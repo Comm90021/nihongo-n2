@@ -71,6 +71,31 @@ public sealed class ContentStore
         return list;
     }
 
+    public IReadOnlyList<ListeningSet> LoadListeningSets()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT id,title,mp3,script_pdf,exam_pdf,page_from,items FROM listening_set ORDER BY ord";
+        try
+        {
+            using var r = cmd.ExecuteReader();
+            var list = new List<ListeningSet>();
+            while (r.Read())
+            {
+                var items = (JsonSerializer.Deserialize(r.GetString(6), CoreJson.Default.StringArray) ?? [])
+                    .Select(s => s.Split('=')).Where(p => p.Length == 2 && p[0].Contains('.'))
+                    .Select(p => new ListeningItem(int.Parse(p[0][..p[0].IndexOf('.')]), p[0][(p[0].IndexOf('.') + 1)..], int.Parse(p[1])))
+                    .ToList();
+                list.Add(new ListeningSet(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetInt32(5), items));
+            }
+            return list;
+        }
+        catch (SqliteException)
+        {
+            return []; // dữ liệu cũ chưa có bảng nghe
+        }
+    }
+
     public string Meta(string key)
     {
         using var c = Open();

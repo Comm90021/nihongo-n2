@@ -18,6 +18,7 @@
           <ListBoxItem AutomationProperties.Name="Từ vựng" Content="Từ vựng" Tag="vocab" />
           <ListBoxItem AutomationProperties.Name="Luyện đề" Content="Luyện đề" Tag="practice" />
           <ListBoxItem AutomationProperties.Name="Đọc hiểu" Content="Đọc hiểu" Tag="reading" />
+          <ListBoxItem AutomationProperties.Name="Nghe hiểu" Content="Nghe hiểu" Tag="listening" />
         </ListBox>
       </DockPanel>
     </Border>

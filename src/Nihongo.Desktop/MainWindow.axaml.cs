@@ -22,6 +22,7 @@ public partial class MainWindow : Window
             "vocab" => new VocabView(),
             "practice" => new PracticeView(),
             "reading" => new ReadingListView(),
+            "listening" => new ListeningListView(),
             _ => new TodayView(),
         });
     }

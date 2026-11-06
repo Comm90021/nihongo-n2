@@ -45,6 +45,15 @@ public sealed record Question(
     public bool IsExam => Source == "exam";
 }
 
+/// <summary>Một câu nghe: Mondai, nhãn câu ("3", "3-1"), đáp án, số phương án (Mondai 4 chỉ có 3).</summary>
+public sealed record ListeningItem(int Mondai, string Label, int Answer)
+{
+    public string Key => $"{Mondai}.{Label}";
+    public int Choices => Mondai == 4 ? 3 : 4;
+}
+
+public sealed record ListeningSet(string Id, string Title, string Mp3, string ScriptPdf, string ExamPdf, int PageFrom, IReadOnlyList<ListeningItem> Items);
+
 public sealed record ReadingSet(
     string Id,
     string Title,

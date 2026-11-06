@@ -27,6 +27,7 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
           example_ja TEXT, example_vi TEXT, note TEXT, grp TEXT, kind INTEGER, sources TEXT, freq_exam INTEGER, freq_corpus INTEGER);
         CREATE TABLE question(id TEXT PRIMARY KEY, ord INTEGER, source TEXT, source_title TEXT, mondai INTEGER, section_name TEXT, number INTEGER,
           text TEXT, word TEXT, context TEXT, options TEXT, options_vi TEXT, answer INTEGER, full_sentence TEXT, topic TEXT, point TEXT, why TEXT);
+        CREATE TABLE listening_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, mp3 TEXT, script_pdf TEXT, exam_pdf TEXT, page_from INTEGER, items TEXT);
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
           last_page INTEGER, m9_from INTEGER, m9_to INTEGER, reading_from INTEGER, reading_to INTEGER, answers TEXT);
         """);
@@ -37,9 +38,10 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var corpus = LoadFreqCorpus(P("nguon_github", "jlpt-freq-main", "normalized", "N2"));
     var vocab = ImportVocab(db, examCorpus.ToString(), corpus, examTokens);
     var sets = ImportReading(db);
+    var listening = ImportListening(db);
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -296,6 +298,47 @@ int ImportReading(SqliteConnection db)
     }
     tx.Commit();
     Console.WriteLine($"Bộ đọc hiểu: {ord}");
+    return ord;
+}
+
+// ---------------------------------------------------------------- nghe hiểu
+int ImportListening(SqliteConnection db)
+{
+    // Mỗi kỳ: 1 MP3, 1 script PDF, đề PDF (trang phần Nghe bắt đầu sau trang cuối Đọc hiểu), đáp án phần II của file đáp án.
+    var archive = P("N2_ĐỀ CÁC NĂM");
+    var answersDir = Path.Combine(archive, "TONG_HOP_XUAT_FILE", "04_Dap_An_Tung_Nam_MD");
+    var realFile = P("antigravity_out", "V7_doc_hieu_de_that", "reading_real.json");
+    if (!Directory.Exists(archive) || !File.Exists(realFile)) return 0;
+    using var tx = db.BeginTransaction();
+    var ord = 0;
+    foreach (var n in JsonNode.Parse(File.ReadAllText(realFile))!.AsArray().OrderByDescending(x => x!["exam"]!.ToString()))
+    {
+        var exam = n!["exam"]!.ToString();
+        var examPdf = P(n["pdf"]!.ToString());
+        var folder = Path.GetDirectoryName(examPdf)!;
+        var mp3 = Directory.GetFiles(folder, "*.mp3").FirstOrDefault();
+        var script = Directory.GetFiles(folder, "*.pdf").FirstOrDefault(f => Path.GetFileName(f).Contains("script", StringComparison.OrdinalIgnoreCase));
+        var md = Path.Combine(answersDir, $"Dap_An_JLPT_N2_{exam.Replace('-', '_')}.md");
+        if (mp3 is null || script is null || !File.Exists(md)) { Console.WriteLine($"  thiếu file nghe {exam}"); continue; }
+
+        var text = File.ReadAllText(md);
+        var part = text[(text.IndexOf("## II.", StringComparison.Ordinal) is var i and >= 0 ? i : 0)..];
+        var items = new List<string>();
+        foreach (var block in Regex.Split(part, @"### 問題\s*").Skip(1))
+        {
+            var mondai = Regex.Match(block, @"^\d").Value;
+            var labels = Regex.Match(block, @"\| Câu \|(.*)").Groups[1].Value.Split('|').Select(s => s.Trim()).Where(s => s != "").ToList();
+            var keys = Regex.Match(block, @"\| \*\*Đáp án\*\* \|(.*)").Groups[1].Value.Split('|').Select(s => s.Replace("*", "").Trim()).Where(s => s != "").ToList();
+            for (var k = 0; k < Math.Min(labels.Count, keys.Count); k++)
+                if (int.TryParse(keys[k], out var a)) items.Add($"{mondai}.{labels[k]}={a}");
+        }
+        if (items.Count == 0) continue;
+        Exec(db, "INSERT INTO listening_set VALUES($i,$o,$t,$m,$s,$e,$p,$it)",
+            ("$i", $"listen-{exam}"), ("$o", ord++), ("$t", $"Đề thật {exam[5..]}/{exam[..4]}"), ("$m", mp3), ("$s", script), ("$e", examPdf),
+            ("$p", (n["pages"]!["end"]?.GetValue<int>() ?? 0) + 1), ("$it", JsonSerializer.Serialize(items)));
+    }
+    tx.Commit();
+    Console.WriteLine($"Bộ nghe hiểu: {ord}");
     return ord;
 }
 
