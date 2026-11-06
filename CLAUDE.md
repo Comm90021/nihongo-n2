@@ -38,6 +38,18 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Kh
 - Danh sách câu bắt buộc ảo hóa (`ListBox` + binding `MediaLine` có `INotifyPropertyChanged`): dựng sẵn 1.879 dòng làm RAM lên 571MB, ảo hóa còn 235MB.
 - Sổ tay: bảng `notebook`. Thẻ sổ tay dùng `NoteEntry.ToCard()`, mã thẻ `v:{word}|{reading}`, trang Hôm nay gộp vào thẻ đến hạn.
 
+## Video nhúng (`Services/WebHost.cs`, `Services/Player.cs`, `Views/VideoReaderView.cs`)
+- User muốn xem video ngay trong app, nên riêng khung video dùng WebView2 (có sẵn trên Windows 11). Phần còn lại của app vẫn là giao diện gốc.
+- `WebHost` là `NativeControlHost`: tạo cửa sổ con Win32, gắn `CoreWebView2Controller`. Dữ liệu WebView ở `data/webview`. Bật `--autoplay-policy=no-user-gesture-required`, nếu không nút Phát của app không điều khiển được video.
+- Trang trình phát `player.html` dùng YouTube IFrame API, ánh xạ thành `https://nihongo.local` (không chạy từ file://). Mỗi 0,3 giây trang gửi `{t,s,r}` về app; app gửi lại `seek`, `toggle`, `rate`.
+- Script tô sáng câu đang phát bằng `SelectedIndex` + `ScrollIntoView`, có chế độ lặp câu.
+- RAM: WebView2 tốn khoảng 500–650MB khi đang mở video. App gốc khoảng 220–260MB.
+
+## Nguồn theo chủ đề (bảng `source` trong `noi_dung.db`)
+- Gemini V8: 48 feed báo RSS, 12 chủ đề, có `start_marker`/`end_marker` cho site cần mốc riêng. Gemini V9: 41 kênh YouTube, 13 chủ đề, `score` là tỉ lệ video có phụ đề ja do người đăng làm.
+- RSS kênh YouTube (`feeds/videos.xml`) trả 404. Lấy video kênh bằng POST `youtubei/v1/browse` với `params=EgZ2aWRlb3PyBgQKAjoA` (tab Video), đọc `lockupViewModel`. Thời gian đăng chỉ có dạng "3時間前", đổi ra giờ ước chừng.
+- Bài và video đã mở lưu trong bảng `media` của `tien_do.db`; mở lại không tải hay dịch lại.
+
 ## Giao diện
 - Bảng màu theo giao diện sáng/tối trong `App.axaml` (`PageBg`, `CardBg`, `CardBorder`, `AccentSoft`, `Ink`). Kiểu `card`, `hero`, `chip`, nút `primary`, `ghost`, `option`.
 - Biểu tượng: font Segoe Fluent Icons của hệ thống (mã ở `Views/Ui.cs`, lớp `Glyph`). Không bao giờ gán `Foreground = null` (chữ thành trong suốt, đã dính 2 lần).
