@@ -1,0 +1,56 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Nihongo.Desktop.App"
+             RequestedThemeVariant="Default">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="PageBg">#F3F5FA</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#E6E9F2</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="PageBg">#0F111A</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#1A1C26</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#151722</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    <SolidColorBrush x:Key="Accent">#5368A4</SolidColorBrush>
+    <SolidColorBrush x:Key="Good">#16A34A</SolidColorBrush>
+    <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource CardBg}" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="16" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="24" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Opacity" Value="0.65" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#475B94" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14,8" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem">
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Margin" Value="0,2" />
+    </Style>
+  </Application.Styles>
+</Application>

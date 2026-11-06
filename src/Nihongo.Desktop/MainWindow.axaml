@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Nihongo.Desktop.MainWindow"
+        Title="Ôn N2"
+        Width="1280" Height="820" MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI, Yu Gothic UI, Meiryo UI"
+        FontSize="15"
+        Background="{DynamicResource PageBg}">
+  <DockPanel>
+    <Border DockPanel.Dock="Left" Width="200" Padding="12"
+            Background="{DynamicResource NavBg}">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Ôn N2" FontSize="22" FontWeight="Bold" Margin="6,4,0,16" />
+        <TextBlock DockPanel.Dock="Bottom" x:Name="Footer" Classes="muted" FontSize="12" TextWrapping="Wrap" Margin="6,0" />
+        <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav">
+          <ListBoxItem AutomationProperties.Name="Hôm nay" Content="Hôm nay" Tag="today" />
+          <ListBoxItem AutomationProperties.Name="Từ vựng" Content="Từ vựng" Tag="vocab" />
+          <ListBoxItem AutomationProperties.Name="Luyện đề" Content="Luyện đề" Tag="practice" />
+          <ListBoxItem AutomationProperties.Name="Đọc hiểu" Content="Đọc hiểu" Tag="reading" />
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <ContentControl x:Name="Host" Margin="24,20" />
+  </DockPanel>
+</Window>

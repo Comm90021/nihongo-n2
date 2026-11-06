@@ -1,0 +1,60 @@
+namespace Nihongo.Core;
+
+public enum VocabKind { Normal, Kana, Affix }
+
+public sealed record VocabItem(
+    long Id,
+    string Word,
+    string Reading,
+    string Level,
+    string HanViet,
+    string MeaningVi,
+    string MeaningEn,
+    string ExampleJa,
+    string ExampleVi,
+    string Note,
+    string Group,
+    VocabKind Kind,
+    string Sources,
+    int FreqExam,
+    int FreqCorpus)
+{
+    public string CardId => $"v:{Word}|{Reading}";
+    public string Meaning => string.IsNullOrEmpty(MeaningVi) ? MeaningEn : MeaningVi;
+    public string FreqLabel => FreqExam > 0 ? $"ra {FreqExam} lần" : FreqCorpus > 0 ? $"đề cũ {FreqCorpus}" : "";
+}
+
+public sealed record Question(
+    string Id,
+    string Source,
+    string SourceTitle,
+    int Mondai,
+    string SectionName,
+    int Number,
+    string Text,
+    string Word,
+    string Context,
+    string[] Options,
+    string[] OptionsVi,
+    int Answer,
+    string FullSentence,
+    string Topic,
+    string Point,
+    string Why)
+{
+    public bool IsExam => Source == "exam";
+}
+
+public sealed record ReadingSet(
+    string Id,
+    string Title,
+    string Kind,
+    string PdfPath,
+    int M9Page,
+    int ReadingPage,
+    int LastPage,
+    int M9From,
+    int M9To,
+    int ReadingFrom,
+    int ReadingTo,
+    IReadOnlyDictionary<int, int> Answers);
