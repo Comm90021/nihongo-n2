@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -16,36 +16,34 @@ sealed class GeminiView : UserControl
     public const string Home = "https://gemini.google.com/app";
     readonly WebHost _web = new();
     readonly TextBlock _status = Text("", 13, muted: true);
+    readonly Control _bar;
     bool _loaded;
 
     public GeminiView()
     {
-        var bar = Line(Col(2, Text("Gemini", 20, bold: true), _status),
+        _bar = Line(Text("Gemini", 20, bold: true),
             Row(8,
                 Btn("Trang Gemini", () => Go(Home)),
                 Btn("Đăng nhập Google", () => Go("https://accounts.google.com/ServiceLogin?continue=" + Uri.EscapeDataString(Home))),
                 Btn("Tải lại", async () => (await _web.Ready).Reload()),
                 Btn("Mở trong trình duyệt", () => { try { Process.Start(new ProcessStartInfo(Home) { UseShellExecute = true }); } catch { } })));
-        DockPanel.SetDock(bar, Dock.Top);
-        var frame = new Border { CornerRadius = new CornerRadius(14), ClipToBounds = true, Margin = new Thickness(0, 12, 0, 0), Child = _web };
-        Content = new DockPanel { Children = { bar, frame } };
-        _status.Text = "Đăng nhập Google một lần, các lần sau tự nhớ. Ở màn đọc báo/video, nút \"Hỏi Gemini\" gửi câu sang đây.";
-        _ = Start();
+        var top = Col(4, _bar, _status);
+        DockPanel.SetDock(top, Dock.Top);
+        var frame = new Border { CornerRadius = new CornerRadius(14), ClipToBounds = true, Margin = new Thickness(0, 10, 0, 0), Child = _web };
+        Content = new DockPanel { Children = { top, frame } };
+        _status.Text = "Đăng nhập Google một lần, các lần sau tự nhớ. Ở màn đọc báo/video, nút \"Hỏi Gemini\" mở Gemini ngay bên cạnh.";
+        _web.WebReady += core =>
+        {
+            core.NavigationCompleted += (_, _) => _loaded = true;
+            if (core.Source is null or "about:blank") { _loaded = false; core.Navigate(Home); }
+        };
+        _web.Ready.ContinueWith(t => { if (t.IsFaulted) Avalonia.Threading.Dispatcher.UIThread.Post(() => _status.Text = $"Không mở được khung web: {t.Exception?.InnerException?.Message}"); });
     }
 
-    async Task Start()
-    {
-        try
-        {
-            var core = await _web.Ready;
-            core.NavigationCompleted += (_, _) => _loaded = true;
-            if (core.Source is null or "about:blank") core.Navigate(Home);
-        }
-        catch (Exception ex)
-        {
-            _status.Text = $"Không mở được khung web: {ex.Message}";
-        }
-    }
+    public string StatusText => _status.Text ?? "";
+
+    /// <summary>Gọn: khi nằm ở cột bên cạnh màn video/báo thì ẩn thanh nút to, chỉ giữ dòng trạng thái.</summary>
+    public bool Compact { get => !_bar.IsVisible; set => _bar.IsVisible = !value; }
 
     async void Go(string url)
     {

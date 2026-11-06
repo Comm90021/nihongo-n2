@@ -46,12 +46,15 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 - User muốn xem video ngay trong app, nên riêng khung video dùng WebView2 (có sẵn trên Windows 11). Phần còn lại của app vẫn là giao diện gốc.
 - `WebHost` là `NativeControlHost`: tạo cửa sổ con Win32, gắn `CoreWebView2Controller`. **Một `CoreWebView2Environment` dùng chung** (`WebHost.Environment`, hồ sơ `data/webview`) cho khung video và tab Gemini: đăng nhập Google một lần là cả hai nhận. Bật `--autoplay-policy=no-user-gesture-required`, nếu không nút Phát của app không điều khiển được video.
 - Trang trình phát `player.html` dùng YouTube IFrame API, ánh xạ thành `https://nihongo.local` (không chạy từ file://). Mỗi 0,3 giây trang gửi `{t,s,r,d}` về app; app gửi lại `seek`, `toggle`, `rate`. Tham số `start` để xem tiếp.
-- Script tô sáng câu đang phát bằng `SelectedIndex` + `ScrollIntoView`, có chế độ lặp câu.
+- Script tô sáng câu đang phát bằng `SelectedIndex`, rồi `AnchorTop` neo câu đó ở đầu khung (chừa 1 câu phía trên). Chỉ dùng `ScrollIntoView` thì câu đang nói luôn dính mép dưới khung (lỗi user báo "script nằm phía dưới"). Khung script đổi bề rộng thì neo lại. Có chế độ lặp câu.
+- Bố cục màn video là Grid 3 cột cố định: video | script | Gemini (cột 3 rộng 0 khi đóng). Màn báo: Gemini là cột phải của DockPanel, mở thì tạm cất bảng tra.
 - Tiến độ xem: bảng `watch` (video_id, position, duration, done). Lưu mỗi 5 giây; xem tới 90% tự thành đã học; mở lại thì xem tiếp từ chỗ cũ (lùi 3 giây).
 - RAM: WebView2 tốn khoảng 500–650MB khi đang mở video. App gốc khoảng 220–360MB.
 
 ## Tab Gemini (`Views/GeminiView.cs`)
-- gemini.google.com trong WebHost. Tạo một lần, nằm trong `GeminiSlot` của MainWindow và chỉ ẩn/hiện, nên không mất cuộc trò chuyện. Bấm lại mục vừa đọc thì quay về màn đang đọc dở.
+- gemini.google.com trong WebHost. Chỉ có **một** GeminiView, bình thường nằm trong `GeminiSlot` của MainWindow (tab toàn trang, chỉ ẩn/hiện). Bấm lại mục vừa đọc thì quay về màn đang đọc dở.
+- Màn video/báo (`IGeminiDock`) mượn GeminiView vào cột phải (`Views/GeminiDock.cs`, `MainWindow.BorrowGemini`/`ReturnGemini`). Chuyển chỗ trong cùng một lượt nên Avalonia không hủy cửa sổ con WebView2: không tải lại, không mất cuộc trò chuyện. Nếu cửa sổ con bị hủy thì `WebHost` tạo `_ready` mới và báo `WebReady`, không dùng lại CoreWebView2 đã đóng. Mở cột thì tạm thu gọn thanh bên, đóng thì trả lại.
+- "Hỏi Gemini" ở màn video/báo mở cột bên cạnh, video vẫn chạy và vẫn đồng bộ; ở màn khác thì mở tab toàn trang.
 - "Hỏi Gemini": chép lời nhắc vào clipboard, rồi chạy script điền vào `rich-textarea .ql-editor` bằng `execCommand('insertText')`. Không tự bấm gửi. Đã thử: điền được khi chưa đăng nhập.
 - Đăng nhập Google trong WebView2 chưa thử được (cần tài khoản user). Google có thể chặn với thông báo "trình duyệt không an toàn".
 
@@ -85,3 +88,4 @@ Mở cửa sổ khoảng 1,0–1,1 giây. RAM khoảng 135MB, khi xem PDF khoả
 
 ## Kiểm thử
 Chưa có test tự động trong repo. Cách đã dùng: script PowerShell dùng UI Automation, chọn mục menu theo `AutomationProperties.Name`, bấm nút theo tên, rồi chụp màn hình. Bôi đen chữ thì giả lập kéo chuột bằng `SetCursorPos` + `mouse_event` (UIA không bôi đen được). Script .ps1 có tiếng Việt phải lưu UTF-8 có BOM. Test chạy trên tien_do.db thật: dọn những gì test thêm vào (kênh theo dõi, video đã mở) sau khi xong.
+- **Màn có khung WebView2 thì UI Automation không đọc được cây control.** Đừng bấm chuột theo tọa độ: user hay đang dùng máy, app không lên được phía trước, và bấm sẽ trúng cửa sổ khác (suýt bấm vào Zalo của user). Dùng tự kiểm trong app: `NIHONGO_SELFTEST=video` + `NIHONGO_SELFTEST_OUT=<thư mục>` (`Services/SelfTest.cs`). App tự mở video đã lưu (tắt tiếng, không giành focus, không ghi tiến độ xem), đo vị trí câu đang phát, kiểm đồng bộ, kiểm chồng lấn, chụp ảnh bản vẽ ở tỉ lệ 1:1 (chụp theo 150% thì danh sách ảo hóa vẽ lệch trong ảnh), rồi tự đóng.

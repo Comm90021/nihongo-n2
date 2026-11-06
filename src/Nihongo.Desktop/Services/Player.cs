@@ -29,6 +29,7 @@ static class Player
           if (m.seek !== undefined) { player.seekTo(m.seek, true); player.playVideo(); }
           if (m.toggle) { player.getPlayerState() === 1 ? player.pauseVideo() : player.playVideo(); }
           if (m.rate) player.setPlaybackRate(m.rate);
+          if (m.mute) player.mute();
         });
         </script>
         <script src="https://www.youtube.com/iframe_api"></script></body></html>

@@ -387,7 +387,9 @@ int ImportSources(SqliteConnection db)
         }
     // V10 (kênh người Nhật làm cho người Nhật) xếp trước V9. Kênh V9 nhắm người nước ngoài thì bỏ (danh sách lấy từ báo cáo V10, đã kiểm tay).
     var seen = new HashSet<string>();
-    HashSet<string> DropChannels = ["UCDqWakN_owifqIBqyNjg6kg"]; // 出口日語: dạy tiếng Nhật cho người Trung Quốc, tiêu đề tiếng Trung
+    // 出口日語 (tiêu đề tiếng Trung), Ask Japanese (tiêu đề tiếng Anh, nhắm khán giả nước ngoài).
+    // Các kênh dạy tiếng Nhật khác vẫn giữ (phần lớn kênh có phụ đề người đăng là nhóm này), app xếp chúng cuối.
+    HashSet<string> DropChannels = ["UCDqWakN_owifqIBqyNjg6kg", "UCOMZWkPo7ao6yGaXc954U0w"];
     foreach (var file in new[] { P("antigravity_out", "V10_kenh_nguoi_nhat", "channels.json"), P("antigravity_out", "V9_kenh_youtube", "channels.json") })
     {
         if (!File.Exists(file)) continue;

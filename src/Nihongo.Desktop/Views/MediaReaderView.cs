@@ -14,8 +14,11 @@ using static Nihongo.Desktop.Views.Ui;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>Đọc báo song song: cột tiếng Nhật (bôi đen là tra), cột tiếng Việt, bảng tra đóng/mở bên phải.</summary>
-sealed class MediaReaderView : UserControl
+sealed class MediaReaderView : UserControl, IGeminiDock
 {
+    readonly GeminiDock _gemini = new();
+    public void OpenGemini() => _gemini.Open();
+
     readonly string _url, _kind, _title;
     readonly List<MediaLine> _lines;
     readonly CancellationTokenSource _cts = new();
@@ -45,14 +48,26 @@ sealed class MediaReaderView : UserControl
             toggle.Content = ShowVi ? "Ẩn bản dịch" : "Hiện bản dịch";
         };
         var side = new SidePane("pane_article", _lookup, 330) { Margin = new Thickness(16, 12, 0, 0) };
+        var geminiToggle = Btn("Mở Gemini bên cạnh", _gemini.Toggle);
+        // Mở Gemini: tạm cất bảng tra để cột bài đọc đủ rộng; đóng Gemini thì bảng tra trở lại như trước.
+        var lookupWasOpen = false;
+        _gemini.Changed += open =>
+        {
+            geminiToggle.Content = open ? "Đóng Gemini" : "Mở Gemini bên cạnh";
+            if (open) { lookupWasOpen = side.IsVisible; side.SetOpen(false, save: false); }
+            else side.SetOpen(lookupWasOpen, save: false);
+        };
+        _gemini.Width = 420;
+        _gemini.Margin = new Thickness(16, 12, 0, 0);
+        DockPanel.SetDock(_gemini, Dock.Right);
         var header = Line(Col(2, Text(title, 22, bold: true), _progress),
-            Row(8, toggle, side.Toggle,
+            Row(8, toggle, side.Toggle, geminiToggle,
                 kind == "video" ? Btn("Mở video", () => OpenUrl(url)) : Btn("Mở trang gốc", () => OpenUrl(url)),
                 IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen),
                 Btn("Quay lại", App.Shell.BackToSection)));
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(side, Dock.Right);
-        Content = new DockPanel { Children = { header, side, rows } };
+        Content = new DockPanel { Children = { header, _gemini, side, rows } };
         _ = TranslateAll();
     }
 

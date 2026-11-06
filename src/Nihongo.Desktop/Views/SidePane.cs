@@ -33,10 +33,11 @@ sealed class SidePane : Border
         SetOpen(App.Progress.Setting(key, "1") == "1");
     }
 
-    public void SetOpen(bool open)
+    /// <param name="save">false khi chỉ tạm ẩn (ví dụ nhường chỗ cho cột Gemini), không đổi lựa chọn đã nhớ.</param>
+    public void SetOpen(bool open, bool save = true)
     {
         IsVisible = open;
         Toggle.Content = open ? "Ẩn bảng tra" : "Hiện bảng tra";
-        App.Progress.SetSetting(_key, open ? "1" : "0");
+        if (save) App.Progress.SetSetting(_key, open ? "1" : "0");
     }
 }

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
@@ -15,13 +15,19 @@ sealed class WebHost : NativeControlHost
 {
     CoreWebView2Controller? _controller;
     IntPtr _hwnd;
-    readonly TaskCompletionSource<CoreWebView2> _ready = new();
+    TaskCompletionSource<CoreWebView2> _ready = new();
 
     public Task<CoreWebView2> Ready => _ready.Task;
     public event Action<string>? Message;
 
+    /// <summary>Báo mỗi lần khung web được tạo (lần đầu, hoặc tạo lại khi Avalonia đã hủy cửa sổ con cũ).</summary>
+    public event Action<CoreWebView2>? WebReady;
+
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
+        // Chuyển control sang chỗ khác trong cùng một lượt thì Avalonia giữ nguyên cửa sổ con.
+        // Nếu cửa sổ cũ đã bị hủy thì đây là lần tạo mới: không được dùng lại CoreWebView2 cũ đã đóng.
+        if (_ready.Task.IsCompleted) _ready = new();
         _hwnd = CreateWindowExW(0, "Static", "", WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0, 1, 1, parent.Handle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
         _ = InitAsync();
         return new PlatformHandle(_hwnd, "HWND");
@@ -50,6 +56,7 @@ sealed class WebHost : NativeControlHost
             core.WebMessageReceived += (_, e) => Message?.Invoke(e.TryGetWebMessageAsString());
             Resize();
             _ready.TrySetResult(core);
+            WebReady?.Invoke(core);
         }
         catch (Exception ex)
         {
