@@ -13,54 +13,150 @@ using static Nihongo.Desktop.Views.Ui;
 
 namespace Nihongo.Desktop.Views;
 
-/// <summary>Danh sách bài báo, video đã mở và sổ tay. Dán link để mở bài mới.</summary>
+/// <summary>Báo và video tiếng Nhật: duyệt theo chủ đề từ nguồn tự cập nhật, dán link, bài đã mở, sổ tay.</summary>
 sealed class MediaView : UserControl
 {
+    static readonly Dictionary<string, List<Web.FeedItem>> FeedCache = new();
+    static readonly HttpClient Images = new() { Timeout = TimeSpan.FromSeconds(15) };
+
     readonly TextBox _url = new() { Watermark = "Dán link bài báo tiếng Nhật hoặc video YouTube có phụ đề tiếng Nhật", MinWidth = 520 };
-    readonly TextBlock _status = Text("", muted: true);
+    readonly TextBlock _status = Text("", 13, muted: true);
+    readonly IReadOnlyList<Source> _sources = App.Content.LoadSources();
 
     public MediaView()
     {
-        var open = Btn("Mở", () => _ = Open(), primary: true);
-        _url.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) _ = Open(); };
+        _url.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) _ = OpenLink(_url.Text ?? ""); };
+        var paste = Col(10,
+            Text("Mở bất kỳ bài báo tiếng Nhật hoặc video YouTube có phụ đề tiếng Nhật.", 14, muted: true),
+            Row(8, _url, Btn("Mở", () => _ = OpenLink(_url.Text ?? ""), primary: true)));
 
-        var saved = Col(8);
+        var tabs = new TabControl
+        {
+            Items =
+            {
+                new TabItem { Header = "Video theo chủ đề", Content = Browse("channel") },
+                new TabItem { Header = "Báo theo chủ đề", Content = Browse("feed") },
+                new TabItem { Header = "Dán link", Content = Card(paste) },
+                new TabItem { Header = "Đã mở & sổ tay", Content = Scroll(Saved()) },
+            },
+        };
+        var top = Col(4, Header("Báo & Video", "Xem video có script chạy theo, đọc báo song song Nhật – Việt, bôi đen để tra và lưu từ."), _status);
+        DockPanel.SetDock(top, Dock.Top);
+        Content = new DockPanel { Children = { top, tabs } };
+    }
+
+    Control Browse(string kind)
+    {
+        var sources = _sources.Where(s => s.Kind == kind).ToList();
+        if (sources.Count == 0)
+            return Card(Text("Danh mục nguồn chưa có. Antigravity đang tìm và kiểm từng nguồn; xong sẽ tự hiện ở đây sau khi dựng lại dữ liệu.", muted: true));
+        var results = Col(8);
+        var groups = sources.GroupBy(s => s.Topic).OrderByDescending(g => g.Count()).ToList();
+        var buttons = new List<Button>();
+        void Select(int i)
+        {
+            for (var k = 0; k < buttons.Count; k++) buttons[k].Classes.Set("primary", k == i);
+            _ = LoadTopic(groups[i].ToList(), results, kind);
+        }
+        for (var i = 0; i < groups.Count; i++) { var idx = i; buttons.Add(Btn($"{groups[i].Key} ({groups[i].Count()})", () => Select(idx))); }
+        var topics = Ui.Wrap(buttons.Cast<Control>().ToArray());
+        Select(0);
+        var top = Col(6, topics);
+        DockPanel.SetDock(top, Dock.Top);
+        return new DockPanel { Children = { top, Scroll(results) } };
+    }
+
+    async Task LoadTopic(List<Source> sources, StackPanel results, string kind)
+    {
+        results.Children.Clear();
+        results.Children.Add(Text($"Đang tải {sources.Count} nguồn...", 13, muted: true));
+        var tasks = sources.Select(async s =>
+        {
+            if (FeedCache.TryGetValue(s.Id, out var cached)) return (s, cached);
+            try { var items = await Web.FetchFeedAsync(s); FeedCache[s.Id] = items; return (s, items); }
+            catch { return (s, new List<Web.FeedItem>()); }
+        });
+        var all = (await Task.WhenAll(tasks)).SelectMany(x => x.Item2.Take(8).Select(i => (Source: x.s, Item: i)))
+            .OrderByDescending(x => x.Item.Published).Take(60).ToList();
+        results.Children.Clear();
+        if (all.Count == 0) { results.Children.Add(Text("Không tải được nguồn nào trong chủ đề này. Kiểm tra mạng rồi thử lại.", muted: true)); return; }
+        foreach (var (source, item) in all) results.Children.Add(kind == "channel" ? VideoRow(source, item) : ArticleRow(source, item));
+    }
+
+    Control VideoRow(Source source, Web.FeedItem item)
+    {
+        var thumb = new Image { Width = 176, Height = 99, Stretch = Stretch.UniformToFill };
+        _ = LoadThumb(thumb, $"https://i.ytimg.com/vi/{item.VideoId}/mqdefault.jpg");
+        var info = Col(4, Text(item.Title, 15, bold: true), Text($"{source.Name} · {Ago(item.Published)}{(source.Score > 0.5 ? " · thường có phụ đề người đăng" : "")}", 12, muted: true));
+        return Card(Item(new Border { CornerRadius = new CornerRadius(10), ClipToBounds = true, Child = thumb }, info,
+            Btn("Xem", () => _ = OpenLink($"https://youtu.be/{item.VideoId}"), primary: true)), 3);
+    }
+
+    Control ArticleRow(Source source, Web.FeedItem item) => Card(Item(IconBadge(Glyph.News),
+        Col(4, Text(item.Title, 15, bold: true), Text($"{source.Name} · {Ago(item.Published)}", 12, muted: true)),
+        Btn("Đọc", () => _ = OpenLink(item.Link, source), primary: true)), 3);
+
+    /// <summary>Hàng 3 cột: ảnh hoặc biểu tượng, phần chữ co giãn và xuống dòng, nút bên phải.</summary>
+    static Grid Item(Control left, Control middle, Control right)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14 };
+        Control[] cells = [left, middle, right];
+        for (var i = 0; i < 3; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
+        return g;
+    }
+
+    static async Task LoadThumb(Image target, string url)
+    {
+        try
+        {
+            var bytes = await Images.GetByteArrayAsync(url);
+            using var ms = new MemoryStream(bytes);
+            target.Source = new Avalonia.Media.Imaging.Bitmap(ms);
+        }
+        catch { }
+    }
+
+    static string Ago(DateTime t)
+    {
+        if (t == DateTime.MinValue) return "";
+        var d = DateTime.Now - t.ToLocalTime();
+        return d.TotalHours < 1 ? $"{(int)d.TotalMinutes} phút trước" : d.TotalDays < 1 ? $"{(int)d.TotalHours} giờ trước" : d.TotalDays < 30 ? $"{(int)d.TotalDays} ngày trước" : t.ToString("dd/MM/yyyy");
+    }
+
+    Control Saved()
+    {
+        var notes = App.Progress.Notes();
+        var list = Col(8, Card(Line(
+            Row(14, IconBadge(Glyph.Save), Col(2, Text("Sổ tay", 16, bold: true), Text($"{notes.Count} từ đã lưu khi đọc báo và xem video", 13, muted: true))),
+            Btn("Ôn sổ tay", () => App.Shell.Show(new FlashView(notes.Select(n => n.ToCard()), "Ôn sổ tay")), primary: true, enabled: notes.Count > 0))),
+            Section("Đã mở gần đây"));
         foreach (var (url, kind, title, lines) in App.Progress.Media())
         {
             var count = JsonSerializer.Deserialize(lines, MediaJson.Default.ListMediaLine)?.Count ?? 0;
-            saved.Children.Add(Card(Line(
-                Row(14, Icon(kind == "video" ? Glyph.Video : Glyph.News, 22, Accent), Col(2, Text(title, 16, bold: true), Text($"{(kind == "video" ? "Video" : "Bài báo")} · {count} câu", 13, muted: true))),
-                Btn("Đọc", () => Show(url, kind, title, lines), primary: true))));
+            list.Children.Add(Card(Line(
+                Row(14, IconBadge(kind == "video" ? Glyph.Video : Glyph.News), Col(2, Text(title, 15, bold: true), Text($"{(kind == "video" ? "Video" : "Bài báo")} · {count} câu", 12, muted: true))),
+                Btn("Đọc", () => Show(url, kind, title, lines), primary: true)), 3));
         }
-        if (saved.Children.Count == 0)
-            saved.Children.Add(Text("Chưa có bài nào. Gợi ý: mở một bài ở www3.nhk.or.jp/news hoặc một video tin tức ANN, TBS có phụ đề tiếng Nhật.", muted: true));
-
-        var notes = App.Progress.Notes();
-        var notebook = Card(Line(
-            Row(14, Icon(Glyph.Save, 22, Accent), Col(2, Text("Sổ tay", 16, bold: true), Text($"{notes.Count} từ đã lưu khi đọc báo và xem video", 13, muted: true))),
-            Btn("Ôn sổ tay", () => App.Shell.Show(new FlashView(notes.Select(n => n.ToCard()), "Ôn sổ tay")), primary: true, enabled: notes.Count > 0)));
-
-        Content = Scroll(Col(10,
-            Header("Báo & Video", "Đọc song song Nhật – Việt. Bôi đen chữ trong câu rồi bấm Tra để xem nghĩa và lưu vào sổ tay."),
-            Card(Col(8, Row(8, _url, open), _status)),
-            notebook,
-            Section("Đã mở gần đây"),
-            saved));
+        return list;
     }
 
-    async Task Open()
+    async Task OpenLink(string url, Source? source = null)
     {
-        var url = _url.Text?.Trim() ?? "";
+        url = url.Trim();
         if (!url.StartsWith("http")) { _status.Text = "Link phải bắt đầu bằng http:// hoặc https://"; return; }
+        // Bài đã mở thì dùng lại, không tải lại và không dịch lại.
+        var saved = App.Progress.Media().FirstOrDefault(m => m.Url == url || (Web.YouTubeId(url) is { } v && m.Url.EndsWith(v)));
+        if (saved.Url is not null) { Show(saved.Url, saved.Kind, saved.Title, saved.Lines); return; }
         _status.Text = "Đang tải...";
         try
         {
             var id = Web.YouTubeId(url);
-            var (title, lines) = id is not null ? await Web.FetchTranscriptAsync(id) : await Web.FetchArticleAsync(url);
+            var (title, lines) = id is not null ? await Web.FetchTranscriptAsync(id) : await Web.FetchArticleAsync(url, default, source?.StartMarker ?? "", source?.EndMarker ?? "");
             var kind = id is not null ? "video" : "article";
             var key = id is not null ? $"https://youtu.be/{id}" : url;
             var json = JsonSerializer.Serialize(lines, MediaJson.Default.ListMediaLine);
             App.Progress.SaveMedia(key, kind, title, json);
+            _status.Text = "";
             Show(key, kind, title, json);
         }
         catch (Exception ex)
@@ -75,7 +171,6 @@ sealed class MediaView : UserControl
         App.Shell.Show(kind == "video" ? new VideoReaderView(url, title, lines) : new MediaReaderView(url, kind, title, lines));
     }
 }
-
 /// <summary>Đọc song song: cột tiếng Nhật (bôi đen được) và cột tiếng Việt, bảng tra từ bên phải.</summary>
 sealed class MediaReaderView : UserControl
 {

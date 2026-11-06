@@ -27,6 +27,7 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
           example_ja TEXT, example_vi TEXT, note TEXT, grp TEXT, kind INTEGER, sources TEXT, freq_exam INTEGER, freq_corpus INTEGER);
         CREATE TABLE question(id TEXT PRIMARY KEY, ord INTEGER, source TEXT, source_title TEXT, mondai INTEGER, section_name TEXT, number INTEGER,
           text TEXT, word TEXT, context TEXT, options TEXT, options_vi TEXT, answer INTEGER, full_sentence TEXT, topic TEXT, point TEXT, why TEXT);
+        CREATE TABLE source(id TEXT PRIMARY KEY, kind TEXT, name TEXT, topic TEXT, level TEXT, url TEXT, start_marker TEXT, end_marker TEXT, note TEXT, score REAL);
         CREATE TABLE listening_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, mp3 TEXT, script_pdf TEXT, exam_pdf TEXT, page_from INTEGER, items TEXT);
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
           last_page INTEGER, m9_from INTEGER, m9_to INTEGER, reading_from INTEGER, reading_to INTEGER, answers TEXT);
@@ -39,9 +40,10 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var vocab = ImportVocab(db, examCorpus.ToString(), corpus, examTokens);
     var sets = ImportReading(db);
     var listening = ImportListening(db);
+    var sources = ImportSources(db);
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -362,6 +364,39 @@ int ImportListening(SqliteConnection db)
     tx.Commit();
     Console.WriteLine($"Bộ nghe hiểu: {ord}");
     return ord;
+}
+
+// ---------------------------------------------------------------- nguồn báo và kênh video theo chủ đề (Gemini V8, V9)
+int ImportSources(SqliteConnection db)
+{
+    using var tx = db.BeginTransaction();
+    var n = 0;
+    void Add(string id, string kind, string name, string topic, string level, string url, string start, string end, string note, double score)
+    {
+        Exec(db, "INSERT OR REPLACE INTO source VALUES($i,$k,$n,$t,$l,$u,$s,$e,$no,$sc)", ("$i", $"{kind}:{id}"), ("$k", kind), ("$n", name), ("$t", topic),
+            ("$l", level), ("$u", url), ("$s", start), ("$e", end), ("$no", note), ("$sc", score));
+        n++;
+    }
+    var feeds = P("antigravity_out", "V8_nguon_bao", "feeds.json");
+    if (File.Exists(feeds))
+        foreach (var f in JsonNode.Parse(File.ReadAllText(feeds))!.AsArray())
+        {
+            if (f!["extract_ok"]?.GetValue<bool>() == false || f["paywall"]?.GetValue<bool>() == true) continue;
+            Add(f["id"]!.ToString(), "feed", f["name"]!.ToString(), f["topic"]?.ToString() ?? "Khác", f["level"]?.ToString() ?? "", f["url"]!.ToString(),
+                f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "", f["note"]?.ToString() ?? "", f["avg_sentences"]?.GetValue<double>() ?? 0);
+        }
+    var channels = P("antigravity_out", "V9_kenh_youtube", "channels.json");
+    if (File.Exists(channels))
+        foreach (var c in JsonNode.Parse(File.ReadAllText(channels))!.AsArray())
+        {
+            var cid = c!["channel_id"]?.ToString() ?? "";
+            if (!cid.StartsWith("UC")) continue;
+            Add(c["id"]?.ToString() ?? cid, "channel", c["name"]!.ToString(), c["topic"]?.ToString() ?? "Khác", c["level"]?.ToString() ?? "",
+                $"https://www.youtube.com/feeds/videos.xml?channel_id={cid}", "", "", $"{c["speed"]} {c["note"]}".Trim(), c["ja_manual_ratio"]?.GetValue<double>() ?? 0);
+        }
+    tx.Commit();
+    Console.WriteLine($"Nguồn báo và kênh video: {n}");
+    return n;
 }
 
 // ---------------------------------------------------------------- tiện ích

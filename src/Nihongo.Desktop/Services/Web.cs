@@ -121,10 +121,16 @@ static partial class Web
     [GeneratedRegex(@"[^。！？!?\n]+[。！？!?」]*")]
     private static partial Regex Sentence();
 
-    public static async Task<(string Title, List<MediaLine> Lines)> FetchArticleAsync(string url, CancellationToken ct = default)
+    public static async Task<(string Title, List<MediaLine> Lines)> FetchArticleAsync(string url, CancellationToken ct = default, string startMarker = "", string endMarker = "")
     {
         var html = await Http.GetStringAsync(url, ct);
         var title = WebUtility.HtmlDecode(TitleTag().Match(html) is { Success: true } t ? (t.Groups[1].Success ? t.Groups[1].Value : t.Groups[2].Value) : url).Trim();
+        // Site có mốc riêng (Gemini V8 tìm ra): chỉ xét phần HTML giữa hai mốc.
+        if (startMarker != "" && html.IndexOf(startMarker, StringComparison.Ordinal) is var s and >= 0)
+        {
+            var e = endMarker != "" ? html.IndexOf(endMarker, s + startMarker.Length, StringComparison.Ordinal) : -1;
+            html = e > s ? html[s..e] : html[s..];
+        }
         var body = Noise().Replace(html, " ");
         // Giữ các đoạn <p> có đủ chữ Nhật: cách này lấy được thân bài ở hầu hết trang báo, kể cả NHK.
         // Thân bài luôn có dấu 。; tiêu đề tin liên quan, nút chia sẻ thì không. Bỏ thêm tiêu đề bài và mốc giờ bị dính vào câu đầu.
@@ -143,6 +149,87 @@ static partial class Web
         Sentence().Matches(text).Select(m => m.Value.Trim()).Where(s => s.Length > 1);
 
     static bool IsJapanese(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
+
+    // ---------------------------------------------------------------- RSS / Atom (cả feed kênh YouTube)
+    public sealed record FeedItem(string Title, string Link, DateTime Published, string Source, string? VideoId);
+
+    public static async Task<List<FeedItem>> FetchFeedAsync(Source source, CancellationToken ct = default)
+    {
+        if (source.Kind == "channel") return await FetchChannelAsync(source, ct);
+        var xml = System.Xml.Linq.XDocument.Parse(await Http.GetStringAsync(source.Url, ct));
+        var items = new List<FeedItem>();
+        foreach (var e in xml.Descendants().Where(x => x.Name.LocalName is "item" or "entry"))
+        {
+            string Child(string name) => e.Elements().FirstOrDefault(x => x.Name.LocalName == name)?.Value.Trim() ?? "";
+            var link = Child("link");
+            if (link == "") link = e.Elements().FirstOrDefault(x => x.Name.LocalName == "link")?.Attribute("href")?.Value ?? "";
+            var date = DateTime.TryParse(Child("pubDate") is { Length: > 0 } pd ? pd : Child("published") is { Length: > 0 } pu ? pu : Child("updated"), out var d) ? d : DateTime.MinValue;
+            var vid = Child("videoId");
+            items.Add(new FeedItem(WebUtility.HtmlDecode(Child("title")), link, date, source.Name, vid == "" ? null : vid));
+        }
+        return items;
+    }
+
+    /// <summary>
+    /// Video mới của kênh qua API youtubei/v1/browse (tab Video). RSS kênh của YouTube trả 404 từ cuối 2026.
+    /// Mỗi video là một lockupViewModel: contentId, tiêu đề, và dòng phụ có chữ kiểu "3時間前".
+    /// </summary>
+    static async Task<List<FeedItem>> FetchChannelAsync(Source source, CancellationToken ct)
+    {
+        var channelId = source.Url[(source.Url.IndexOf("channel_id=", StringComparison.Ordinal) + 11)..];
+        var body = new JsonObject
+        {
+            ["context"] = new JsonObject { ["client"] = new JsonObject { ["clientName"] = "WEB", ["clientVersion"] = "2.20250101.00.00", ["hl"] = "ja", ["gl"] = "JP" } },
+            ["browseId"] = channelId,
+            ["params"] = "EgZ2aWRlb3PyBgQKAjoA",
+        };
+        using var res = await Http.PostAsync("https://www.youtube.com/youtubei/v1/browse?prettyPrint=false",
+            new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"), ct);
+        res.EnsureSuccessStatusCode();
+        var root = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
+        var items = new List<FeedItem>();
+        void Walk(JsonNode? n)
+        {
+            switch (n)
+            {
+                case JsonObject o when o["lockupViewModel"] is JsonObject lv && lv["contentType"]?.ToString() == "LOCKUP_CONTENT_TYPE_VIDEO":
+                    var meta = lv["metadata"]?["lockupMetadataViewModel"];
+                    var title = meta?["title"]?["content"]?.ToString() ?? "";
+                    var parts = meta?["metadata"]?["contentMetadataViewModel"]?["metadataRows"]?.AsArray()
+                        .SelectMany(r => r?["metadataParts"]?.AsArray() ?? []).Select(p => p?["text"]?["content"]?.ToString() ?? "") ?? [];
+                    var when = parts.FirstOrDefault(p => p.EndsWith('前')) ?? "";
+                    var id = lv["contentId"]!.ToString();
+                    items.Add(new FeedItem(title, $"https://youtu.be/{id}", Relative(when), source.Name, id));
+                    break;
+                case JsonObject o:
+                    foreach (var (_, v) in o) Walk(v);
+                    break;
+                case JsonArray a:
+                    foreach (var v in a) Walk(v);
+                    break;
+            }
+        }
+        Walk(root);
+        return items;
+    }
+
+    /// <summary>Đổi "3時間前", "2日前", "1 か月前" thành thời điểm ước chừng.</summary>
+    static DateTime Relative(string text)
+    {
+        var m = Regex.Match(text, @"(\d+)\s*(秒|分|時間|日|週間|か月|ヶ月|年)");
+        if (!m.Success) return DateTime.MinValue;
+        var n = int.Parse(m.Groups[1].Value);
+        return m.Groups[2].Value switch
+        {
+            "秒" => DateTime.Now.AddSeconds(-n),
+            "分" => DateTime.Now.AddMinutes(-n),
+            "時間" => DateTime.Now.AddHours(-n),
+            "日" => DateTime.Now.AddDays(-n),
+            "週間" => DateTime.Now.AddDays(-7 * n),
+            "年" => DateTime.Now.AddYears(-n),
+            _ => DateTime.Now.AddMonths(-n),
+        };
+    }
 
     // ---------------------------------------------------------------- YouTube
     [GeneratedRegex(@"(?:v=|youtu\.be/|shorts/|embed/|live/)([\w-]{11})")]

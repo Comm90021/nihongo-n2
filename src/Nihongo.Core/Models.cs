@@ -52,6 +52,9 @@ public sealed record ListeningItem(int Mondai, string Label, int Answer)
     public int Choices => Mondai == 4 ? 3 : 4;
 }
 
+/// <summary>Nguồn tự cập nhật: feed báo (kind=feed) hoặc kênh YouTube (kind=channel). Score: số câu tách được trung bình, hoặc tỉ lệ video có phụ đề thủ công.</summary>
+public sealed record Source(string Id, string Kind, string Name, string Topic, string Level, string Url, string StartMarker, string EndMarker, string Note, double Score);
+
 public sealed record ListeningSet(string Id, string Title, string Mp3, string ScriptPdf, string ExamPdf, int PageFrom, IReadOnlyList<ListeningItem> Items);
 
 public sealed record ReadingSet(

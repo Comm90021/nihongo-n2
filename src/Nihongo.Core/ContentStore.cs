@@ -71,6 +71,25 @@ public sealed class ContentStore
         return list;
     }
 
+    public IReadOnlyList<Source> LoadSources()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT id,kind,name,topic,level,url,start_marker,end_marker,note,score FROM source ORDER BY topic, score DESC";
+        try
+        {
+            using var r = cmd.ExecuteReader();
+            var list = new List<Source>();
+            while (r.Read())
+                list.Add(new Source(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6), r.GetString(7), r.GetString(8), r.GetDouble(9)));
+            return list;
+        }
+        catch (SqliteException)
+        {
+            return [];
+        }
+    }
+
     public IReadOnlyList<ListeningSet> LoadListeningSets()
     {
         using var c = Open();
