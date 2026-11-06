@@ -6,51 +6,109 @@
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="PageBg">#F3F5FA</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#F4F6FB</SolidColorBrush>
           <SolidColorBrush x:Key="CardBg">#FFFFFF</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#E6E9F2</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#E4E8F2</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#EBEEF6</SolidColorBrush>
+          <SolidColorBrush x:Key="RowHover">#F1F4FB</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#E3E8F6</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#1B2133</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#EEF1F8</SolidColorBrush>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="PageBg">#0F111A</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBg">#1A1C26</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#151722</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#0E1018</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#181B26</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#262A38</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#131620</SolidColorBrush>
+          <SolidColorBrush x:Key="RowHover">#1F2331</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#263055</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#E8EBF5</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#222636</SolidColorBrush>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
-    <SolidColorBrush x:Key="Accent">#5368A4</SolidColorBrush>
-    <SolidColorBrush x:Key="Good">#16A34A</SolidColorBrush>
-    <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>
+      <SolidColorBrush x:Key="Accent">#5368A4</SolidColorBrush>
+      <SolidColorBrush x:Key="Good">#16A34A</SolidColorBrush>
+      <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>
+      <LinearGradientBrush x:Key="Hero" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="#4F63A8" Offset="0" />
+        <GradientStop Color="#7A5BC7" Offset="1" />
+      </LinearGradientBrush>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBg}" />
-      <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="16" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="Padding" Value="18" />
+      <Setter Property="BoxShadow" Value="0 1 2 0 #0F000000, 0 6 18 0 #0A000000" />
     </Style>
-    <Style Selector="TextBlock.title">
-      <Setter Property="FontSize" Value="24" />
-      <Setter Property="FontWeight" Value="Bold" />
+    <Style Selector="Border.hero">
+      <Setter Property="Background" Value="{StaticResource Hero}" />
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="Padding" Value="26,22" />
+      <Setter Property="BoxShadow" Value="0 10 30 0 #335368A4" />
     </Style>
-    <Style Selector="TextBlock.muted">
-      <Setter Property="Opacity" Value="0.65" />
+    <Style Selector="Border.row">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Border.row:pointerover">
+      <Setter Property="Background" Value="{DynamicResource RowHover}" />
+    </Style>
+    <Style Selector="Border.chip">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="8,3" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Background" Value="{DynamicResource SoftButton}" />
+      <Setter Property="BorderThickness" Value="0" />
     </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="White" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="#475B94" />
+      <Setter Property="Background" Value="#46599A" />
       <Setter Property="Foreground" Value="White" />
     </Style>
-    <Style Selector="Button">
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="14,8" />
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent" />
     </Style>
+    <Style Selector="Button.option">
+      <Setter Property="Background" Value="{DynamicResource CardBg}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="16,12" />
+    </Style>
+    <Style Selector="Button.option:pointerover /template/ ContentPresenter">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    </Style>
+
     <Style Selector="ListBox.nav ListBoxItem">
-      <Setter Property="Padding" Value="14,10" />
-      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Margin" Value="0,2" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:selected TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ProgressBar">
+      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="CornerRadius" Value="4" />
     </Style>
   </Application.Styles>
 </Application>

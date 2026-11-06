@@ -1,4 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Nihongo.Core;
 using static Nihongo.Desktop.Views.Ui;
 
@@ -17,7 +20,8 @@ sealed class TodayView : UserControl
         var days = Math.Max(0, ExamDay.DayNumber - today.DayNumber);
 
         var questionsById = content.Questions.ToDictionary(q => q.Id);
-        var vocabById = content.Vocab.GroupBy(v => v.CardId).ToDictionary(g => g.Key, g => g.First());
+        var notes = p.Notes();
+        var vocabById = content.Vocab.Concat(notes.Select(n => n.ToCard())).GroupBy(v => v.CardId).ToDictionary(g => g.Key, g => g.First());
         var dueQuestions = p.DueIds(SrsKind.Question).Select(id => questionsById.GetValueOrDefault(id)).OfType<Question>().ToList();
         var dueCards = p.DueIds(SrsKind.Card).Select(id => vocabById.GetValueOrDefault(id)).OfType<VocabItem>().ToList();
 
@@ -31,32 +35,53 @@ sealed class TodayView : UserControl
 
         var done = p.Results().Select(r => r.SetId).ToHashSet();
         var nextSet = content.LoadReadingSets().FirstOrDefault(s => !done.Contains($"{s.Id}:reading"));
+        var nextListen = content.LoadListeningSets().FirstOrDefault(s => !done.Contains(s.Id));
 
-        Control Step(int n, string title, string detail, string button, Action go, bool enabled) => Card(Line(
-            Row(14, Text($"{n}", 20, bold: true), Col(2, Text(title, 16, bold: true), Text(detail, muted: true))),
-            Btn(button, go, primary: true, enabled: enabled)));
+        var hero = new Border
+        {
+            Classes = { "hero" },
+            Child = Line(
+                Col(2,
+                    Text("KỲ THI JLPT N2 · CHỦ NHẬT 06/12/2026", 12, bold: true).Also(t => { t.Foreground = Brushes.White; t.Opacity = 0.8; t.LetterSpacing = 0.8; }),
+                    Row(10, Text($"{days}", 56, bold: true).Also(t => { t.Foreground = Brushes.White; t.FontWeight = FontWeight.Bold; }),
+                        Text("ngày nữa", 22).Also(t => { t.Foreground = Brushes.White; t.VerticalAlignment = VerticalAlignment.Bottom; t.Margin = new Thickness(0, 0, 0, 12); })),
+                    Text("Làm từ trên xuống. Câu sai và thẻ quên tự quay lại sau 1, 3, 7 ngày.", 14).Also(t => { t.Foreground = Brushes.White; t.Opacity = 0.85; })),
+                Icon(Glyph.Calendar, 64, Brushes.White).Also(i => i.Opacity = 0.35)),
+        };
+
+        var tiles = Columns(12,
+            Tile($"{dueCards.Count + dueQuestions.Count}", "việc ôn đến hạn", Glyph.Refresh),
+            Tile($"{p.CountLearning(SrsKind.Question)}", "câu còn yếu", Glyph.Flag),
+            Tile($"{p.CountMastered(SrsKind.Card)}", "thẻ đã chắc", Glyph.Check),
+            Tile($"{notes.Count}", "từ trong sổ tay", Glyph.Save));
+
+        Control Step(string glyph, string title, string detail, string button, Action go, bool enabled) => Card(Line(
+            Row(16, IconBadge(glyph), Col(2, Text(title, 16, bold: true), Text(detail, 13, muted: true))),
+            Btn(button, go, primary: enabled, enabled: enabled)), 4);
 
         var reasons = p.ReasonCounts();
-        var reasonText = reasons.Count == 0 ? "Chưa có lý do sai nào được ghi." :
-            string.Join(" · ", reasons.Select(kv => $"{Label(kv.Key)}: {kv.Value}"));
+        var reasonRow = Ui.Wrap(reasons.Count == 0
+            ? [Text("Chưa có lý do sai nào được ghi. Khi làm sai, chọn lý do để app biết mày yếu chỗ nào.", 13, muted: true)]
+            : reasons.Select(kv => (Control)Chip($"{Label(kv.Key)}: {kv.Value}")).ToArray());
 
-        Content = Scroll(Col(8,
-            Title($"Còn {days} ngày tới kỳ thi 06/12"),
-            Text("Làm từ trên xuống. Câu sai và thẻ quên sẽ tự quay lại sau 1, 3, 7 ngày.", muted: true),
-            Step(1, "Ôn câu sai đến hạn", $"{dueQuestions.Count} câu", "Làm",
+        Content = Scroll(Col(10,
+            hero,
+            tiles,
+            Section("Việc hôm nay"),
+            Step(Glyph.Refresh, "Ôn câu sai đến hạn", $"{dueQuestions.Count} câu", "Làm",
                 () => App.Shell.Show(new QuizView(dueQuestions, "Ôn câu sai đến hạn")), dueQuestions.Count > 0),
-            Step(2, "Ôn thẻ từ đến hạn", $"{dueCards.Count} thẻ", "Ôn",
+            Step(Glyph.Library, "Ôn thẻ từ đến hạn", $"{dueCards.Count} thẻ, gồm cả từ trong sổ tay", "Ôn",
                 () => App.Shell.Show(new FlashView(dueCards, "Ôn thẻ đến hạn")), dueCards.Count > 0),
-            Step(3, "Thẻ từ mới", $"{newCards.Count} từ N2 hay ra đề nhất chưa học", "Học",
+            Step(Glyph.Light, "Thẻ từ mới", $"{newCards.Count} từ N2 hay ra đề nhất chưa học", "Học",
                 () => App.Shell.Show(new FlashView(newCards, "Thẻ từ mới")), newCards.Count > 0),
-            Step(4, "Ngữ pháp Mondai 7 chưa làm", $"{newGrammar.Count} câu đề thật, có giải thích", "Làm",
+            Step(Glyph.Education, "Ngữ pháp Mondai 7", $"{newGrammar.Count} câu đề thật chưa làm, có giải thích", "Làm",
                 () => App.Shell.Show(new QuizView(newGrammar, "Ngữ pháp hôm nay")), newGrammar.Count > 0),
-            Step(5, "Đọc hiểu", nextSet is null ? "Đã làm hết" : $"{nextSet.Title}, 60 phút", "Làm",
+            Step(Glyph.Reading, "Đọc hiểu", nextSet is null ? "Đã làm hết" : $"{nextSet.Title}, 60 phút", "Làm",
                 () => App.Shell.Show(new ReadingSessionView(nextSet!, m9: false)), nextSet is not null),
-            Card(Col(6,
-                Text("Tiến độ", 16, bold: true),
-                Text($"Câu còn yếu: {p.CountLearning(SrsKind.Question)} · Thẻ đang học: {p.CountLearning(SrsKind.Card)} · Thẻ đã chắc: {p.CountMastered(SrsKind.Card)}"),
-                Text(reasonText, muted: true)))));
+            Step(Glyph.Headphone, "Nghe hiểu", nextListen is null ? "Đã làm hết" : $"{nextListen.Title}, khoảng 50 phút", "Nghe",
+                () => App.Shell.Show(new ListeningSessionView(nextListen!)), nextListen is not null),
+            Section("Hay sai vì"),
+            Card(reasonRow)));
     }
 
     public static string Label(WrongReason r) => r switch

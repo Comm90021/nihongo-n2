@@ -32,16 +32,16 @@ sealed class PracticeView : UserControl
         }
 
         var kinds = Col(6, Text("Lấy ngẫu nhiên từ đề thật và 480 câu luyện ngữ pháp.", muted: true));
-        string[] names = ["", "Đọc kanji", "Viết kanji", "Tiền tố, hậu tố", "Điền từ theo ngữ cảnh", "Từ gần nghĩa", "Cách dùng từ", "Ngữ pháp trong câu", "Sắp xếp câu ★", "Ngữ pháp đoạn văn"];
-        foreach (var g in qs.GroupBy(q => q.Mondai).Where(g => g.Key is >= 1 and <= 9).OrderBy(g => g.Key))
+        string[] names = ["", "Đọc kanji", "Viết kanji", "Tiền tố, hậu tố", "Điền từ theo ngữ cảnh", "Từ gần nghĩa", "Cách dùng từ", "Ngữ pháp trong câu", "Sắp xếp câu ★", "Ngữ pháp đoạn văn", "Đọc hiểu luyện (60 bài Thaolejp)"];
+        foreach (var g in qs.GroupBy(q => q.Mondai).Where(g => g.Key is >= 1 and <= 10).OrderBy(g => g.Key))
             kinds.Children.Add(Card(Line(Col(2, Text($"Mondai {g.Key}: {names[g.Key]}", 16, bold: true), Text($"{g.Count()} câu", muted: true)),
-                Btn($"Làm {Batch} câu", () => Start(g.OrderBy(_ => Rng.Next()).Take(Batch), $"Mondai {g.Key}: {names[g.Key]}"), primary: true))));
+                Btn($"Làm {Batch} câu", () => Start(Pick(g), $"Mondai {g.Key}: {names[g.Key]}"), primary: true))));
 
         Content = new DockPanel
         {
             Children =
             {
-                Title("Luyện đề").Also(t => DockPanel.SetDock(t, Dock.Top)),
+                Header("Luyện đề", "Làm từng câu, có đáp án và giải thích ngay. Câu sai tự vào lịch ôn.").Also(t => DockPanel.SetDock(t, Dock.Top)),
                 new TabControl
                 {
                     Items =
@@ -53,6 +53,20 @@ sealed class PracticeView : UserControl
                 },
             },
         };
+    }
+
+    /// <summary>Câu có bài đọc đi kèm thì lấy trọn từng bài theo thứ tự câu; câu lẻ thì lấy ngẫu nhiên.</summary>
+    static IEnumerable<Question> Pick(IEnumerable<Question> group)
+    {
+        var list = group.ToList();
+        if (list.All(q => q.Context == "")) return list.OrderBy(_ => Rng.Next()).Take(Batch);
+        var picked = new List<Question>();
+        foreach (var passage in list.GroupBy(q => q.Context).OrderBy(_ => Rng.Next()))
+        {
+            picked.AddRange(passage.OrderBy(q => q.Number));
+            if (picked.Count >= Batch) break;
+        }
+        return picked;
     }
 
     static IEnumerable<Question> Weakest(IEnumerable<Question> topic)

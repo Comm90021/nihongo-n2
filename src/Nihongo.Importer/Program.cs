@@ -108,6 +108,27 @@ int ImportQuestions(SqliteConnection db, string webRoot, StringBuilder corpus, D
     // Bộ luyện ngữ pháp: 問題1/2/3 tương ứng dạng Mondai 7/8/9 của đề thật.
     foreach (var f in Directory.GetFiles(Path.Combine(webRoot, "data", "gramma"), "*.json").Order())
         Add(JsonNode.Parse(File.ReadAllText(f))!.AsObject(), "grammar", name => Digits(name) + 6);
+    // Đọc hiểu luyện (Gemini V6, 60 bài Thaolejp, đáp án lấy từ trang 解答 của sách): mỗi câu mang theo cả bài đọc.
+    var v6 = P("antigravity_out", "V6_doc_hieu_180", "passages.json");
+    if (File.Exists(v6))
+        foreach (var n in JsonNode.Parse(File.ReadAllText(v6))!.AsArray())
+        {
+            var passage = n!["passage_ja"]?.ToString() ?? "";
+            var title = $"Thaolejp ngày {n["day"]} · {n["test"]}";
+            foreach (var qn in n["questions"]!.AsArray())
+            {
+                var answer = qn!["answer"]?.GetValue<int?>();
+                if (answer is null || passage == "") continue;
+                var id = $"dk-{n["id"]}-q{qn["number"]}";
+                if (!seenIds.Add(id)) continue;
+                var opts = Enumerable.Range(1, 4).Select(i => qn["options"]?[$"{i}"]?.ToString() ?? "").ToArray();
+                Exec(db, "INSERT INTO question VALUES($id,$o,$src,$st,$m,$sn,$n,$t,$w,$c,$op,$ov,$a,$fs,$tp,$pt,$why)",
+                    ("$id", id), ("$o", ord++), ("$src", "dokkai"), ("$st", title), ("$m", 10), ("$sn", "Đọc hiểu luyện"),
+                    ("$n", qn["number"]!.GetValue<int>()), ("$t", qn["text"]?.ToString() ?? ""), ("$w", ""), ("$c", passage),
+                    ("$op", JsonSerializer.Serialize(opts)), ("$ov", JsonSerializer.Serialize(new[] { "", "", "", "" })), ("$a", answer.Value),
+                    ("$fs", ""), ("$tp", ""), ("$pt", ""), ("$why", ""));
+            }
+        }
     tx.Commit();
     Console.WriteLine($"Câu hỏi: {ord} (bỏ {duplicates} câu trùng mã)");
     return ord;
@@ -132,6 +153,7 @@ int ImportVocab(SqliteConnection db, string examText, string corpusText, Diction
         ("Từ vựng N2.csv", "Từ vựng N2", VocabKind.Normal),
         ("20260112115349_GUNGUN N2 - TỪ VỰNG.csv", "GunGun N2", VocabKind.Normal),
         ("Tiền hậu tố N2 600 từ 未来へ.csv", "600 tiền hậu tố", VocabKind.Affix),
+        (Path.Combine("..", "V6_doc_hieu_180", "tu_moi.csv"), "Từ mới đọc hiểu", VocabKind.Normal),
     };
     foreach (var (file, label, kind) in books)
     {

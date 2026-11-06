@@ -1,14 +1,41 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Nihongo.Desktop.Views;
 
 namespace Nihongo.Desktop;
 
 public partial class MainWindow : Window
 {
+    static readonly (string Tag, string Label, string Glyph)[] Sections =
+    [
+        ("today", "Hôm nay", Views.Glyph.Home),
+        ("vocab", "Từ vựng", Views.Glyph.Library),
+        ("practice", "Luyện đề", Views.Glyph.Education),
+        ("reading", "Đọc hiểu", Views.Glyph.Reading),
+        ("listening", "Nghe hiểu", Views.Glyph.Headphone),
+        ("media", "Báo & Video", Views.Glyph.News),
+    ];
+
     public MainWindow()
     {
         InitializeComponent();
-        Footer.Text = $"{App.Content.Meta("vocab")} từ · {App.Content.Meta("questions")} câu\nDữ liệu dựng {App.Content.Meta("built_at").Replace('T', ' ')}";
+        foreach (var (tag, label, glyph) in Sections)
+        {
+            var item = new ListBoxItem
+            {
+                Tag = tag,
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 12,
+                    Children = { Ui.Icon(glyph, 17), new TextBlock { Text = label, FontSize = 15, VerticalAlignment = VerticalAlignment.Center } },
+                },
+            };
+            AutomationProperties.SetName(item, label);
+            Nav.Items.Add(item);
+        }
+        Footer.Text = $"{App.Content.Meta("vocab")} từ · {App.Content.Meta("questions")} câu · {App.Content.Meta("listening_sets")} đề nghe\nDữ liệu {App.Content.Meta("built_at").Replace('T', ' ')[..16]}";
         Nav.SelectedIndex = 0;
     }
 
@@ -23,6 +50,7 @@ public partial class MainWindow : Window
             "practice" => new PracticeView(),
             "reading" => new ReadingListView(),
             "listening" => new ListeningListView(),
+            "media" => new MediaView(),
             _ => new TodayView(),
         });
     }

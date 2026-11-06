@@ -8,6 +8,12 @@ public enum WrongReason { None, Meaning, Connection, Nuance, Unknown }
 
 public sealed record SrsEntry(string ItemId, SrsKind Kind, int Box, DateOnly Due, int Lapses, WrongReason Reason);
 
+/// <summary>Từ tự lưu khi đọc báo hoặc xem video, kèm câu đã gặp và bản dịch câu.</summary>
+public sealed record NoteEntry(string Word, string Reading, string Meaning, string Sentence, string SentenceVi, string Source)
+{
+    public VocabItem ToCard() => new(0, Word, Reading, "", "", Meaning, "", Sentence, SentenceVi, "", "Sổ tay", VocabKind.Normal, $"Sổ tay · {Source}", 0, 0);
+}
+
 public sealed record ExamResult(string SetId, string Title, string Kind, DateTime At, int Correct, int Total, int UsedSeconds);
 
 /// <summary>Tiến độ học trong tien_do.db. Không bao giờ bị công cụ nhập dữ liệu ghi đè.</summary>
@@ -30,6 +36,9 @@ public sealed class ProgressStore
             CREATE TABLE IF NOT EXISTS attempt(item_id TEXT, correct INTEGER, at TEXT);
             CREATE TABLE IF NOT EXISTS seen(item_id TEXT PRIMARY KEY);
             CREATE TABLE IF NOT EXISTS result(set_id TEXT, title TEXT, kind TEXT, at TEXT, correct INTEGER, total INTEGER, used_seconds INTEGER);
+            CREATE TABLE IF NOT EXISTS notebook(word TEXT PRIMARY KEY, reading TEXT, meaning TEXT, sentence TEXT, sentence_vi TEXT, source TEXT, added_at TEXT);
+            CREATE TABLE IF NOT EXISTS translation(src TEXT PRIMARY KEY, vi TEXT);
+            CREATE TABLE IF NOT EXISTS media(url TEXT PRIMARY KEY, kind TEXT, title TEXT, lines TEXT, opened_at TEXT);
             PRAGMA journal_mode=WAL;
             """);
         using var cmd = c.CreateCommand();
@@ -119,6 +128,57 @@ public sealed class ProgressStore
         using var c = Open();
         Exec(c, "INSERT INTO result VALUES($s,$t,$k,$a,$c,$n,$u)", ("$s", x.SetId), ("$t", x.Title), ("$k", x.Kind),
             ("$a", x.At.ToString("s")), ("$c", x.Correct), ("$n", x.Total), ("$u", x.UsedSeconds));
+    }
+
+    // ---------------------------------------------------------------- sổ tay, bản dịch, bài đã mở
+    public void SaveNote(NoteEntry n)
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO notebook VALUES($w,$r,$m,$s,$v,$src,$a)", ("$w", n.Word), ("$r", n.Reading), ("$m", n.Meaning),
+            ("$s", n.Sentence), ("$v", n.SentenceVi), ("$src", n.Source), ("$a", DateTime.Now.ToString("s")));
+    }
+
+    public IReadOnlyList<NoteEntry> Notes()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT word,reading,meaning,sentence,sentence_vi,source FROM notebook ORDER BY added_at DESC";
+        using var r = cmd.ExecuteReader();
+        var list = new List<NoteEntry>();
+        while (r.Read()) list.Add(new NoteEntry(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5)));
+        return list;
+    }
+
+    public string? CachedTranslation(string src)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT vi FROM translation WHERE src=$s";
+        cmd.Parameters.AddWithValue("$s", src);
+        return cmd.ExecuteScalar() as string;
+    }
+
+    public void CacheTranslation(string src, string vi)
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO translation VALUES($s,$v)", ("$s", src), ("$v", vi));
+    }
+
+    public void SaveMedia(string url, string kind, string title, string linesJson)
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO media VALUES($u,$k,$t,$l,$a)", ("$u", url), ("$k", kind), ("$t", title), ("$l", linesJson), ("$a", DateTime.Now.ToString("s")));
+    }
+
+    public IReadOnlyList<(string Url, string Kind, string Title, string Lines)> Media()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT url,kind,title,lines FROM media ORDER BY opened_at DESC";
+        using var r = cmd.ExecuteReader();
+        var list = new List<(string, string, string, string)>();
+        while (r.Read()) list.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3)));
+        return list;
     }
 
     public IReadOnlyList<ExamResult> Results()

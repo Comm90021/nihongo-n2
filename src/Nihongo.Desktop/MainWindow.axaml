@@ -2,26 +2,28 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Nihongo.Desktop.MainWindow"
         Title="Ôn N2"
-        Width="1280" Height="820" MinWidth="900" MinHeight="600"
+        Width="1320" Height="840" MinWidth="960" MinHeight="620"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI, Yu Gothic UI, Meiryo UI"
+        FontFamily="Segoe UI Variable Text, Segoe UI, Yu Gothic UI, Meiryo UI"
         FontSize="15"
+        Foreground="{DynamicResource Ink}"
         Background="{DynamicResource PageBg}">
   <DockPanel>
-    <Border DockPanel.Dock="Left" Width="200" Padding="12"
-            Background="{DynamicResource NavBg}">
+    <Border DockPanel.Dock="Left" Width="220" Padding="14,18" Background="{DynamicResource NavBg}">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Top" Text="Ôn N2" FontSize="22" FontWeight="Bold" Margin="6,4,0,16" />
-        <TextBlock DockPanel.Dock="Bottom" x:Name="Footer" Classes="muted" FontSize="12" TextWrapping="Wrap" Margin="6,0" />
-        <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav">
-          <ListBoxItem AutomationProperties.Name="Hôm nay" Content="Hôm nay" Tag="today" />
-          <ListBoxItem AutomationProperties.Name="Từ vựng" Content="Từ vựng" Tag="vocab" />
-          <ListBoxItem AutomationProperties.Name="Luyện đề" Content="Luyện đề" Tag="practice" />
-          <ListBoxItem AutomationProperties.Name="Đọc hiểu" Content="Đọc hiểu" Tag="reading" />
-          <ListBoxItem AutomationProperties.Name="Nghe hiểu" Content="Nghe hiểu" Tag="listening" />
-        </ListBox>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="4,0,0,22">
+          <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource Hero}">
+            <TextBlock Text="N2" Foreground="White" FontWeight="Bold" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Ôn N2" FontSize="19" FontWeight="Bold" />
+            <TextBlock Text="JLPT · 06/12/2026" FontSize="12" Opacity="0.6" />
+          </StackPanel>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" x:Name="Footer" Opacity="0.55" FontSize="11.5" TextWrapping="Wrap" Margin="6,0" />
+        <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" />
       </DockPanel>
     </Border>
-    <ContentControl x:Name="Host" Margin="24,20" />
+    <ContentControl x:Name="Host" Margin="28,22" />
   </DockPanel>
 </Window>
