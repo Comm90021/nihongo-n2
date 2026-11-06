@@ -69,8 +69,11 @@ sealed class MediaView : UserControl
         }
     }
 
-    static void Show(string url, string kind, string title, string json) =>
-        App.Shell.Show(new MediaReaderView(url, kind, title, JsonSerializer.Deserialize(json, MediaJson.Default.ListMediaLine) ?? []));
+    public static void Show(string url, string kind, string title, string json)
+    {
+        var lines = JsonSerializer.Deserialize(json, MediaJson.Default.ListMediaLine) ?? [];
+        App.Shell.Show(kind == "video" ? new VideoReaderView(url, title, lines) : new MediaReaderView(url, kind, title, lines));
+    }
 }
 
 /// <summary>Đọc song song: cột tiếng Nhật (bôi đen được) và cột tiếng Việt, bảng tra từ bên phải.</summary>
