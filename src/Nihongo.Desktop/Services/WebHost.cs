@@ -8,8 +8,8 @@ using Nihongo.Core;
 namespace Nihongo.Desktop.Services;
 
 /// <summary>
-/// Khung web nhỏ (WebView2 có sẵn trên Windows 11) gắn vào cửa sổ app. Chỉ dùng cho trình phát video;
-/// phần còn lại của app vẫn là giao diện gốc.
+/// Khung web nhỏ (WebView2 có sẵn trên Windows 11) gắn vào cửa sổ app. Chỉ dùng cho trình phát video
+/// và tab Gemini; phần còn lại của app vẫn là giao diện gốc.
 /// </summary>
 sealed class WebHost : NativeControlHost
 {
@@ -27,14 +27,22 @@ sealed class WebHost : NativeControlHost
         return new PlatformHandle(_hwnd, "HWND");
     }
 
+    static Task<CoreWebView2Environment>? _env;
+
+    /// <summary>
+    /// Một môi trường cho cả app: khung video và tab Gemini dùng chung hồ sơ trong data/webview,
+    /// nên đăng nhập Google một lần là cả YouTube lẫn Gemini đều nhận.
+    /// </summary>
+    public static Task<CoreWebView2Environment> Environment => _env ??= CoreWebView2Environment.CreateAsync(null,
+        Path.Combine(AppPaths.DataDir, "webview"),
+        // Cho phép nút Phát của app điều khiển video (mặc định trình duyệt chặn phát khi chưa có cú bấm trong trang).
+        new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required"));
+
     async Task InitAsync()
     {
         try
         {
-            var dataDir = Path.Combine(AppPaths.DataDir, "webview");
-            // Cho phép nút Phát của app điều khiển video (mặc định trình duyệt chặn phát khi chưa có cú bấm trong trang).
-            var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
-            var env = await CoreWebView2Environment.CreateAsync(null, dataDir, options);
+            var env = await Environment;
             _controller = await env.CreateCoreWebView2ControllerAsync(_hwnd);
             var core = _controller.CoreWebView2;
             core.Settings.AreDevToolsEnabled = false;

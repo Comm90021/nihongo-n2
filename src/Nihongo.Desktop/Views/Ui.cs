@@ -6,7 +6,13 @@ using Avalonia.Media;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>Mã biểu tượng của font Segoe Fluent Icons (Windows 11), dự phòng Segoe MDL2 Assets (Windows 10).</summary>
-static class Glyph
+static partial class Glyph
+{
+    public const string Settings = "", Chat = "", Menu = "", Add = "", Copy = "",
+        FullScreen = "", Close = "", Accept = "", People = "";
+}
+
+static partial class Glyph
 {
     public const string Home = "", Library = "", Education = "", Reading = "", Headphone = "",
         News = "", Video = "", Save = "", Calendar = "", Check = "", Play = "",
@@ -124,6 +130,29 @@ static class Ui
             g.Children.Add(children[i]);
         }
         return g;
+    }
+
+    /// <summary>Gắn phông và cỡ chữ đọc theo trang Cài đặt (đổi là cập nhật ngay).</summary>
+    public static T Reading<T>(T t, bool vi = false) where T : TextBlock
+    {
+        if (!vi)
+        {
+            t.Bind(TextBlock.FontFamilyProperty, t.GetResourceObservable("ReadFont"));
+            t.Bind(TextBlock.FontSizeProperty, t.GetResourceObservable("ReadSize"));
+            t.Bind(TextBlock.LineHeightProperty, t.GetResourceObservable("ReadLine"));
+        }
+        else t.Bind(TextBlock.FontSizeProperty, t.GetResourceObservable("ReadViSize"));
+        return t;
+    }
+
+    /// <summary>Nút chỉ có biểu tượng, có tên cho trình đọc màn hình và chú thích khi rê chuột.</summary>
+    public static Button IconBtn(string glyph, string tip, Action onClick)
+    {
+        var b = new Button { Content = Icon(glyph, 16), Padding = new Thickness(10, 8) };
+        ToolTip.SetTip(b, tip);
+        Avalonia.Automation.AutomationProperties.SetName(b, tip);
+        b.Click += (_, _) => onClick();
+        return b;
     }
 
     public static ScrollViewer Scroll(Control child) => new() { Content = child, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };

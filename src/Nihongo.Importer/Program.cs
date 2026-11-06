@@ -385,15 +385,20 @@ int ImportSources(SqliteConnection db)
             Add(f["id"]!.ToString(), "feed", f["name"]!.ToString(), f["topic"]?.ToString() ?? "Khác", f["level"]?.ToString() ?? "", f["url"]!.ToString(),
                 f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "", f["note"]?.ToString() ?? "", f["avg_sentences"]?.GetValue<double>() ?? 0);
         }
-    var channels = P("antigravity_out", "V9_kenh_youtube", "channels.json");
-    if (File.Exists(channels))
-        foreach (var c in JsonNode.Parse(File.ReadAllText(channels))!.AsArray())
+    // V10 (kênh người Nhật làm cho người Nhật) xếp trước V9. Kênh V9 nhắm người nước ngoài thì bỏ (danh sách lấy từ báo cáo V10, đã kiểm tay).
+    var seen = new HashSet<string>();
+    HashSet<string> DropChannels = ["UCDqWakN_owifqIBqyNjg6kg"]; // 出口日語: dạy tiếng Nhật cho người Trung Quốc, tiêu đề tiếng Trung
+    foreach (var file in new[] { P("antigravity_out", "V10_kenh_nguoi_nhat", "channels.json"), P("antigravity_out", "V9_kenh_youtube", "channels.json") })
+    {
+        if (!File.Exists(file)) continue;
+        foreach (var c in JsonNode.Parse(File.ReadAllText(file))!.AsArray())
         {
             var cid = c!["channel_id"]?.ToString() ?? "";
-            if (!cid.StartsWith("UC")) continue;
+            if (!cid.StartsWith("UC") || cid.Length != 24 || DropChannels.Contains(cid) || !seen.Add(cid)) continue;
             Add(c["id"]?.ToString() ?? cid, "channel", c["name"]!.ToString(), c["topic"]?.ToString() ?? "Khác", c["level"]?.ToString() ?? "",
                 $"https://www.youtube.com/feeds/videos.xml?channel_id={cid}", "", "", $"{c["speed"]} {c["note"]}".Trim(), c["ja_manual_ratio"]?.GetValue<double>() ?? 0);
         }
+    }
     tx.Commit();
     Console.WriteLine($"Nguồn báo và kênh video: {n}");
     return n;

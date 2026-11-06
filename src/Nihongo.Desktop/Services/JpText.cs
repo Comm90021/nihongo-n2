@@ -29,4 +29,6 @@ static partial class JpText
     }
 
     public static string Plain(string text) => text.Replace("<u>", "").Replace("</u>", "");
+
+    public static bool IsKana(char c) => c is >= '぀' and <= 'ヿ' or 'ー';
 }

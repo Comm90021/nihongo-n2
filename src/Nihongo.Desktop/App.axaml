@@ -26,6 +26,10 @@
           <SolidColorBrush x:Key="SoftButton">#222636</SolidColorBrush>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
+      <FontFamily x:Key="ReadFont">Yu Gothic UI, Meiryo, Segoe UI</FontFamily>
+      <x:Double x:Key="ReadSize">19</x:Double>
+      <x:Double x:Key="ReadLine">30</x:Double>
+      <x:Double x:Key="ReadViSize">15</x:Double>
       <SolidColorBrush x:Key="Accent">#5368A4</SolidColorBrush>
       <SolidColorBrush x:Key="Good">#16A34A</SolidColorBrush>
       <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>

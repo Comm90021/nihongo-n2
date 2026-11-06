@@ -9,13 +9,11 @@
         Foreground="{DynamicResource Ink}"
         Background="{DynamicResource PageBg}">
   <DockPanel>
-    <Border DockPanel.Dock="Left" Width="220" Padding="14,18" Background="{DynamicResource NavBg}">
+    <Border x:Name="NavPane" DockPanel.Dock="Left" Width="220" Padding="14,18" Background="{DynamicResource NavBg}">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="4,0,0,22">
-          <Border Width="42" Height="42" CornerRadius="12" Background="{StaticResource Hero}">
-            <TextBlock Text="N2" Foreground="White" FontWeight="Bold" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
-          </Border>
-          <StackPanel VerticalAlignment="Center">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="0,0,0,22">
+          <Button x:Name="NavToggle" Classes="ghost" Padding="10,8" Click="OnNavToggle" ToolTip.Tip="Thu gọn / mở rộng thanh bên (Ctrl+B)" />
+          <StackPanel x:Name="Brand" VerticalAlignment="Center">
             <TextBlock Text="Ôn N2" FontSize="19" FontWeight="Bold" />
             <TextBlock Text="JLPT · 06/12/2026" FontSize="12" Opacity="0.6" />
           </StackPanel>
@@ -24,6 +22,9 @@
         <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" />
       </DockPanel>
     </Border>
-    <ContentControl x:Name="Host" Margin="28,22" />
+    <Grid Margin="28,22">
+      <ContentControl x:Name="Host" />
+      <ContentControl x:Name="GeminiSlot" IsVisible="False" />
+    </Grid>
   </DockPanel>
 </Window>

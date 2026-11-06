@@ -17,6 +17,8 @@ public partial class App : Application
     {
         Content = new ContentStore(AppPaths.ContentDb);
         Progress = new ProgressStore(AppPaths.ProgressDb);
+        Services.Prefs.Load();
+        _ = Task.Run(Services.Prefs.AutoBackup);
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.MainWindow = Shell = new MainWindow();
         base.OnFrameworkInitializationCompleted();

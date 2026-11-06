@@ -26,9 +26,27 @@ public sealed class ProgressStore
     readonly string _connection;
     readonly Dictionary<string, SrsEntry> _srs = new();
 
+    /// <summary>
+    /// Nếu có file path.restore (do trang Cài đặt chuẩn bị) thì thay tien_do.db bằng nó trước khi mở.
+    /// Bản đang dùng được giữ lại thành tien_do.truoc_khoi_phuc_{giờ}.db, không bao giờ bị xóa.
+    /// </summary>
+    static void ApplyPendingRestore(string path)
+    {
+        var pending = path + ".restore";
+        if (!File.Exists(pending)) return;
+        if (File.Exists(path))
+        {
+            SqliteConnection.ClearAllPools();
+            File.Move(path, Path.Combine(Path.GetDirectoryName(path)!, $"tien_do.truoc_khoi_phuc_{DateTime.Now:yyyyMMdd_HHmmss}.db"));
+            foreach (var side in new[] { path + "-wal", path + "-shm" }) if (File.Exists(side)) File.Delete(side);
+        }
+        File.Move(pending, path);
+    }
+
     public ProgressStore(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        ApplyPendingRestore(path);
         _connection = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
         using var c = Open();
         Exec(c, """
@@ -39,6 +57,9 @@ public sealed class ProgressStore
             CREATE TABLE IF NOT EXISTS notebook(word TEXT PRIMARY KEY, reading TEXT, meaning TEXT, sentence TEXT, sentence_vi TEXT, source TEXT, added_at TEXT);
             CREATE TABLE IF NOT EXISTS translation(src TEXT PRIMARY KEY, vi TEXT);
             CREATE TABLE IF NOT EXISTS media(url TEXT PRIMARY KEY, kind TEXT, title TEXT, lines TEXT, opened_at TEXT);
+            CREATE TABLE IF NOT EXISTS setting(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE IF NOT EXISTS watch(video_id TEXT PRIMARY KEY, position REAL, duration REAL, done INTEGER, updated_at TEXT);
+            CREATE TABLE IF NOT EXISTS follow(channel_id TEXT PRIMARY KEY, name TEXT, added_at TEXT);
             PRAGMA journal_mode=WAL;
             """);
         using var cmd = c.CreateCommand();
@@ -179,6 +200,87 @@ public sealed class ProgressStore
         var list = new List<(string, string, string, string)>();
         while (r.Read()) list.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3)));
         return list;
+    }
+
+    // ---------------------------------------------------------------- cài đặt
+    public string Setting(string key, string fallback = "")
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT value FROM setting WHERE key=$k";
+        cmd.Parameters.AddWithValue("$k", key);
+        return cmd.ExecuteScalar() as string ?? fallback;
+    }
+
+    public void SetSetting(string key, string value)
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO setting VALUES($k,$v)", ("$k", key), ("$v", value));
+    }
+
+    // ---------------------------------------------------------------- video đã xem, kênh theo dõi
+    /// <summary>Lưu vị trí xem. Đã xem tới 90% thì tự coi là đã học; đã học rồi thì không bị bỏ đánh dấu.</summary>
+    public void SaveWatch(string videoId, double position, double duration, bool? done = null)
+    {
+        using var c = Open();
+        var auto = duration > 0 && position >= duration * 0.9 ? 1 : 0;
+        Exec(c, """
+            INSERT INTO watch VALUES($v,$p,$d,$x,$t)
+            ON CONFLICT(video_id) DO UPDATE SET position=$p, duration=CASE WHEN $d>0 THEN $d ELSE duration END,
+              done=CASE WHEN $force>=0 THEN $force ELSE MAX(done,$x) END, updated_at=$t
+            """, ("$v", videoId), ("$p", position), ("$d", duration), ("$x", done == true ? 1 : auto),
+            ("$force", done is null ? -1 : done.Value ? 1 : 0), ("$t", DateTime.Now.ToString("s")));
+    }
+
+    public Dictionary<string, (double Position, double Duration, bool Done)> Watches()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT video_id,position,duration,done FROM watch";
+        using var r = cmd.ExecuteReader();
+        var d = new Dictionary<string, (double, double, bool)>();
+        while (r.Read()) d[r.GetString(0)] = (r.GetDouble(1), r.GetDouble(2), r.GetInt32(3) == 1);
+        return d;
+    }
+
+    public void Follow(string channelId, string name)
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO follow VALUES($c,$n,$t)", ("$c", channelId), ("$n", name), ("$t", DateTime.Now.ToString("s")));
+    }
+
+    public void Unfollow(string channelId)
+    {
+        using var c = Open();
+        Exec(c, "DELETE FROM follow WHERE channel_id=$c", ("$c", channelId));
+    }
+
+    public IReadOnlyList<(string ChannelId, string Name)> Follows()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT channel_id,name FROM follow ORDER BY added_at DESC";
+        using var r = cmd.ExecuteReader();
+        var list = new List<(string, string)>();
+        while (r.Read()) list.Add((r.GetString(0), r.GetString(1)));
+        return list;
+    }
+
+    // ---------------------------------------------------------------- sao lưu
+    /// <summary>Chép tien_do.db bằng API sao lưu của SQLite (an toàn cả khi app đang ghi), giữ <paramref name="keep"/> bản mới nhất.</summary>
+    public string Backup(string dir, int keep = 20)
+    {
+        Directory.CreateDirectory(dir);
+        var file = Path.Combine(dir, $"tien_do_{DateTime.Now:yyyyMMdd_HHmmss}.db");
+        using (var src = Open())
+        using (var dst = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = file, Pooling = false }.ToString()))
+        {
+            dst.Open();
+            src.BackupDatabase(dst);
+        }
+        foreach (var old in Directory.GetFiles(dir, "tien_do_*.db").OrderByDescending(f => f).Skip(keep)) File.Delete(old);
+        SetSetting("last_backup", DateTime.Now.ToString("s"));
+        return file;
     }
 
     public IReadOnlyList<ExamResult> Results()

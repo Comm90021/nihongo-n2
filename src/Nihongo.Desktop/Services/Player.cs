@@ -14,15 +14,15 @@ static class Player
         <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{width:100%;height:100%}</style></head>
         <body><div id="p"></div>
         <script>
-        const id = new URLSearchParams(location.search).get('v');
+        const q = new URLSearchParams(location.search), id = q.get('v'), start = parseInt(q.get('start') || '0');
         let player;
         function onYouTubeIframeAPIReady() {
           player = new YT.Player('p', { videoId: id, width: '100%', height: '100%',
-            playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, origin: location.origin },
+            playerVars: { playsinline: 1, rel: 0, modestbranding: 1, cc_load_policy: 0, start: start, origin: location.origin },
             events: { onReady: () => setInterval(tick, 300), onError: e => post({ error: e.data }) } });
         }
         function post(o) { window.chrome.webview.postMessage(JSON.stringify(o)); }
-        function tick() { if (player && player.getCurrentTime) post({ t: player.getCurrentTime(), s: player.getPlayerState(), r: player.getPlaybackRate() }); }
+        function tick() { if (player && player.getCurrentTime) post({ t: player.getCurrentTime(), s: player.getPlayerState(), r: player.getPlaybackRate(), d: player.getDuration() }); }
         window.chrome.webview.addEventListener('message', e => {
           const m = JSON.parse(e.data);
           if (!player) return;
@@ -35,23 +35,23 @@ static class Player
         """;
 
     /// <summary>Ghi trang trình phát ra thư mục data và ánh xạ thành https://nihongo.local để YouTube nhận đúng nguồn nhúng.</summary>
-    public static async Task OpenAsync(WebHost host, string videoId)
+    public static async Task OpenAsync(WebHost host, string videoId, int start = 0)
     {
         var core = await host.Ready;
         var dir = Path.Combine(AppPaths.DataDir, "webview", "site");
         Directory.CreateDirectory(dir);
         await File.WriteAllTextAsync(Path.Combine(dir, "player.html"), Html);
         core.SetVirtualHostNameToFolderMapping(Host, dir, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
-        core.Navigate($"https://{Host}/player.html?v={videoId}");
+        core.Navigate($"https://{Host}/player.html?v={videoId}&start={start}");
     }
 
     public static async Task SendAsync(WebHost host, JsonObject message) => (await host.Ready).PostWebMessageAsString(message.ToJsonString());
 
-    public static (double Time, int State, string? Error) Parse(string json)
+    public static (double Time, int State, double Duration, string? Error) Parse(string json)
     {
         var n = JsonNode.Parse(json);
-        if (n?["error"] is { } err) return (-1, -1, err.ToString());
-        var t = double.TryParse(n?["t"]?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : -1;
-        return (t, n?["s"]?.GetValue<int>() ?? -1, null);
+        if (n?["error"] is { } err) return (-1, -1, 0, err.ToString());
+        static double Num(JsonNode? x) => double.TryParse(x?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : -1;
+        return (Num(n?["t"]), (int)Num(n?["s"]), Math.Max(0, Num(n?["d"])), null);
     }
 }

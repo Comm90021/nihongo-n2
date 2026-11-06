@@ -151,7 +151,7 @@ static partial class Web
     static bool IsJapanese(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
 
     // ---------------------------------------------------------------- RSS / Atom (cả feed kênh YouTube)
-    public sealed record FeedItem(string Title, string Link, DateTime Published, string Source, string? VideoId);
+    public sealed record FeedItem(string Title, string Link, DateTime Published, string Source, string? VideoId, string? ChannelId = null, string Length = "", bool Captioned = false);
 
     public static async Task<List<FeedItem>> FetchFeedAsync(Source source, CancellationToken ct = default)
     {
@@ -211,6 +211,68 @@ static partial class Web
         }
         Walk(root);
         return items;
+    }
+
+    static JsonObject WebClient() => new()
+    {
+        ["client"] = new JsonObject { ["clientName"] = "WEB", ["clientVersion"] = "2.20250101.00.00", ["hl"] = "ja", ["gl"] = "JP" },
+    };
+
+    /// <summary>
+    /// Tìm video trên YouTube bằng API tìm kiếm nội bộ. <paramref name="captionsOnly"/> bật bộ lọc "Phụ đề"
+    /// (params EgIoAQ==), nên kết quả gần như đều có phụ đề; nhãn 字幕 nghĩa là phụ đề do người đăng làm.
+    /// </summary>
+    public static async Task<List<FeedItem>> SearchVideosAsync(string query, bool captionsOnly = true, CancellationToken ct = default)
+    {
+        var body = new JsonObject { ["context"] = WebClient(), ["query"] = query };
+        if (captionsOnly) body["params"] = "EgIoAQ==";
+        using var res = await Http.PostAsync("https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+            new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"), ct);
+        res.EnsureSuccessStatusCode();
+        var items = new List<FeedItem>();
+        void Walk(JsonNode? n)
+        {
+            switch (n)
+            {
+                case JsonObject o when o["videoRenderer"] is JsonObject v && v["videoId"] is { } vid:
+                    var owner = v["ownerText"]?["runs"]?[0];
+                    var badges = v["badges"]?.AsArray().Select(b => b?["metadataBadgeRenderer"]?["label"]?.ToString() ?? "") ?? [];
+                    items.Add(new FeedItem(v["title"]?["runs"]?[0]?["text"]?.ToString() ?? "", $"https://youtu.be/{vid}",
+                        Relative(v["publishedTimeText"]?["simpleText"]?.ToString() ?? ""), owner?["text"]?.ToString() ?? "", vid.ToString(),
+                        owner?["navigationEndpoint"]?["browseEndpoint"]?["browseId"]?.ToString(),
+                        v["lengthText"]?["simpleText"]?.ToString() ?? "", badges.Contains("字幕")));
+                    break;
+                case JsonObject o:
+                    foreach (var (_, x) in o) Walk(x);
+                    break;
+                case JsonArray a:
+                    foreach (var x in a) Walk(x);
+                    break;
+            }
+        }
+        Walk(JsonNode.Parse(await res.Content.ReadAsStringAsync(ct)));
+        return items;
+    }
+
+    [GeneratedRegex(@"""externalId"":""(UC[\w-]{22})""")]
+    private static partial Regex ExternalId();
+
+    [GeneratedRegex(@"<meta property=""og:title"" content=""([^""]*)""")]
+    private static partial Regex OgTitle();
+
+    /// <summary>Đổi link kênh, @handle hoặc mã UC… thành (mã kênh, tên kênh) bằng cách đọc trang kênh.</summary>
+    public static async Task<(string Id, string Name)> ResolveChannelAsync(string input, CancellationToken ct = default)
+    {
+        input = input.Trim();
+        var direct = Regex.Match(input, @"UC[\w-]{22}");
+        var url = input.StartsWith("http") ? input
+            : direct.Success ? $"https://www.youtube.com/channel/{direct.Value}"
+            : $"https://www.youtube.com/@{input.TrimStart('@')}";
+        var html = await Http.GetStringAsync(url, ct);
+        var id = ExternalId().Match(html) is { Success: true } m ? m.Groups[1].Value
+            : direct.Success ? direct.Value : throw new InvalidOperationException("Không tìm thấy kênh. Thử dán link trang kênh, ví dụ https://www.youtube.com/@HikakinTV");
+        var name = OgTitle().Match(html) is { Success: true } t ? WebUtility.HtmlDecode(t.Groups[1].Value) : id;
+        return (id, name);
     }
 
     /// <summary>Đổi "3時間前", "2日前", "1 か月前" thành thời điểm ước chừng.</summary>

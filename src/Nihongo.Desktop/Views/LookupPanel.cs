@@ -1,60 +1,103 @@
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Nihongo.Core;
 using Nihongo.Desktop.Services;
 using static Nihongo.Desktop.Views.Ui;
 
 namespace Nihongo.Desktop.Views;
 
-/// <summary>Bảng tra chữ đã bôi đen: kho từ của app trước, không có thì Google Dịch; lưu vào sổ tay kèm câu ngữ cảnh.</summary>
+/// <summary>
+/// Bảng tra từ dùng chung cho màn đọc báo và xem video. Bôi đen chữ là tra ngay (không cần bấm nút):
+/// kho từ của app trước (có đưa dạng chia về dạng gốc), không có mới hỏi Google cho riêng từ đó.
+/// Câu dài thì không dịch lại vì bản dịch câu đã hiện ngay dưới câu; thay vào đó có nút Hỏi Gemini.
+/// </summary>
 sealed class LookupPanel : StackPanel
 {
     readonly string _source;
+    int _version;
+
+    /// <summary>Báo cho màn chứa bảng mở bảng ra khi người dùng vừa bôi đen.</summary>
+    public event Action? Wanted;
 
     public LookupPanel(string source)
     {
         _source = source;
         Spacing = 8;
-        Reset("Bôi đen một từ trong script rồi bấm Tra.");
+        Reset();
     }
 
-    void Reset(string hint)
+    void Reset()
     {
         Children.Clear();
-        Children.Add(Text("Tra từ", 16, bold: true));
-        Children.Add(Text(hint, 13, muted: true));
+        Children.Add(Text("Bôi đen một từ trong câu tiếng Nhật là tra ngay. Từ chia (食べました, 高かった) tự đưa về dạng gốc.", 13, muted: true));
     }
 
-    public async Task ShowAsync(string word, MediaLine? line)
+    /// <summary>
+    /// Gắn vào ô chữ tiếng Nhật. Đọc chữ bôi đen ngay lúc thả chuột: nếu đợi tới lúc bấm nút thì ô chữ đã mất
+    /// focus và Avalonia xóa vùng bôi đen (lỗi cũ "không tra được").
+    /// </summary>
+    public void Hook(SelectableTextBlock ja)
     {
-        word = word.Trim();
-        if (word == "" || line is null) { Reset("Chưa bôi đen chữ nào."); return; }
-        Children.Clear();
-        Children.Add(Text("Tra từ", 16, bold: true));
-
-        var local = App.Content.Vocab.FirstOrDefault(v => v.Word == word) ?? App.Content.Vocab.FirstOrDefault(v => v.Reading == word);
-        Children.Add(Text(word, 28, bold: true));
-        var meaning = local?.Meaning ?? "";
-        if (local is not null)
+        ja.AddHandler(PointerReleasedEvent, (_, e) =>
         {
-            Children.Add(Text(string.Join("   ", new[] { local.Reading, local.HanViet }.Where(s => s != "")), 15, muted: true));
-            Children.Add(Text(local.Meaning, 17, bold: true).Also(t => t.Foreground = Accent));
-            Children.Add(Text($"Cấp {local.Level} · {local.Sources}{(local.FreqExam > 0 ? $" · ra đề {local.FreqExam} lần" : "")}", 12, muted: true));
+            if (e.InitialPressMouseButton != MouseButton.Left) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                var text = ja.SelectedText ?? "";
+                if (text.Trim() != "" && ja.DataContext is MediaLine line) _ = ShowAsync(text, line);
+            });
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    public async Task ShowAsync(string selection, MediaLine line)
+    {
+        var version = ++_version;
+        selection = selection.Trim();
+        Wanted?.Invoke();
+        Children.Clear();
+
+        var gemini = Btn("Hỏi Gemini về câu này", () => _ = App.Shell.AskGemini(GeminiView.PromptFor(line.Ja, selection.Length <= 12 ? selection : "")));
+        if (selection.Length > 12 || selection.Contains('。'))
+        {
+            Children.Add(Text("Đoạn dài: bản dịch câu đã hiện ngay dưới câu.", 14));
+            Children.Add(Text("Muốn tra từ thì bôi đen riêng từ đó. Muốn hiểu ngữ pháp và sắc thái thì hỏi Gemini.", 13, muted: true));
+            Children.Add(gemini.Also(b => b.Classes.Add("primary")));
+            return;
+        }
+
+        var (item, matched) = Dict.Lookup(selection);
+        var word = item?.Word ?? selection;
+        Children.Add(Text(word, 30, bold: true).Also(t => t.FontFamily = new Avalonia.Media.FontFamily("Yu Gothic UI, Meiryo")));
+        var meaning = item?.Meaning ?? "";
+        if (item is not null)
+        {
+            if (matched != selection) Children.Add(Text($"Khớp phần「{matched}」của chữ bôi đen.", 12, muted: true));
+            Children.Add(Text(string.Join("   ", new[] { item.Reading != item.Word ? item.Reading : "", item.HanViet }.Where(s => s != "")), 15, muted: true));
+            Children.Add(Text(item.Meaning, 17, bold: true).Also(t => t.Foreground = Accent));
+            Children.Add(Text($"Cấp {item.Level}{(item.FreqExam > 0 ? $" · ra đề {item.FreqExam} lần" : "")} · {item.Sources}", 12, muted: true));
+            if (item.ExampleJa != "") Children.Add(Card(Col(4, Text(item.ExampleJa, 14), Text(item.ExampleVi, 13, muted: true)), 2));
         }
         else
         {
-            var waiting = Text("Đang dịch bằng Google...", 13, muted: true);
+            var waiting = Text("Không có trong kho từ của app, đang hỏi Google...", 13, muted: true);
             Children.Add(waiting);
-            try { meaning = await Web.TranslateAsync(word); waiting.Text = "Nghĩa từ Google Dịch, không có trong kho từ của app."; }
+            try { meaning = await Web.TranslateAsync(selection); waiting.Text = "Nghĩa từ Google Dịch (không có trong kho từ của app)."; }
             catch (Exception ex) { waiting.Text = $"Không dịch được: {ex.Message}"; }
+            if (version != _version) return;
             Children.Add(Text(meaning, 17, bold: true).Also(t => t.Foreground = Accent));
         }
-        Children.Add(Card(Col(4, Text(line.Ja, 14), Text(line.Vi, 13, muted: true))));
-        Children.Add(Row(8,
-            Btn("Nghe", () => Speech.Say(local?.Reading is { Length: > 0 } r ? r : word)),
+
+        var saved = Text("", 13).Also(t => t.Foreground = Good);
+        Children.Add(Ui.Wrap(
             Btn("Lưu vào sổ tay", () =>
             {
-                App.Progress.SaveNote(new NoteEntry(word, local?.Reading ?? "", meaning, line.Ja, line.Vi, _source));
-                Children.Add(Text("Đã lưu. Ôn ở mục Sổ tay hoặc trang Hôm nay.", 13).Also(t => t.Foreground = Good));
-            }, primary: true)));
+                App.Progress.SaveNote(new NoteEntry(word, item?.Reading ?? "", meaning, line.Ja, line.Vi, _source));
+                saved.Text = "Đã lưu. Từ này sẽ vào lịch ôn ở trang Hôm nay.";
+            }, primary: true),
+            Btn("Nghe", () => Speech.Say(item?.Reading is { Length: > 0 } r ? r : word)),
+            gemini));
+        Children.Add(saved);
     }
 }
