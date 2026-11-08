@@ -538,6 +538,7 @@ int ImportExams(SqliteConnection db)
             var pages = new Dictionary<string, object>();
             var instruction = new Dictionary<int, string>();
             var added = 0;
+            var notPrinted = 0;
             var examFix = fixes[examId] as JsonObject;
             foreach (var it in e["items"]?.AsArray() ?? [])
             {
@@ -548,6 +549,8 @@ int ImportExams(SqliteConnection db)
                 var options = (it["options"]?.AsArray() ?? []).Select(o => o?.ToString() ?? "").ToArray();
                 var answer = it["answer"]?.GetValue<int>() ?? -1;
                 if (mondai <= 0 || no <= 0 || options.Length < 3 || answer < 0 || answer >= options.Length) { skipped++; continue; }
+                // Sách 非凡 (đề 真题) không in một số câu vì bản quyền bài đọc ("未收录"): Gemini để chỗ giữ với phương án "1/2/3/4", bỏ.
+                if ((it["stem"]?.ToString() ?? "").Contains("未收录")) { notPrinted++; continue; }
                 if (it["instruction"]?.ToString() is { Length: > 0 } ins) instruction[mondai] = ins;
                 var qid = $"{examId}-q{no}";
                 var context = it["passage_id"]?.ToString() is { Length: > 0 } pid ? passages.GetValueOrDefault(pid, "") : "";
@@ -561,7 +564,9 @@ int ImportExams(SqliteConnection db)
                 added++;
             }
             if (added == 0) continue;
-            Exec(db, "INSERT OR REPLACE INTO exam VALUES($i,$o,$t,$l,$s,$m,$p)", ("$i", examId), ("$o", count), ("$t", e["title"]?.ToString() ?? examId),
+            var title = e["title"]?.ToString() ?? examId;
+            if (notPrinted > 0) { title += $" (thiếu {notPrinted} câu sách không in)"; Console.WriteLine($"  {examId}: bỏ {notPrinted} câu sách không in"); }
+            Exec(db, "INSERT OR REPLACE INTO exam VALUES($i,$o,$t,$l,$s,$m,$p)", ("$i", examId), ("$o", count), ("$t", title),
                 ("$l", e["level"]?.ToString() ?? "N2"), ("$s", e["source"]?.ToString() ?? ""), ("$m", e["minutes"]?.GetValue<int>() ?? 105),
                 ("$p", JsonSerializer.Serialize(pages)));
             count++;
