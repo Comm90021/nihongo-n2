@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Text.Json.Nodes;
 using Nihongo.Core;
@@ -50,7 +50,7 @@ static class Sites
     public static void Add(string area, string name, string url, string note = "")
     {
         var cfg = Config();
-        Arr(cfg, "added").Add(new JsonObject { ["id"] = $"user:{DateTime.Now:yyyyMMddHHmmss}", ["area"] = area, ["name"] = name, ["url"] = url, ["note"] = note });
+        Arr(cfg, "added").Add((JsonNode)new JsonObject { ["id"] = $"user:{DateTime.Now:yyyyMMddHHmmss}", ["area"] = area, ["name"] = name, ["url"] = url, ["note"] = note });
         Save(cfg);
     }
 
@@ -78,7 +78,7 @@ static class Sites
         {
             var h = Arr(cfg, "hidden");
             if (h.Any(x => x?.ToString() == s.Id)) h.Remove(h.First(x => x?.ToString() == s.Id));
-            else h.Add(s.Id);
+            else h.Add((JsonNode)JsonValue.Create(s.Id));
         }
         Save(cfg);
     }
