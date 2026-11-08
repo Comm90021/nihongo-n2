@@ -1,3 +1,4 @@
+﻿using Nihongo.Core;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Nihongo.Desktop.Views;

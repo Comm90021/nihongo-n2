@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Nihongo.Core;
 
 namespace Nihongo.Desktop.Services;
@@ -12,8 +12,6 @@ sealed record ExamItem(int Mondai, int No, Question? Q, string Pdf, int PageFrom
     public bool HasPdf => Pdf != "";
     public string Passage => Q?.Context ?? "";
     public int Choices => Q is null ? 4 : Math.Max(2, Q.Options.Count(o => o != ""));
-    /// <summary>Tính vào phần 言語知識 (問題1–9) hay 読解 (問題10–14).</summary>
-    public bool IsLanguage => Mondai <= 9;
 }
 
 sealed record ExamDef(string Id, string Title, string Kind, string Level, int Minutes, IReadOnlyList<ExamItem> Items)

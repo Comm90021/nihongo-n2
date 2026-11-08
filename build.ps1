@@ -24,6 +24,9 @@ if (-not $SkipData) {
 
 if (-not $SkipApp) {
   if (Get-Process NihongoN2 -ErrorAction SilentlyContinue) { throw 'App đang mở. Đóng NihongoN2 rồi build lại.' }
+  # Kiểm thử trước khi đóng gói: test đỏ thì dừng, không ra bản exe lỗi.
+  dotnet test src\Nihongo.Tests -v q
+  if ($LASTEXITCODE -ne 0) { throw 'Có test không đạt. Sửa xong mới đóng gói.' }
   # Không nén và có biên dịch sẵn: file to hơn (~80MB) nhưng mở nhanh gấp 3 so với bản nén.
   dotnet publish src\Nihongo.Desktop -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true `

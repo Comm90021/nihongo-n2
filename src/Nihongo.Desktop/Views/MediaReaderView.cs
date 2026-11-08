@@ -2,18 +2,26 @@ using System.Diagnostics;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Data.Converters;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Nihongo.Core;
 using Nihongo.Desktop.Services;
 using static Nihongo.Desktop.Views.Ui;
 
 namespace Nihongo.Desktop.Views;
 
-/// <summary>Đọc báo song song: cột tiếng Nhật (bôi đen là tra), cột tiếng Việt, bảng tra đóng/mở bên phải.</summary>
+/// <summary>
+/// Đọc báo theo bản mẫu đã duyệt: một cột tiếng Nhật, bản dịch ẩn sẵn (bấm câu để hiện câu đó, phím V hiện/ẩn tất cả),
+/// phóng to bằng Ctrl+lăn chuột hoặc Ctrl+= / Ctrl+- / Ctrl+0, thanh tiến độ đọc, mẫu ngữ pháp tô sáng có nút giải thích,
+/// bôi đen để tra từ, Gemini mở ở cột bên phải.
+/// </summary>
 sealed class MediaReaderView : UserControl, IGeminiDock
 {
     readonly GeminiDock _gemini = new();
@@ -23,9 +31,13 @@ sealed class MediaReaderView : UserControl, IGeminiDock
     readonly List<MediaLine> _lines;
     readonly CancellationTokenSource _cts = new();
     readonly TextBlock _progress = Text("", 13, muted: true);
+    readonly TextBlock _zoom = Text("", 12.5, muted: true, wrap: false);
+    readonly ProgressBar _readBar = Bar(0, 100, 3);
     readonly LookupPanel _lookup;
+    readonly ListBox _rows;
+    readonly Button _toggleVi;
 
-    public static readonly StyledProperty<bool> ShowViProperty = AvaloniaProperty.Register<MediaReaderView, bool>(nameof(ShowVi), true);
+    public static readonly StyledProperty<bool> ShowViProperty = AvaloniaProperty.Register<MediaReaderView, bool>(nameof(ShowVi));
     public bool ShowVi { get => GetValue(ShowViProperty); set => SetValue(ShowViProperty, value); }
 
     public MediaReaderView(string url, string kind, string title, List<MediaLine> lines)
@@ -35,61 +47,142 @@ sealed class MediaReaderView : UserControl, IGeminiDock
         _title = title;
         _lines = lines;
         _lookup = new LookupPanel(title);
-        ShowVi = Prefs.ShowVi;
+        ShowVi = false; // đọc tiếng Nhật trước, cần mới mở bản dịch
+        Focusable = true;
         DetachedFromVisualTree += (_, _) => _cts.Cancel();
+        AttachedToVisualTree += (_, _) => Focus();
+        KeyDown += OnKey;
+        AddHandler(PointerWheelChangedEvent, OnWheel, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
-        var rows = new ListBox { ItemsSource = lines, ItemTemplate = new FuncDataTemplate<MediaLine>((l, _) => BuildRow(l)), Background = Brushes.Transparent, Margin = new Thickness(0, 12, 0, 0) };
+        _rows = new ListBox { ItemsSource = lines, ItemTemplate = new FuncDataTemplate<MediaLine>((l, _) => BuildRow(l)), Background = Brushes.Transparent };
+        _rows.AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(HookScroll, DispatcherPriority.Background);
 
-        var toggle = Btn(ShowVi ? "Ẩn bản dịch" : "Hiện bản dịch", () => { });
-        toggle.Click += (_, _) =>
-        {
-            ShowVi = !ShowVi;
-            Prefs.SetShowVi(ShowVi);
-            toggle.Content = ShowVi ? "Ẩn bản dịch" : "Hiện bản dịch";
-        };
-        var side = new SidePane("pane_article", _lookup, 330) { Margin = new Thickness(16, 12, 0, 0) };
-        var geminiToggle = Btn("Mở Gemini bên cạnh", _gemini.Toggle);
-        // Mở Gemini: tạm cất bảng tra để cột bài đọc đủ rộng; đóng Gemini thì bảng tra trở lại như trước.
+        _toggleVi = Btn("", ToggleAll);
+        UpdateToggle();
+        var side = new SidePane("pane_article", _lookup, 300) { Margin = new Thickness(16, 0, 0, 0) };
+        var geminiToggle = Btn("Gemini", _gemini.Toggle).Also(b => b.Classes.Add("strong"));
         var lookupWasOpen = false;
         _gemini.Changed += open =>
         {
-            geminiToggle.Content = open ? "Đóng Gemini" : "Mở Gemini bên cạnh";
+            geminiToggle.Content = open ? "Đóng Gemini" : "Gemini";
             if (open) { lookupWasOpen = side.IsVisible; side.SetOpen(false, save: false); }
             else side.SetOpen(lookupWasOpen, save: false);
         };
         _gemini.Width = 420;
-        _gemini.Margin = new Thickness(16, 12, 0, 0);
+        _gemini.Margin = new Thickness(16, 0, 0, 0);
         DockPanel.SetDock(_gemini, Dock.Right);
-        var header = Line(Col(2, Text(title, 22, bold: true), _progress),
-            Row(8, toggle, side.Toggle, geminiToggle,
-                kind == "video" ? Btn("Mở video", () => OpenUrl(url)) : Btn("Mở trang gốc", () => OpenUrl(url)),
-                IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen),
-                Btn("Quay lại", App.Shell.BackToSection)));
-        DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(side, Dock.Right);
-        Content = new DockPanel { Children = { header, _gemini, side, rows } };
+
+        // Thanh trên: quay lại, nguồn, cỡ chữ, bản dịch, bảng tra, Gemini.
+        var zoomBox = Row(0, IconBtn(Glyph.ZoomOut, "Thu nhỏ chữ (Ctrl −)", () => Zoom(-1)), _zoom.Also(z => z.Margin = new Thickness(8, 0)), IconBtn(Glyph.ZoomIn, "Phóng to chữ (Ctrl +)", () => Zoom(1)));
+        var bar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 12 };
+        Control[] cells = [IconBtn(Glyph.Back, "Quay lại danh sách", App.Shell.BackToSection),
+            Col(2, Text(title, 17, bold: true).Also(t => { t.TextTrimming = TextTrimming.CharacterEllipsis; t.TextWrapping = TextWrapping.NoWrap; }), _progress),
+            Row(8, zoomBox, _toggleVi, side.Toggle, Btn("Trang gốc", () => OpenUrl(url)), IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen), geminiToggle)];
+        for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(cells[i]); }
+        var top = Col(10, new Border { Classes = { "card" }, Padding = new Thickness(12, 8), Child = bar }, _readBar);
+        DockPanel.SetDock(top, Dock.Top);
+        top.Margin = new Thickness(0, 0, 0, 12);
+
+        // Cột đọc giới hạn bề rộng cho dễ đọc, căn giữa.
+        var column = new Border { Classes = { "card" }, Padding = new Thickness(28, 16), MaxWidth = 860, Child = _rows };
+        Content = new DockPanel { Children = { top, _gemini, side, column } };
+        UpdateZoomLabel();
         _ = TranslateAll();
     }
 
-    /// <summary>Mẫu dòng dùng lại khi cuộn: chỉ các dòng đang hiện mới được vẽ, bản dịch cập nhật qua binding.</summary>
     Control BuildRow(MediaLine? _)
     {
-        var ja = Reading(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, [!SelectableTextBlock.TextProperty] = new Binding(nameof(MediaLine.Ja)) });
+        var ja = Reading(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap });
         _lookup.Hook(ja);
-        var vi = Reading(new TextBlock { Opacity = 0.62, TextWrapping = TextWrapping.Wrap, [!TextBlock.TextProperty] = new Binding(nameof(MediaLine.ViShown)), [!IsVisibleProperty] = new Binding(nameof(ShowVi)) { Source = this } }, vi: true);
-        var speak = Btn("Nghe", () => { }).Also(b => { b.FontSize = 12; b.Padding = new Thickness(8, 4); b.Classes.Add("ghost"); });
+        var chips = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+        ja.DataContextChanged += (_, _) =>
+        {
+            chips.Children.Clear();
+            if (ja.DataContext is not MediaLine line) return;
+            foreach (var h in Grammar.Apply(ja, line.Ja))
+            {
+                var g = h.Point;
+                var chip = Btn(g.Pattern, () => _lookup.ShowGrammar(g, line)).Also(b => { b.Classes.Add("seg"); b.FontSize = 12; b.Padding = new Thickness(8, 2); b.Margin = new Thickness(0, 0, 6, 4); });
+                ToolTip.SetTip(chip, g.MeaningVi);
+                chips.Children.Add(chip);
+            }
+        };
+        // Bấm vào câu (không bôi đen) thì hiện/ẩn bản dịch câu đó.
+        ja.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left && string.IsNullOrEmpty(ja.SelectedText) && ja.DataContext is MediaLine l) l.Revealed = !l.Revealed;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+
+        var vi = Reading(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), [!TextBlock.TextProperty] = new Binding(nameof(MediaLine.ViShown)) }, vi: true).Tint("Muted");
+        vi[!IsVisibleProperty] = new MultiBinding
+        {
+            Converter = BoolConverters.Or,
+            Bindings = { new Binding(nameof(ShowVi)) { Source = this }, new Binding(nameof(MediaLine.Revealed)) },
+        };
+        var speak = IconBtn(Glyph.Play, "Nghe câu", () => { }).Also(b => { b.Classes.Add("ghost"); b.VerticalAlignment = VerticalAlignment.Top; });
         speak.Click += (_, _) => { if (speak.DataContext is MediaLine l) Speech.Say(l.Ja); };
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,Auto"), ColumnSpacing = 14, Margin = new Thickness(0, 4) };
-        Control[] cells = [ja, vi, speak];
-        for (var c = 0; c < cells.Length; c++) { Grid.SetColumn(cells[c], c); cells[c].VerticalAlignment = VerticalAlignment.Top; grid.Children.Add(cells[c]); }
-        return grid;
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Margin = new Thickness(0, 6) };
+        var text = Col(0, ja, chips, vi);
+        Grid.SetColumn(speak, 1);
+        g.Children.Add(text);
+        g.Children.Add(speak);
+        return g;
+    }
+
+    // ---------------------------------------------------------------- bản dịch, cỡ chữ, tiến độ
+    void ToggleAll()
+    {
+        ShowVi = !ShowVi;
+        if (!ShowVi) foreach (var l in _lines) l.Revealed = false;
+        UpdateToggle();
+    }
+
+    void UpdateToggle() => _toggleVi.Content = ShowVi ? "Ẩn bản dịch (V)" : "Hiện bản dịch (V)";
+
+    void Zoom(int delta)
+    {
+        Prefs.SetReadSize(delta == 0 ? 19 : Math.Clamp(Prefs.ReadSize + delta, 12, 36));
+        Prefs.SetViSize(Math.Clamp(Math.Round(Prefs.ReadSize * 0.79), 11, 28));
+        UpdateZoomLabel();
+    }
+
+    void UpdateZoomLabel() => _zoom.Text = $"{Prefs.ReadSize / 19:P0}";
+
+    void OnWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+        Zoom(e.Delta.Y > 0 ? 1 : -1);
+        e.Handled = true;
+    }
+
+    void OnKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Source is TextBox) return;
+        var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        if (ctrl && e.Key is Key.OemPlus or Key.Add) Zoom(1);
+        else if (ctrl && e.Key is Key.OemMinus or Key.Subtract) Zoom(-1);
+        else if (ctrl && e.Key is Key.D0 or Key.NumPad0) Zoom(0);
+        else if (!ctrl && e.Key == Key.V) ToggleAll();
+        else return;
+        e.Handled = true;
+    }
+
+    void HookScroll()
+    {
+        if (_rows.FindDescendantOfType<ScrollViewer>() is not { } sv) return;
+        void Update() => _readBar.Value = sv.Extent.Height <= sv.Viewport.Height ? 100 : 100 * sv.Offset.Y / (sv.Extent.Height - sv.Viewport.Height);
+        sv.ScrollChanged += (_, _) => Update();
+        Update();
     }
 
     async Task TranslateAll()
     {
         var done = _lines.Count(l => l.Vi != "");
-        void Report() => _progress.Text = done < _lines.Count ? $"Đang dịch {done}/{_lines.Count} câu..." : $"{_lines.Count} câu · đã dịch xong · bôi đen từ để tra";
+        var chars = _lines.Sum(l => l.Ja.Length);
+        void Report() => _progress.Text = (done < _lines.Count ? $"Đang dịch {done}/{_lines.Count} câu · " : "") +
+            $"{chars:N0} chữ · khoảng {Math.Max(1, chars / 400)} phút đọc · bấm câu để xem bản dịch, bôi đen để tra";
         Report();
         try
         {

@@ -336,30 +336,24 @@ sealed class ExamView : UserControl
         _timer.Stop();
         App.Progress.SetSetting(DraftKey, "");
 
-        int lang = 0, langTotal = 0, read = 0, readTotal = 0;
+        var results = _items.Select((it, i) => (it.Mondai, Correct: _picked.GetValueOrDefault(i) == it.Answer)).ToList();
         for (var i = 0; i < _items.Count; i++)
-        {
-            var it = _items[i];
-            var ok = _picked.GetValueOrDefault(i) == it.Answer;
-            if (it.IsLanguage) { langTotal++; if (ok) lang++; } else { readTotal++; if (ok) read++; }
-            if (it.Q is { } q) App.Progress.Review(q.Id, SrsKind.Question, ok);
-        }
+            if (_items[i].Q is { } q) App.Progress.Review(q.Id, SrsKind.Question, results[i].Correct);
+        var score = ExamScore.From(results, _exam.Level);
         var used = _usedBefore + (int)(DateTime.Now - _started).TotalSeconds;
-        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, lang + read, _items.Count, used));
+        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, score.Lang + score.Read, _items.Count, used));
 
         _submit.Content = "Về danh sách đề";
-        _clock.Text = $"Đúng {lang + read}/{_items.Count}";
-        _left.Content = Scroll(ResultCard(lang, langTotal, read, readTotal, used));
+        _clock.Text = $"Đúng {score.Lang + score.Read}/{_items.Count}";
+        _left.Content = Scroll(ResultCard(score, used));
         _right.Content = Scroll(GridCard());
     }
 
 
     /// <summary>Điểm quy đổi ước lượng theo tỉ lệ đúng mỗi phần (JLPT chấm theo thang riêng, không công bố cách quy đổi).</summary>
-    Control ResultCard(int lang, int langTotal, int read, int readTotal, int used)
+    Control ResultCard(ExamScore s, int used)
     {
-        static int Scale(int c, int t) => t == 0 ? 0 : (int)Math.Round(60.0 * c / t);
-        var sLang = Scale(lang, langTotal);
-        var sRead = Scale(read, readTotal);
+        int lang = s.Lang, langTotal = s.LangTotal, read = s.Read, readTotal = s.ReadTotal, sLang = s.ScaledLang, sRead = s.ScaledRead;
         var byMondai = Col(8);
         foreach (var g in _items.Select((it, i) => (it, i)).GroupBy(p => MondaiLabel(p.it)))
         {
@@ -369,8 +363,8 @@ sealed class ExamView : UserControl
         // Chỉ chấm phần có trong đề (đề thiếu PDF đọc hiểu chỉ có 言語知識).
         var hasLang = langTotal > 0;
         var hasRead = readTotal > 0;
-        var pass = (!hasLang || sLang >= 19) && (!hasRead || sRead >= 19);
-        var max = (hasLang ? 60 : 0) + (hasRead ? 60 : 0);
+        var pass = s.AboveFloor;
+        var max = s.Max;
         var badges = Ui.Wrap(Badge($"Thời gian {used / 60} phút", "plain"));
         if (hasRead) badges.Children.Insert(0, Badge($"読解 {sRead}/60 · đúng {read}/{readTotal}", sRead >= 19 ? "" : "bad").Also(b => b.Margin = new Thickness(0, 0, 8, 8)));
         if (hasLang) badges.Children.Insert(0, Badge($"言語知識 {sLang}/60 · đúng {lang}/{langTotal}", sLang >= 19 ? "" : "bad").Also(b => b.Margin = new Thickness(0, 0, 8, 8)));

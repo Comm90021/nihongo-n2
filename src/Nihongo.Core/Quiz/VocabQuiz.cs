@@ -1,11 +1,9 @@
-﻿using Nihongo.Core;
+﻿namespace Nihongo.Core;
 
-namespace Nihongo.Desktop.Services;
-
-enum QuizKind { Reading, Writing, Meaning, Context }
+public enum QuizKind { Reading, Writing, Meaning, Context }
 
 /// <summary>Một câu trắc nghiệm từ vựng: đề, 4 phương án, chỉ số đáp án đúng (0–3).</summary>
-sealed record VocabQuestion(VocabItem Item, QuizKind Kind, string Prompt, string Stem, string[] Options, int Answer);
+public sealed record VocabQuestion(VocabItem Item, QuizKind Kind, string Prompt, string Stem, string[] Options, int Answer);
 
 /// <summary>
 /// Sinh câu 4 đáp án theo đúng kiểu đề N2:
@@ -15,8 +13,12 @@ sealed record VocabQuestion(VocabItem Item, QuizKind Kind, string Prompt, string
 /// - 文脈 (問題4): câu ví dụ khoét chỗ của từ. Nhiễu: từ cùng loại, cùng cấp.
 /// Phương án luôn khác nhau và khác đáp án; thiếu nhiễu thì đổi sang dạng khác.
 /// </summary>
-static class VocabQuiz
+public static class VocabQuiz
 {
+    /// <summary>Kho từ để sinh câu và lấy nhiễu. App gán App.Content.Vocab; test gán danh sách tự tạo. Đổi nguồn thì gọi Reset().</summary>
+    public static Func<IReadOnlyList<VocabItem>> Source { get; set; } = () => [];
+    public static void Reset() => _pool = null;
+
     static readonly Random Rng = new();
     static List<VocabItem>? _pool;
     static Dictionary<char, List<VocabItem>>? _byKanji;
@@ -29,7 +31,7 @@ static class VocabQuiz
     static void Build()
     {
         // Chỉ lấy từ sạch: một dạng viết, cách đọc toàn kana, có nghĩa.
-        _pool = App.Content.Vocab.Where(v => v.Word.Length is > 0 and <= 8 && !v.Word.Any(c => c is '～' or '〜' or '/' or '／' or ' ' or '・' or '(' or '（')
+        _pool = Source().Where(v => v.Word.Length is > 0 and <= 8 && !v.Word.Any(c => c is '～' or '〜' or '/' or '／' or ' ' or '・' or '(' or '（')
             && IsKanaOnly(v.Reading) && v.Meaning != "").ToList();
         _byKanji = new();
         _byReading = new();
@@ -60,7 +62,7 @@ static class VocabQuiz
     static readonly string[] Voicing = ["かが", "きぎ", "くぐ", "けげ", "こご", "さざ", "しじ", "すず", "せぜ", "そぞ", "ただ", "ちぢ", "つづ", "てで", "とど", "はばぱ", "ひびぴ", "ふぶぷ", "へべぺ", "ほぼぽ"];
 
     /// <summary>Biến thể cách đọc hay gây nhầm ở 問題1: trường âm, っ, dấu đục, ゅ/ょ.</summary>
-    static IEnumerable<string> Perturb(string r)
+    public static IEnumerable<string> Perturb(string r)
     {
         for (var i = 0; i < r.Length; i++)
         {

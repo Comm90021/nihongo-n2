@@ -75,13 +75,32 @@ public sealed class ContentStore
     {
         using var c = Open();
         using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT id,kind,name,topic,level,url,start_marker,end_marker,note,score FROM source ORDER BY topic, score DESC";
+        cmd.CommandText = "SELECT id,kind,name,topic,level,url,start_marker,end_marker,note,score,list_selector FROM source ORDER BY topic, score DESC";
         try
         {
             using var r = cmd.ExecuteReader();
             var list = new List<Source>();
             while (r.Read())
-                list.Add(new Source(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6), r.GetString(7), r.GetString(8), r.GetDouble(9)));
+                list.Add(new Source(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6), r.GetString(7), r.GetString(8), r.GetDouble(9), r.GetString(10)));
+            return list;
+        }
+        catch (SqliteException)
+        {
+            return []; // dữ liệu cũ chưa có cột list_selector: dựng lại bằng build.ps1
+        }
+    }
+
+    public IReadOnlyList<GrammarPoint> LoadGrammar()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT id,pattern,level,regex,meaning_vi,connect,nuance,exam_count FROM grammar ORDER BY exam_count DESC";
+        try
+        {
+            using var r = cmd.ExecuteReader();
+            var list = new List<GrammarPoint>();
+            while (r.Read())
+                list.Add(new GrammarPoint(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetString(6), r.GetInt32(7)));
             return list;
         }
         catch (SqliteException)

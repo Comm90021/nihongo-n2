@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -27,7 +27,8 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
           example_ja TEXT, example_vi TEXT, note TEXT, grp TEXT, kind INTEGER, sources TEXT, freq_exam INTEGER, freq_corpus INTEGER);
         CREATE TABLE question(id TEXT PRIMARY KEY, ord INTEGER, source TEXT, source_title TEXT, mondai INTEGER, section_name TEXT, number INTEGER,
           text TEXT, word TEXT, context TEXT, options TEXT, options_vi TEXT, answer INTEGER, full_sentence TEXT, topic TEXT, point TEXT, why TEXT);
-        CREATE TABLE source(id TEXT PRIMARY KEY, kind TEXT, name TEXT, topic TEXT, level TEXT, url TEXT, start_marker TEXT, end_marker TEXT, note TEXT, score REAL);
+        CREATE TABLE source(id TEXT PRIMARY KEY, kind TEXT, name TEXT, topic TEXT, level TEXT, url TEXT, start_marker TEXT, end_marker TEXT, note TEXT, score REAL, list_selector TEXT);
+        CREATE TABLE grammar(id TEXT PRIMARY KEY, pattern TEXT, level TEXT, regex TEXT, meaning_vi TEXT, connect TEXT, nuance TEXT, confusable TEXT, exam_count INTEGER, examples TEXT);
         CREATE TABLE listening_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, mp3 TEXT, script_pdf TEXT, exam_pdf TEXT, page_from INTEGER, items TEXT);
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
           last_page INTEGER, m9_from INTEGER, m9_to INTEGER, reading_from INTEGER, reading_to INTEGER, answers TEXT);
@@ -43,9 +44,10 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var listening = ImportListening(db);
     var sources = ImportSources(db);
     var exams = ImportExams(db);
+    var grammar = ImportGrammar(db, LoadSentences(db));
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -342,7 +344,8 @@ int ImportListening(SqliteConnection db)
         var exam = n!["exam"]!.ToString();
         var examPdf = P(n["pdf"]!.ToString());
         var folder = Path.GetDirectoryName(examPdf)!;
-        var mp3 = Directory.GetFiles(folder, "*.mp3").FirstOrDefault();
+        // Audio đã được nén thành .m4a (scripts/nen_audio.ps1, 08/11/2026); bản .mp3 cũ chỉ còn nếu chưa nén.
+        var mp3 = Directory.GetFiles(folder, "*.m4a").Concat(Directory.GetFiles(folder, "*.mp3")).FirstOrDefault();
         var script = Directory.GetFiles(folder, "*.pdf").FirstOrDefault(f => Path.GetFileName(f).Contains("script", StringComparison.OrdinalIgnoreCase));
         var md = Path.Combine(answersDir, $"Dap_An_JLPT_N2_{exam.Replace('-', '_')}.md");
         if (mp3 is null || script is null || !File.Exists(md)) { Console.WriteLine($"  thiếu file nghe {exam}"); continue; }
@@ -368,46 +371,69 @@ int ImportListening(SqliteConnection db)
     return ord;
 }
 
-// ---------------------------------------------------------------- nguồn báo và kênh video theo chủ đề (Gemini V8, V9)
+// ---------------------------------------------------------------- nguồn báo và kênh video theo chủ đề
+// 08/11/2026: người dùng chê nguồn cũ (V8 báo, V9/V10 kênh) nhiều rác → chỉ dùng nguồn đã kiểm có giá trị học:
+// V14 báo học thuật (社説, 解説, viện nghiên cứu…; có nguồn chỉ có trang danh sách, đọc bằng list_selector) và V15 video có giá trị.
 int ImportSources(SqliteConnection db)
 {
     using var tx = db.BeginTransaction();
     var n = 0;
-    void Add(string id, string kind, string name, string topic, string level, string url, string start, string end, string note, double score)
+    void Add(string id, string kind, string name, string topic, string level, string url, string start, string end, string note, double score, string selector)
     {
-        Exec(db, "INSERT OR REPLACE INTO source VALUES($i,$k,$n,$t,$l,$u,$s,$e,$no,$sc)", ("$i", $"{kind}:{id}"), ("$k", kind), ("$n", name), ("$t", topic),
-            ("$l", level), ("$u", url), ("$s", start), ("$e", end), ("$no", note), ("$sc", score));
+        Exec(db, "INSERT OR REPLACE INTO source VALUES($i,$k,$n,$t,$l,$u,$s,$e,$no,$sc,$sel)", ("$i", $"{kind}:{id}"), ("$k", kind), ("$n", name), ("$t", topic),
+            ("$l", level), ("$u", url), ("$s", start), ("$e", end), ("$no", note), ("$sc", score), ("$sel", selector));
         n++;
     }
-    var feeds = P("antigravity_out", "V8_nguon_bao", "feeds.json");
+    var feeds = P("antigravity_out", "V14_bao_hoc_thuat", "sources.json");
     if (File.Exists(feeds))
         foreach (var f in JsonNode.Parse(File.ReadAllText(feeds))!.AsArray())
         {
-            if (f!["extract_ok"]?.GetValue<bool>() == false || f["paywall"]?.GetValue<bool>() == true) continue;
+            var publisher = f!["publisher"]?.ToString() ?? "";
             Add(f["id"]!.ToString(), "feed", f["name"]!.ToString(), f["topic"]?.ToString() ?? "Khác", f["level"]?.ToString() ?? "", f["url"]!.ToString(),
-                f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "", f["note"]?.ToString() ?? "", f["avg_sentences"]?.GetValue<double>() ?? 0);
+                f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "",
+                $"{f["kind"]} · {publisher} · {f["note"]}".Trim(' ', '·'), f["avg_chars"]?.GetValue<double>() ?? 0, f["list_selector"]?.ToString() ?? "");
         }
-    // V10 (kênh người Nhật làm cho người Nhật) xếp trước V9. Kênh V9 nhắm người nước ngoài thì bỏ (danh sách lấy từ báo cáo V10, đã kiểm tay).
     var seen = new HashSet<string>();
-    // 出口日語 (tiêu đề tiếng Trung), Ask Japanese (tiêu đề tiếng Anh, nhắm khán giả nước ngoài).
-    // Các kênh dạy tiếng Nhật khác vẫn giữ (phần lớn kênh có phụ đề người đăng là nhóm này), app xếp chúng cuối.
-    HashSet<string> DropChannels = ["UCDqWakN_owifqIBqyNjg6kg", "UCOMZWkPo7ao6yGaXc954U0w"];
-    foreach (var file in new[] { P("antigravity_out", "V10_kenh_nguoi_nhat", "channels.json"), P("antigravity_out", "V9_kenh_youtube", "channels.json") })
-    {
-        if (!File.Exists(file)) continue;
-        foreach (var c in JsonNode.Parse(File.ReadAllText(file))!.AsArray())
+    var channels = P("antigravity_out", "V15_video_gia_tri", "channels.json");
+    if (File.Exists(channels))
+        foreach (var c in JsonNode.Parse(File.ReadAllText(channels))!.AsArray())
         {
             var cid = c!["channel_id"]?.ToString() ?? "";
-            if (!cid.StartsWith("UC") || cid.Length != 24 || DropChannels.Contains(cid) || !seen.Add(cid)) continue;
+            if (!cid.StartsWith("UC") || cid.Length != 24 || !seen.Add(cid)) continue;
             Add(c["id"]?.ToString() ?? cid, "channel", c["name"]!.ToString(), c["topic"]?.ToString() ?? "Khác", c["level"]?.ToString() ?? "",
-                $"https://www.youtube.com/feeds/videos.xml?channel_id={cid}", "", "", $"{c["speed"]} {c["note"]}".Trim(), c["ja_manual_ratio"]?.GetValue<double>() ?? 0);
+                $"https://www.youtube.com/feeds/videos.xml?channel_id={cid}", "", "", $"{c["speed"]} {c["note"]}".Trim(), c["ja_manual_ratio"]?.GetValue<double>() ?? 0, "");
         }
-    }
     tx.Commit();
     Console.WriteLine($"Nguồn báo và kênh video: {n}");
     return n;
 }
 
+// ---------------------------------------------------------------- mẫu ngữ pháp (Gemini V12) để tô sáng trong bài đọc, phụ đề
+// Regex quá rộng (khớp hơn 8% số câu đề thật) là bắt nhầm, bỏ. Regex không biên dịch được cũng bỏ.
+int ImportGrammar(SqliteConnection db, IReadOnlyList<string> sentences)
+{
+    var file = P("antigravity_out", "V12_ngu_phap_n2", "grammar.json");
+    if (!File.Exists(file)) return 0;
+    using var tx = db.BeginTransaction();
+    int n = 0, broad = 0, bad = 0;
+    foreach (var g in JsonNode.Parse(File.ReadAllText(file))!.AsArray())
+    {
+        var pattern = g!["regex"]?.ToString() ?? "";
+        Regex re;
+        try { re = new Regex(pattern, RegexOptions.None, TimeSpan.FromMilliseconds(50)); }
+        catch { bad++; continue; }
+        var hits = sentences.Count(s => { try { return re.IsMatch(s); } catch { return false; } });
+        if (sentences.Count > 0 && hits > sentences.Count * 0.08) { broad++; Console.WriteLine($"  bỏ mẫu quá rộng {g["pattern"]}: khớp {hits}/{sentences.Count} câu"); continue; }
+        Exec(db, "INSERT OR REPLACE INTO grammar VALUES($i,$p,$l,$r,$m,$c,$nu,$cf,$e,$ex)", ("$i", g["id"]!.ToString()), ("$p", g["pattern"]?.ToString() ?? ""),
+            ("$l", g["level"]?.ToString() ?? ""), ("$r", pattern), ("$m", g["meaning_vi"]?.ToString() ?? ""), ("$c", g["connect"]?.ToString() ?? ""),
+            ("$nu", g["nuance"]?.ToString() ?? ""), ("$cf", g["confusable"]?.ToJsonString() ?? "[]"), ("$e", g["exam_count"]?.GetValue<int>() ?? 0),
+            ("$ex", g["examples"]?.ToJsonString() ?? "[]"));
+        n++;
+    }
+    tx.Commit();
+    Console.WriteLine($"Mẫu ngữ pháp: {n} (bỏ {broad} quá rộng, {bad} regex lỗi)");
+    return n;
+}
 // ---------------------------------------------------------------- đề thi thử dạng JSON (Gemini V16: HQ, 非凡; V18: đề dự đoán)
 // Mỗi file exams/<id>.json: {id,title,level,source,minutes,items:[{mondai,no,instruction,passage_id,stem,options,answer(0-3),explain_vi,pdf,page}],passages:[{id,mondai,text}]}.
 // Câu hỏi vào bảng question với source = "mock", source_title = id đề; đề vào bảng exam.
@@ -460,6 +486,17 @@ int ImportExams(SqliteConnection db)
     tx.Commit();
     Console.WriteLine($"Đề thi thử JSON: {count} đề (bỏ {skipped} câu thiếu dữ liệu)");
     return count;
+}
+
+// Câu tiếng Nhật trong đề thật (câu hỏi + bài đọc) để đo độ rộng của regex ngữ pháp.
+List<string> LoadSentences(SqliteConnection db)
+{
+    using var cmd = db.CreateCommand();
+    cmd.CommandText = "SELECT text || ' ' || context FROM question WHERE source='exam'";
+    using var r = cmd.ExecuteReader();
+    var list = new List<string>();
+    while (r.Read()) list.AddRange(Regex.Split(r.GetString(0), "(?<=。)").Where(s => s.Length > 4));
+    return list;
 }
 
 // ---------------------------------------------------------------- tiện ích

@@ -51,6 +51,20 @@ sealed class LookupPanel : StackPanel
         }, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
+    /// <summary>Giải thích mẫu ngữ pháp được tô sáng trong câu (bấm nút tên mẫu dưới câu).</summary>
+    public void ShowGrammar(GrammarPoint g, MediaLine line)
+    {
+        ++_version;
+        Wanted?.Invoke();
+        Children.Clear();
+        Children.Add(Row(8, Text(g.Pattern, 22, bold: true).Also(t => t.FontFamily = new Avalonia.Media.FontFamily("Yu Gothic UI, Meiryo")), Badge(g.Level == "" ? "N2" : g.Level)));
+        Children.Add(Text(g.MeaningVi, 16, bold: true).Tint("AccentInk"));
+        if (g.Connect != "") Children.Add(Text($"Cách nối: {g.Connect}", 13.5));
+        if (g.Nuance != "") Children.Add(Text(g.Nuance, 13.5, muted: true));
+        Children.Add(Text(g.ExamCount > 0 ? $"Đã ra trong đề thật {g.ExamCount} lần" : "Chưa thấy trong 31 đề thật đã có", 12.5, muted: true));
+        Children.Add(Btn("Hỏi Gemini về mẫu này trong câu", () => _ = App.Shell.AskGemini(GeminiView.PromptFor(line.Ja, g.Pattern))));
+    }
+
     public async Task ShowAsync(string selection, MediaLine line)
     {
         var version = ++_version;

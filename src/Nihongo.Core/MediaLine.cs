@@ -25,6 +25,16 @@ public sealed class MediaLine : INotifyPropertyChanged
 
     [JsonIgnore] public string ViShown => _vi == "" ? "…" : _vi;
 
+    bool _revealed;
+
+    /// <summary>Người đọc bấm vào câu để xem riêng bản dịch câu này (bản dịch ẩn sẵn khi đọc báo).</summary>
+    [JsonIgnore]
+    public bool Revealed
+    {
+        get => _revealed;
+        set { if (_revealed == value) return; _revealed = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Revealed))); }
+    }
+
     [JsonIgnore]
     public string TimeLabel => StartSeconds < 0 ? "" :
         StartSeconds >= 3600 ? TimeSpan.FromSeconds(StartSeconds).ToString(@"h\:mm\:ss") : TimeSpan.FromSeconds(StartSeconds).ToString(@"mm\:ss");

@@ -53,7 +53,14 @@ public sealed record ListeningItem(int Mondai, string Label, int Answer)
 }
 
 /// <summary>Nguồn tự cập nhật: feed báo (kind=feed) hoặc kênh YouTube (kind=channel). Score: số câu tách được trung bình, hoặc tỉ lệ video có phụ đề thủ công.</summary>
-public sealed record Source(string Id, string Kind, string Name, string Topic, string Level, string Url, string StartMarker, string EndMarker, string Note, double Score);
+public sealed record Source(string Id, string Kind, string Name, string Topic, string Level, string Url, string StartMarker, string EndMarker, string Note, double Score, string ListSelector = "")
+{
+    /// <summary>Nguồn không có RSS: Url là trang danh sách bài, lấy link bài theo ListSelector (vd a[href*="/press/20"]).</summary>
+    public bool IsListPage => ListSelector != "";
+}
+
+/// <summary>Mẫu ngữ pháp (Gemini V12) có regex dò trong câu, để tô sáng khi đọc báo/phụ đề.</summary>
+public sealed record GrammarPoint(string Id, string Pattern, string Level, string Regex, string MeaningVi, string Connect, string Nuance, int ExamCount);
 
 /// <summary>Trang PDF gốc của một câu (Mondai 14 có bảng, hình).</summary>
 public sealed record ExamPage(string Pdf, int Page);

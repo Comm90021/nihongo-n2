@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -19,24 +19,23 @@ sealed class MediaView : UserControl
     static readonly HttpClient Images = new() { Timeout = TimeSpan.FromSeconds(15) };
     const string FollowTopic = "Kênh mày theo dõi";
 
-    // Nội dung người Nhật làm cho người Nhật xem lên trước; kênh dạy tiếng Nhật cho người nước ngoài xuống cuối.
+    // Chủ đề kênh V15 (video có giá trị học: phóng sự, khoa học, giải thích thời sự, lịch sử, văn hóa, bài giảng).
     static readonly string[] TopicOrder =
     [
-        FollowTopic, "Đời sống – vlog", "Văn hóa – truyền thống", "Người nổi tiếng – idol", "Khoa học – kiến thức", "Tài liệu – phóng sự",
-        "Ẩm thực", "Du lịch trong nước", "Nói chuyện – talk", "Thể thao – sở thích",
+        FollowTopic, "Phóng sự – tài liệu", "Khoa học – công nghệ", "Kinh tế – thời sự giải thích", "Lịch sử", "Văn hóa – truyền thống", "Giáo dục – bài giảng",
     ];
 
-    // Gợi ý tìm: từ khóa người Nhật hay dùng, ra video người Nhật làm cho người Nhật.
+    // Gợi ý tìm: nội dung có giá trị tri thức (người dùng bỏ vlog, idol, tạp kỹ ngày 08/11/2026).
     static readonly string[] Suggestions =
     [
-        "一人暮らし vlog", "社会人 日常 vlog", "田舎暮らし", "主婦 ルーティン", "大学生 vlog", "京都 旅行", "鉄道 旅", "料理 簡単 レシピ",
-        "科学 解説", "宇宙 解説", "歴史 解説", "密着 ドキュメンタリー", "職人 技", "ラジオ トーク", "対談", "将棋 解説",
+        "NHKスペシャル", "ドキュメンタリー 密着", "職人 技", "伝統工芸", "日本文化 解説", "経済 解説", "環境問題 解説", "医療 解説",
+        "科学 解説", "宇宙 解説", "歴史 解説", "大学 講義", "物理 解説", "心理学 解説", "日本史", "地理 解説",
     ];
 
     readonly TextBox _url = new() { Watermark = "Dán link bài báo tiếng Nhật hoặc video YouTube có phụ đề tiếng Nhật", MinWidth = 520 };
     readonly TextBlock _status = Text("", 13, muted: true);
     readonly IReadOnlyList<Source> _sources = App.Content.LoadSources();
-    readonly CheckBox _hideDone = new() { Content = "Ẩn video đã học" };
+    readonly CheckBox _hideDone = new() { Content = "Ẩn video đã xem" };
     Dictionary<string, (double Position, double Duration, bool Done)> _watch = App.Progress.Watches();
 
     public MediaView()
@@ -62,6 +61,8 @@ sealed class MediaView : UserControl
     }
 
     // ---------------------------------------------------------------- video
+    bool Seen(string videoId) => _watch.TryGetValue(videoId, out var w) && (w.Done || w.Duration > 0 && w.Position >= w.Duration * 0.5);
+
     List<Source> VideoSources()
     {
         var follows = App.Progress.Follows().Select(f => new Source($"f:{f.ChannelId}", "channel", f.Name, FollowTopic, "", $"https://www.youtube.com/feeds/videos.xml?channel_id={f.ChannelId}", "", "", "", 0));
@@ -87,11 +88,13 @@ sealed class MediaView : UserControl
         {
             results.Children.Clear();
             if (head is not null) results.Children.Add(head);
-            var list = shown.Where(x => _hideDone.IsChecked != true || x.Item.VideoId is not { } v || !_watch.GetValueOrDefault(v).Done).ToList();
+            // Chỉ video 5–40 phút (bỏ Shorts, clip vụn, buổi phát dài). Mặc định ẩn video đã học hoặc đã xem quá nửa.
+            var list = shown.Where(x => x.Item.Minutes < 0 || x.Item.Minutes is >= 5 and <= 40)
+                .Where(x => _hideDone.IsChecked != true || x.Item.VideoId is not { } v || !Seen(v)).ToList();
             if (list.Count == 0) { results.Children.Add(Text(shown.Count == 0 ? "Không có video nào." : "Đã học hết video ở đây.", muted: true)); return; }
             foreach (var x in list) results.Children.Add(VideoRow(x.Source, x.Item, () => { BuildTopics(); Render(); }));
         }
-        _hideDone.IsChecked = App.Progress.Setting("hide_done") == "1";
+        _hideDone.IsChecked = App.Progress.Setting("hide_done", "1") == "1";
         _hideDone.IsCheckedChanged += (_, _) => { App.Progress.SetSetting("hide_done", _hideDone.IsChecked == true ? "1" : "0"); Render(); };
 
         void Mark(Button? active) { foreach (var b in buttons) b.Classes.Set("primary", b == active); }
@@ -224,35 +227,52 @@ sealed class MediaView : UserControl
     }
 
     // ---------------------------------------------------------------- báo
+    // Nguồn V14 (đã kiểm, có giá trị học thuật). Mặc định ẩn bài đã đọc (bài đã mở nằm trong bảng media).
     Control Browse(string kind)
     {
         var sources = _sources.Where(s => s.Kind == kind).ToList();
         if (sources.Count == 0)
             return Card(Text("Danh mục nguồn chưa có. Dựng lại dữ liệu bằng build.ps1.", muted: true));
         var results = Col(8);
+        var hideRead = new CheckBox { Content = "Ẩn bài đã đọc", IsChecked = App.Progress.Setting("hide_read", "1") == "1" };
         var groups = sources.GroupBy(s => s.Topic).OrderByDescending(g => g.Count()).ToList();
         var buttons = new List<Button>();
+        var current = 0;
+        List<(Source?, Web.FeedItem)> all = [];
+        void Render()
+        {
+            results.Children.Clear();
+            var read = App.Progress.Media().Select(m => m.Url).ToHashSet();
+            var list = all.Where(x => hideRead.IsChecked != true || !read.Contains(x.Item2.Link)).Take(60).ToList();
+            if (list.Count == 0) { results.Children.Add(Text(all.Count == 0 ? "Không tải được nguồn nào trong chủ đề này. Kiểm tra mạng rồi thử lại." : "Đã đọc hết bài mới ở đây.", muted: true)); return; }
+            foreach (var (source, item) in list) results.Children.Add(ArticleRow(source!, item, read.Contains(item.Link)));
+        }
         async void Select(int i)
         {
+            current = i;
             for (var k = 0; k < buttons.Count; k++) buttons[k].Classes.Set("primary", k == i);
             results.Children.Clear();
             results.Children.Add(Text($"Đang tải {groups[i].Count()} nguồn...", 13, muted: true));
-            var all = await LoadSources(groups[i].ToList());
-            results.Children.Clear();
-            if (all.Count == 0) { results.Children.Add(Text("Không tải được nguồn nào trong chủ đề này. Kiểm tra mạng rồi thử lại.", muted: true)); return; }
-            foreach (var (source, item) in all.Take(60)) results.Children.Add(ArticleRow(source!, item));
+            all = await LoadSources(groups[i].ToList());
+            Render();
         }
+        hideRead.IsCheckedChanged += (_, _) => { App.Progress.SetSetting("hide_read", hideRead.IsChecked == true ? "1" : "0"); Render(); };
         for (var i = 0; i < groups.Count; i++) { var idx = i; buttons.Add(Btn($"{groups[i].Key} ({groups[i].Count()})", () => Select(idx))); }
-        var topics = Ui.Wrap(buttons.Cast<Control>().ToArray());
+        var topics = Col(6, Ui.Wrap(buttons.Cast<Control>().ToArray()), hideRead);
         Select(0);
         DockPanel.SetDock(topics, Dock.Top);
         return new DockPanel { Children = { topics, Scroll(results) } };
     }
 
-    Control ArticleRow(Source source, Web.FeedItem item) => Card(Item(IconBadge(Glyph.News),
-        Col(4, Text(item.Title, 15, bold: true), Text($"{source.Name} · {Ago(item.Published)}", 12, muted: true)),
-        Btn("Đọc", () => _ = OpenLink(item.Link, source), primary: true)), 3);
-
+    Control ArticleRow(Source source, Web.FeedItem item, bool read)
+    {
+        var meta = Row(8, Text(source.Name, 12, muted: true));
+        if (Ago(item.Published) is { Length: > 0 } ago) meta.Children.Add(Text($"· {ago}", 12, muted: true));
+        if (source.Level != "") meta.Children.Add(Badge(source.Level, "plain"));
+        if (read) meta.Children.Add(Badge("Đã đọc", "good"));
+        return Card(Item(IconBadge(Glyph.News), Col(4, Text(item.Title, 15, bold: true), meta),
+            Btn(read ? "Đọc lại" : "Đọc", () => _ = OpenLink(item.Link, source), primary: !read)), 3);
+    }
     /// <summary>Hàng 3 cột: ảnh hoặc biểu tượng, phần chữ co giãn và xuống dòng, nút bên phải.</summary>
     static Grid Item(Control left, Control middle, Control right)
     {

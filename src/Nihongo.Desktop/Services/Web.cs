@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -151,11 +151,22 @@ static partial class Web
     static bool IsJapanese(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
 
     // ---------------------------------------------------------------- RSS / Atom (cả feed kênh YouTube)
-    public sealed record FeedItem(string Title, string Link, DateTime Published, string Source, string? VideoId, string? ChannelId = null, string Length = "", bool Captioned = false);
+    public sealed record FeedItem(string Title, string Link, DateTime Published, string Source, string? VideoId, string? ChannelId = null, string Length = "", bool Captioned = false)
+    {
+        /// <summary>Thời lượng theo phút từ chuỗi "12:34" hoặc "1:02:03"; -1 nếu không rõ.</summary>
+        public double Minutes => Length.Split(':').Select(p => int.TryParse(p, out var v) ? v : -1).ToArray() is var a && a.Length >= 2 && a.All(x => x >= 0)
+            ? a.Aggregate(0.0, (acc, x) => acc * 60 + x) / 60 : -1;
+    }
 
     public static async Task<List<FeedItem>> FetchFeedAsync(Source source, CancellationToken ct = default)
     {
         if (source.Kind == "channel") return await FetchChannelAsync(source, ct);
+        if (source.IsListPage)
+        {
+            // Nguồn không có RSS (V14): đọc trang danh sách, lấy link bài theo list_selector. Không có ngày đăng.
+            var html = await Http.GetStringAsync(source.Url, ct);
+            return LinkPicker.Pick(html, source.Url, source.ListSelector).Select(l => new FeedItem(l.Title, l.Url, DateTime.MinValue, source.Name, null)).ToList();
+        }
         var xml = System.Xml.Linq.XDocument.Parse(await Http.GetStringAsync(source.Url, ct));
         var items = new List<FeedItem>();
         foreach (var e in xml.Descendants().Where(x => x.Name.LocalName is "item" or "entry"))
@@ -199,7 +210,11 @@ static partial class Web
                         .SelectMany(r => r?["metadataParts"]?.AsArray() ?? []).Select(p => p?["text"]?["content"]?.ToString() ?? "") ?? [];
                     var when = parts.FirstOrDefault(p => p.EndsWith('前')) ?? "";
                     var id = lv["contentId"]!.ToString();
-                    items.Add(new FeedItem(title, $"https://youtu.be/{id}", Relative(when), source.Name, id));
+                    // Thời lượng nằm ở nhãn trên ảnh thu nhỏ (V15 đã dò): contentImage.thumbnailViewModel.overlays[].thumbnailBottomOverlayViewModel.badges[].thumbnailBadgeViewModel.text
+                    var length = lv["contentImage"]?["thumbnailViewModel"]?["overlays"]?.AsArray()
+                        .SelectMany(o => o?["thumbnailBottomOverlayViewModel"]?["badges"]?.AsArray() ?? [])
+                        .Select(b => b?["thumbnailBadgeViewModel"]?["text"]?.ToString() ?? "").FirstOrDefault(s => s.Contains(':')) ?? "";
+                    items.Add(new FeedItem(title, $"https://youtu.be/{id}", Relative(when), source.Name, id, Length: length));
                     break;
                 case JsonObject o:
                     foreach (var (_, v) in o) Walk(v);

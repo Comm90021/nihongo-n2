@@ -124,8 +124,15 @@ sealed class VideoReaderView : UserControl, IGeminiDock
     {
         var time = new Button { FontSize = 12, Padding = new Thickness(8, 3), VerticalAlignment = VerticalAlignment.Top, [!ContentControl.ContentProperty] = new Binding(nameof(MediaLine.TimeLabel)) };
         time.Click += (_, _) => { if (time.DataContext is MediaLine l) Seek(l.StartSeconds); };
-        var ja = Reading(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, [!SelectableTextBlock.TextProperty] = new Binding(nameof(MediaLine.Ja)) });
+        var ja = Reading(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap });
         _lookup.Hook(ja);
+        // Tô sáng mẫu ngữ pháp; bấm chữ được tô (thả chuột không bôi đen) thì mở giải thích mẫu đầu tiên trong câu.
+        IReadOnlyList<GrammarHit> hits = [];
+        ja.DataContextChanged += (_, _) => { if (ja.DataContext is MediaLine l) hits = Grammar.Apply(ja, l.Ja); };
+        ja.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (hits.Count > 0 && string.IsNullOrEmpty(ja.SelectedText) && ja.DataContext is MediaLine l) _lookup.ShowGrammar(hits[0].Point, l);
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         var vi = Reading(new TextBlock { Opacity = 0.62, TextWrapping = TextWrapping.Wrap, [!TextBlock.TextProperty] = new Binding(nameof(MediaLine.ViShown)), [!IsVisibleProperty] = new Binding(nameof(ShowVi)) { Source = this } }, vi: true);
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12, Margin = new Thickness(0, 4) };
         var text = Col(2, ja, vi);

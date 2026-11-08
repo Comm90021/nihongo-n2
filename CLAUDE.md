@@ -8,6 +8,10 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 | Thư mục | Vai trò |
 |---|---|
 | `src/Nihongo.Core` | Model, `ContentStore` (đọc `noi_dung.db`, chỉ đọc), `ProgressStore` (lịch ôn trong `tien_do.db`), `AppPaths` |
+| `src/Nihongo.Core/Quiz` | Logic thuần, có test: `VocabQuiz` (sinh câu 4 đáp án; nguồn từ qua `VocabQuiz.Source`), `ExamScore` (chấm 言語知識/読解, N1 ranh giới 問題7, N2 問題9), `ExamFile` (kiểm file đề JSON) |
+| `src/Nihongo.Core/Text` | `GrammarIndex` (dò mẫu ngữ pháp V12 trong câu), `LinkPicker` (lấy link bài từ trang danh sách theo list_selector) |
+| `src/Nihongo.Tests` | xUnit. `build.ps1` chạy `dotnet test` trước khi đóng gói, đỏ thì dừng. Test dữ liệu đề đọc `../antigravity_out/*/exams` nếu máy có |
+| `scripts/nen_audio.ps1` | Nén file nghe thành .m4a mono 24kHz 32kbps (bộ chuyển mã Windows), kiểm thời lượng rồi mới xóa gốc, bỏ nếu không nhỏ hơn 80%, ghi `../../XOA_LOG.md` |
 | `src/Nihongo.Importer` | Dựng `data/noi_dung.db` từ mọi nguồn ở thư mục cha. Chạy lại lúc nào cũng được, mất khoảng 5 giây |
 | `src/Nihongo.Desktop` | Giao diện. View viết bằng C# trong `Views/`, dùng hàm dựng chung `Views/Ui.cs`. PDF vẽ bằng `Windows.Data.Pdf` (`Services/PdfPages.cs`), giọng đọc bằng `System.Speech` |
 | `data/` | `noi_dung.db` (dựng lại được) và `tien_do.db` (**tiến độ của user, không được xóa hay ghi đè**) |
@@ -31,7 +35,7 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
    - V4 ghép Hán Việt theo từng chữ.
 3. Tần suất: từ có ≥2 ký tự và có chữ Hán thì đếm mọi lần xuất hiện. Từ kana hoặc 1 chữ chỉ đếm khi là phương án hoặc từ được hỏi, vì đếm chuỗi con làm `ある` lên 239 lần.
 4. Đọc hiểu: V7 (32 đề thật, trang và đáp án Mondai 9–14) xếp trước, sau đó là 34 đề luyện của `40 ĐỀ N2.pdf`.
-**08/11/2026: kho `../N2_ĐỀ CÁC NĂM/` (PDF + MP3 32 kỳ) và `../download file/` không còn trên máy** (không có trong Thùng rác; `D:\Study\N2_ĐỀ CÁC NĂM` chỉ còn `HE_THONG_ON_THI_N2_2026`). Không phải Claude hay Gemini xóa (đã rà nhật ký). Khi chưa khôi phục: **không chạy Importer** (sẽ mất bộ đọc hiểu/nghe trong noi_dung.db), đóng gói bằng `build.ps1 -SkipData`.
+**08/11/2026: kho `../N2_ĐỀ CÁC NĂM/` từng biến mất rồi được user chép lại** (`download file/` vẫn chưa có). Trước khi chạy Importer luôn kiểm kho này còn đủ: thiếu thì Importer bỏ bộ đọc hiểu/nghe. File nghe đã được nén thành `.m4a` (Importer nhận cả `.m4a` lẫn `.mp3`). Đề N1 thật ở `../Đề thi N1 các năm/` (23 kỳ, ảnh quét; Gemini V24 bóc).
 5. Nghe hiểu: 32 kỳ trong `../N2_ĐỀ CÁC NĂM/<kỳ>/` (1 MP3, 1 PDF script, đề PDF). Trang đề Nghe bắt đầu ngay sau trang cuối Đọc hiểu (V7). Đáp án đọc từ phần `## II.` của `TONG_HOP_XUAT_FILE/04_Dap_An_Tung_Nam_MD`; đã đối chiếu 07/2010 với file chính thức. Mondai 4 chỉ có 3 phương án. Phát âm thanh bằng `Windows.Media.Playback.MediaPlayer` (`Services/Audio.cs`).
 
 6. Đọc hiểu luyện: V6 (60 bài Thaolejp, 174 câu, đáp án từ trang 解答 của sách) nạp thành câu hỏi `source=dokkai`, Mondai 10, mỗi câu mang cả bài đọc trong `context`. Từ mới của V6 vào nhóm "Từ mới đọc hiểu".
@@ -73,6 +77,13 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 - Tìm: POST `youtubei/v1/search`, `params=EgIoAQ==` là bộ lọc "Phụ đề". Đọc `videoRenderer`; nhãn `字幕` là phụ đề người đăng.
 - Theo dõi: GET trang `@handle` lấy `"externalId":"UC…"` và `og:title`. Lưu bảng `follow`; hiện thành chủ đề "Kênh mày theo dõi". (`navigation/resolve_url` chỉ trả về URL, không có mã kênh.)
 - Thứ tự chủ đề: theo dõi, rồi chủ đề người Nhật xem (V10), kênh dạy tiếng Nhật cho người nước ngoài xuống cuối (`MediaView.TopicOrder`).
+
+## Báo & Video làm lại (08/11/2026)
+- Nguồn chỉ còn V14 (31 nguồn báo học thuật: 社説, viện nghiên cứu, 解説…; nguồn không có RSS đọc trang danh sách bằng `list_selector`) và V15 (46 kênh có giá trị học). V8/V9/V10 bỏ vì user chê rác.
+- Video: thời lượng đọc từ `lockupViewModel.contentImage.thumbnailViewModel.overlays[].thumbnailBottomOverlayViewModel.badges[].thumbnailBadgeViewModel.text`; chỉ hiện 5–40 phút; mặc định ẩn video đã học hoặc đã xem quá nửa (`hide_done`).
+- Báo: mặc định ẩn bài đã đọc (bài có trong bảng `media`, setting `hide_read`).
+- Màn đọc báo (`MediaReaderView`): một cột, bản dịch ẩn sẵn (bấm câu = `MediaLine.Revealed`, phím V = tất cả), Ctrl+lăn/±/0 đổi `Prefs.ReadSize`, thanh tiến độ theo cuộn, mẫu ngữ pháp tô sáng (`Services/Grammar.cs`) + nút tên mẫu → `LookupPanel.ShowGrammar`.
+- Bảng `grammar` (Importer `ImportGrammar` từ V12): regex khớp quá 8% câu đề thật bị bỏ vì bắt nhầm.
 
 ## Nguồn theo chủ đề (bảng `source` trong `noi_dung.db`)
 - Gemini V8: 48 feed báo RSS, 12 chủ đề, có `start_marker`/`end_marker` cho site cần mốc riêng. Gemini V9: 41 kênh YouTube, 13 chủ đề, `score` là tỉ lệ video có phụ đề ja do người đăng làm.
