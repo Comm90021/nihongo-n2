@@ -147,7 +147,8 @@ public sealed partial class ContentStore
             {
                 var items = (JsonSerializer.Deserialize(r.GetString(6), CoreJson.Default.StringArray) ?? [])
                     .Select(s => s.Split('=')).Where(p => p.Length == 2 && p[0].Contains('.'))
-                    .Select(p => new ListeningItem(int.Parse(p[0][..p[0].IndexOf('.')]), p[0][(p[0].IndexOf('.') + 1)..], int.Parse(p[1])))
+                    .Select(p => (p, a: p[1].Split('/')))
+                    .Select(x => new ListeningItem(int.Parse(x.p[0][..x.p[0].IndexOf('.')]), x.p[0][(x.p[0].IndexOf('.') + 1)..], int.Parse(x.a[0]), x.a.Length > 1 ? int.Parse(x.a[1]) : 0))
                     .ToList();
                 list.Add(new ListeningSet(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetInt32(5), items));
             }

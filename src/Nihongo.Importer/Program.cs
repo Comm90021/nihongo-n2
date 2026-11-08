@@ -383,8 +383,69 @@ int ImportListening(SqliteConnection db)
             ("$i", $"listen-{exam}"), ("$o", ord++), ("$t", $"Đề thật {exam[5..]}/{exam[..4]}"), ("$m", mp3), ("$s", script), ("$e", examPdf),
             ("$p", (n["pages"]!["end"]?.GetValue<int>() ?? 0) + 1), ("$it", JsonSerializer.Serialize(items)));
     }
+    ord = ImportListeningJson(db, ord);
     tx.Commit();
     Console.WriteLine($"Bộ nghe hiểu: {ord}");
+    return ord;
+}
+
+// Nghe đề N1 thật (V24) và J.TEST (V25): đáp án + số phương án lấy từ listening/*.json của Gemini (đã đối chiếu mẫu
+// với file đáp án gốc 08/11/2026). Trang đề phần Nghe = sau trang PDF lớn nhất mà đề đọc cùng kỳ trỏ tới (問題13/hình).
+int ImportListeningJson(SqliteConnection db, int ord)
+{
+    foreach (var (folder, examFolder) in new[] { ("V24_de_n1_that", "V24_de_n1_that"), ("V25_jtest", "V25_jtest") })
+    {
+        var dir = P("antigravity_out", folder, "listening");
+        if (!Directory.Exists(dir)) continue;
+        foreach (var file in Directory.GetFiles(dir, "*.json").OrderByDescending(f => f))
+        {
+            var n = JsonNode.Parse(File.ReadAllText(file))!;
+            var id = n["id"]!.ToString();
+            var sections = (n["mondai"] ?? n["sections"])?.AsArray();
+            if (sections is null) continue;
+            var items = new List<string>();
+            foreach (var s in sections)
+                foreach (var it in s!["items"]!.AsArray())
+                    items.Add($"{s["mondai"]}.{it!["no"]}={it["answer"]}/{it["choices"]?.GetValue<int>() ?? 4}");
+
+            string audio = n["audio"]?.ToString() ?? "", script = "", examPdf = "", title;
+            if (id.StartsWith("real-n1-"))
+            {
+                // real-n1-2021-07 → thư mục "N1 7-2021"
+                var y = id[8..12]; var m = int.Parse(id[13..15]);
+                var kdir = P("Đề thi N1 các năm", $"N1 {m}-{y}");
+                if (!Directory.Exists(kdir)) { Console.WriteLine($"  thiếu thư mục {kdir}"); continue; }
+                var sounds = Directory.GetFiles(kdir, "*.m4a").Concat(Directory.GetFiles(kdir, "*.mp3")).ToList();
+                audio = sounds.FirstOrDefault(f => f.Contains("tiếng ồn")) ?? sounds.FirstOrDefault() ?? "";
+                var pdfs = Directory.GetFiles(kdir, "*.pdf");
+                script = pdfs.FirstOrDefault(f => Path.GetFileName(f).Contains("Script", StringComparison.OrdinalIgnoreCase)) ?? "";
+                title = $"Đề thật N1 {m:00}/{y}";
+            }
+            else
+            {
+                var kdir = Path.GetDirectoryName(audio) ?? "";
+                script = Directory.Exists(kdir) ? Directory.GetFiles(kdir, "*ans*.pdf").FirstOrDefault() ?? "" : "";
+                title = $"J.TEST A-C kỳ {id.Split('-').Last()}";
+            }
+            // Trang đầu phần Nghe: sau trang cuối mà đề đọc cùng kỳ trỏ tới.
+            var examJson = P("antigravity_out", examFolder, "exams", id + ".json");
+            var page = 1;
+            if (File.Exists(examJson))
+                foreach (var it in JsonNode.Parse(File.ReadAllText(examJson))!["items"]!.AsArray())
+                    if (it!["pdf"]?.ToString() is { Length: > 0 } pdf && it["page"]?.GetValue<int>() is int pg && pg >= page) { examPdf = pdf; page = pg + 1; }
+            // J.TEST A-C in theo khuôn 41 trang: phần đọc có hình nằm giữa đề, phần Nghe (写真問題) luôn bắt đầu ở trang 32
+            // (kiểm 08/11/2026: kỳ 187 có lớp chữ, kỳ 188 xem ảnh).
+            if (id.StartsWith("jtest") && examPdf != "") page = 32;
+            // Tài liệu 問題13 có kỳ dài 2 trang nên "trang cuối + 1" lệch; trang đã xem ảnh kiểm (08/11/2026).
+            // Lô sau: Gemini ghi "page" (trang đầu phần Nghe trong PDF đề) vào listening/*.json thì dùng luôn.
+            if (n["page"]?.GetValue<int>() is int given and > 0) page = given;
+            else if (new Dictionary<string, int> { ["real-n1-2020-12"] = 23, ["real-n1-2019-12"] = 30 }.TryGetValue(id, out var fixedPage)) page = fixedPage;
+            if (examPdf == "") { examPdf = script; page = 1; }
+            if (!File.Exists(audio) || !File.Exists(examPdf)) { Console.WriteLine($"  thiếu file nghe {id}"); continue; }
+            Exec(db, "INSERT INTO listening_set VALUES($i,$o,$t,$m,$s,$e,$p,$it)",
+                ("$i", $"listen-{id}"), ("$o", ord++), ("$t", title), ("$m", audio), ("$s", script), ("$e", examPdf), ("$p", page), ("$it", JsonSerializer.Serialize(items)));
+        }
+    }
     return ord;
 }
 

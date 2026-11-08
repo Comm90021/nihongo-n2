@@ -17,6 +17,8 @@ sealed class BrowserView : UserControl
     readonly WebHost _web = new();
     readonly TextBox _address = new() { MinWidth = 300 };
     readonly TextBlock _title = Text("", 15, bold: true, wrap: false);
+    readonly CaptionPane _captions = new();
+    readonly Button _captionBtn = new() { Content = "Phụ đề máy" };
 
     public BrowserView(string url, string title, Action? back = null)
     {
@@ -34,6 +36,7 @@ sealed class BrowserView : UserControl
         _title.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
         Grid.SetColumn(_address, 2);
         var right = Row(6,
+            _captionBtn,
             Btn("Hỏi Gemini đoạn bôi đen", AskSelection),
             IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", () => App.Shell.ToggleFullScreen()),
             Btn("Mở trình duyệt", () => { try { Process.Start(new ProcessStartInfo(_address.Text ?? url) { UseShellExecute = true }); } catch { } }));
@@ -44,7 +47,14 @@ sealed class BrowserView : UserControl
         bar.Children.Add(right);
         DockPanel.SetDock(bar, Dock.Top);
         var frame = new Border { CornerRadius = new CornerRadius(12), ClipToBounds = true, Margin = new Thickness(0, 10, 0, 0), Child = _web };
-        Content = new DockPanel { Children = { bar, frame } };
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
+        _captions.Margin = new Thickness(0, 10, 0, 0);
+        Grid.SetColumn(_captions, 1);
+        body.Children.Add(frame);
+        body.Children.Add(_captions);
+        Content = new DockPanel { Children = { bar, body } };
+        _captionBtn.Click += (_, _) => _captions.Toggle();
+        DetachedFromVisualTree += (_, _) => _captions.Stop();
         _web.WebReady += core =>
         {
             core.SourceChanged += (_, _) => _address.Text = core.Source;

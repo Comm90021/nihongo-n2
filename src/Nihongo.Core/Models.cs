@@ -1,4 +1,4 @@
-namespace Nihongo.Core;
+﻿namespace Nihongo.Core;
 
 public enum VocabKind { Normal, Kana, Affix }
 
@@ -46,10 +46,11 @@ public sealed record Question(
 }
 
 /// <summary>Một câu nghe: Mondai, nhãn câu ("3", "3-1"), đáp án, số phương án (Mondai 4 chỉ có 3).</summary>
-public sealed record ListeningItem(int Mondai, string Label, int Answer)
+public sealed record ListeningItem(int Mondai, string Label, int Answer, int ChoiceCount = 0)
 {
     public string Key => $"{Mondai}.{Label}";
-    public int Choices => Mondai == 4 ? 3 : 4;
+    /// <summary>N2 問題4 có 3 phương án; đề N1/J.TEST ghi số phương án trong dữ liệu ("3.21=2/3").</summary>
+    public int Choices => ChoiceCount > 0 ? ChoiceCount : Mondai == 4 ? 3 : 4;
 }
 
 /// <summary>Nguồn tự cập nhật: feed báo (kind=feed) hoặc kênh YouTube (kind=channel). Score: số câu tách được trung bình, hoặc tỉ lệ video có phụ đề thủ công.</summary>
