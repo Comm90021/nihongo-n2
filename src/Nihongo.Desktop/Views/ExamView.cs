@@ -361,6 +361,19 @@ sealed class ExamView : UserControl
             byMondai.Children.Add(Col(4, Line(Text(g.Key, 13.5), Text($"{ok}/{g.Count()}", 13, muted: true)), Bar(ok, g.Count(), 6)));
         }
         // Chỉ chấm phần có trong đề (đề thiếu PDF đọc hiểu chỉ có 言語知識).
+        // J.TEST có thang điểm riêng (đọc/nghe mỗi phần 500): chỉ báo số câu đúng, không quy đổi theo kiểu JLPT.
+        if (!_exam.Level.StartsWith('N'))
+        {
+            var right = lang + read;
+            return Col(14,
+                Card(Col(12,
+                    Text("Kết quả", 13, muted: true),
+                    Row(10, Text($"{right}/{_items.Count}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"câu đúng ({100.0 * right / Math.Max(1, _items.Count):0}%)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+                    Badge($"Thời gian {used / 60} phút", "plain"),
+                    Text("J.TEST chấm theo thang riêng; app chỉ đếm câu đúng của phần trắc nghiệm đọc (phần tự viết 記述 không có trong đề).", 12, muted: true),
+                    Row(8, Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                Panel("Theo từng phần", byMondai));
+        }
         var hasLang = langTotal > 0;
         var hasRead = readTotal > 0;
         var pass = s.AboveFloor;

@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using Nihongo.Core;
 
 namespace Nihongo.Tests;
@@ -20,7 +20,7 @@ public class ExamDataTests
     {
         var root = Root();
         if (root is null) yield break;
-        foreach (var folder in new[] { "V16_de_hq_feifan", "V18_de_du_doan", "V24_de_n1_that" })
+        foreach (var folder in new[] { "V16_de_hq_feifan", "V18_de_du_doan", "V24_de_n1_that", "V25_jtest" })
         {
             var dir = Path.Combine(root, folder, "exams");
             if (!Directory.Exists(dir)) continue;

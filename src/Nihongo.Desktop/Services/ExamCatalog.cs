@@ -22,6 +22,8 @@ sealed record ExamDef(string Id, string Title, string Kind, string Level, int Mi
         "real" => "Đề thật",
         "hq" => "Đề thi thử Hàn Quốc",
         "feifan" => "非凡 (Trung Quốc)",
+        "real_n1" => "Đề thật N1",
+        "jtest" => "J.TEST A-C",
         _ => "Đề luyện",
     };
 }
@@ -71,8 +73,8 @@ static partial class ExamCatalog
         foreach (var set in reading.Values.Where(s => !used.Contains(s.Id)))
             list.Add(new ExamDef($"exam-{set.Id}", $"{set.Title} (問題9–14)", "real", "N2", 70, PdfItems(set).ToList()));
 
-        string[] order = ["du_doan", "real", "hq", "feifan"];
-        return list.OrderBy(e => e.Level == "N1" ? 1 : 0).ThenBy(e => Array.IndexOf(order, e.Kind) is var i and >= 0 ? i : 9)
+        string[] order = ["du_doan", "real", "real_n1", "hq", "feifan", "jtest"];
+        return list.OrderBy(e => e.Level == "N2" ? 0 : e.Level == "N1" ? 1 : 2).ThenBy(e => Array.IndexOf(order, e.Kind) is var i and >= 0 ? i : 9)
             .ThenByDescending(e => e.Kind == "real" ? e.Id : "").ThenBy(e => e.Id).ToList();
     }
 
