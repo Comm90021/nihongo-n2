@@ -521,7 +521,7 @@ int ImportExams(SqliteConnection db)
     var ord = 1_000_000; // sau mọi câu hỏi khác
     var count = 0;
     var skipped = 0;
-    foreach (var folder in new[] { P("antigravity_out", "V18_de_du_doan", "exams"), P("antigravity_out", "V16_de_hq_feifan", "exams"), P("antigravity_out", "V24_de_n1_that", "exams"), P("antigravity_out", "V25_jtest", "exams") })
+    foreach (var folder in new[] { P("antigravity_out", "V18_de_du_doan", "exams"), P("antigravity_out", "V16_de_hq_feifan", "exams"), P("antigravity_out", "V24_de_n1_that", "exams"), P("antigravity_out", "V25_jtest", "exams"), P("antigravity_out", "V27_de_n1_hq_feifan", "exams") })
     {
         if (!Directory.Exists(folder)) continue;
         // Bản sửa tay (sua_cau.json cạnh thư mục exams): {"<id đề>": {"<số câu>": {stem?, options?, answer?, explain_vi?}}}.

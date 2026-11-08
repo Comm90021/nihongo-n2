@@ -166,7 +166,7 @@ sealed class TodayView : UserControl
         lower.Children.Add(planCard);
         lower.Children.Add(right);
 
-        Content = Scroll(Col(24, header, stats, lower).Also(c => c.MaxWidth = 1200));
+        Content = Scroll(Col(24, Artwork.Banner(), header, stats, lower).Also(c => c.MaxWidth = 1200));
     }
 
     /// <summary>Ôn: từ đến hạn làm 4 đáp án (từ trong sổ tay không đủ dữ liệu thì dùng thẻ lật), câu sai làm lại.</summary>

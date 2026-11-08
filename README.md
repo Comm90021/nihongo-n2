@@ -1,4 +1,4 @@
-# Ôn N2 — app Windows ôn JLPT N2/N1
+# Ôn thi N2 · N1 — app Windows ôn JLPT N2/N1
 
 App Windows gốc để ôn JLPT N2 (và tiếp N1): từ vựng, ngữ pháp, đọc hiểu, nghe hiểu, cùng báo và video tiếng Nhật thật. Phần ôn đề chạy không cần mạng; Báo & Video, dịch và Gemini cần mạng.
 

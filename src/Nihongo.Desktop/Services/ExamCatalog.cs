@@ -75,7 +75,8 @@ static partial class ExamCatalog
 
         string[] order = ["du_doan", "real", "real_n1", "hq", "feifan", "jtest"];
         return list.OrderBy(e => e.Level == "N2" ? 0 : e.Level == "N1" ? 1 : 2).ThenBy(e => Array.IndexOf(order, e.Kind) is var i and >= 0 ? i : 9)
-            .ThenByDescending(e => e.Kind == "real" ? e.Id : "").ThenBy(e => e.Id).ToList();
+            // Đề thật (N2, N1) và J.TEST: kỳ mới nhất trước; đề luyện theo số thứ tự.
+            .ThenByDescending(e => e.Kind is "real" or "real_n1" or "jtest" ? e.Id : "").ThenBy(e => e.Id).ToList();
     }
 
     static IEnumerable<ExamItem> PdfItems(ReadingSet s)

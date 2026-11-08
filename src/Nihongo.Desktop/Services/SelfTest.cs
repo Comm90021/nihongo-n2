@@ -15,7 +15,7 @@ namespace Nihongo.Desktop.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "video" or "ui" or "extra" or "caption";
+    public static bool Enabled => Mode is "video" or "ui" or "extra";
 
     public static async void Run(MainWindow w)
     {
@@ -26,7 +26,6 @@ static class SelfTest
         {
             if (Mode == "video") await Video(w, dir, log);
             else if (Mode == "extra") await Extra(w, dir, log);
-            else if (Mode == "caption") await Caption(log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -68,6 +67,15 @@ static class SelfTest
         var r = App.Progress.Results().FirstOrDefault(x => x.SetId == $"exam:{exam.Id}");
         log.Add($"Nộp bài: lưu kết quả {(r is null ? "KHÔNG" : $"{r.Correct}/{r.Total}")} (đã chọn đúng 5 câu đầu, câu 6 chọn 1)");
         view.TestGo(0); await Task.Delay(600); Shot(w, dir, "8_xem_lai");
+        foreach (var lv in LevelTabs.Levels)
+        {
+            LevelTabs.Current = lv;
+            var tag = lv == "J.TEST" ? "jtest" : lv;
+            w.Show(new ReadingListView()); await Task.Delay(800); Shot(w, dir, $"a_doc_{tag}");
+            w.Show(new ListeningListView()); await Task.Delay(800); Shot(w, dir, $"b_nghe_{tag}");
+            w.Show(new ExamListView()); await Task.Delay(800); Shot(w, dir, $"c_thi_{tag}");
+        }
+        LevelTabs.Current = "N2";
         w.TestSelectNav("settings"); await Task.Delay(1000); Shot(w, dir, "9_cai_dat");
     }
 
@@ -120,55 +128,6 @@ static class SelfTest
         log.Add($"電験: câu chấm tự động {DenkenView.All.Count(q => q.Choice > 0)}, tự chấm {DenkenView.All.Count(q => q.Choice == 0)}; dạng: {string.Join(", ", DenkenView.All.GroupBy(q => q.KindGroup).Select(g => $"{g.Key} {g.Count()}"))}");
         w.Show(new DenkenSessionView(dk, "Tự kiểm 電験", 0, () => { })); await Task.Delay(6000); Shot(w, dir, "8_denken_lam_bai");
         w.Show(new DenkenSessionView(dk, "Tự kiểm 電験 thi", 90, () => { }, "dk:test")); await Task.Delay(3000); Shot(w, dir, "9_denken_thi");
-    }
-    // ---------------------------------------------------------------- phụ đề máy (không phát ra loa)
-    static async Task Caption(List<string> log)
-    {
-        var file = Environment.GetEnvironmentVariable("NIHONGO_SELFTEST_AUDIO") ?? "";
-        log.Add($"Model: {LiveCaption.ModelDir() ?? "KHÔNG CÓ"}");
-        // Kiểm thu loopback thật (không phát gì ra loa): chỉ xem khởi động được, định dạng và có khối âm thanh tới không.
-        if (Environment.GetEnvironmentVariable("NIHONGO_SELFTEST_LOOPBACK") == "1")
-        {
-            using var real = new LiveCaption();
-            real.Status += s => log.Add("  loopback: " + s);
-            var ok = await real.StartAsync(capture: true);
-            await Task.Delay(6000);
-            log.Add($"Loopback: khởi động {(ok ? "OK" : "LỖI")}, định dạng {real.TestFormat}, khối nhận {real.TestChunks}");
-            return;
-        }
-        var live = new LiveCaption();
-        var finals = new List<LiveCaption.Line>();
-        var partials = 0;
-        live.Final += l => { lock (finals) finals.Add(l); };
-        live.Partial += p => { if (p != "") Interlocked.Increment(ref partials); };
-        live.Status += s => log.Add("  trạng thái: " + s);
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        if (!await live.StartAsync(capture: false)) { log.Add("Không khởi động được"); return; }
-        log.Add($"Nạp model: {sw.ElapsedMilliseconds} ms, RAM {Environment.WorkingSet / 1048576} MB");
-        // Đọc file nghe thành float 48kHz stereo, đẩy vào theo nhịp thời gian thực (khối 100 ms) như loopback.
-        using var reader = new NAudio.Wave.MediaFoundationReader(file);
-        var sp = new NAudio.Wave.SampleProviders.WdlResamplingSampleProvider(NAudio.Wave.WaveExtensionMethods.ToSampleProvider(reader), 48000);
-        var stereo = sp.WaveFormat.Channels == 2 ? (NAudio.Wave.ISampleProvider)sp : new NAudio.Wave.SampleProviders.MonoToStereoSampleProvider(sp);
-        var block = new float[4800 * 2];
-        var bytes = new byte[block.Length * 4];
-        var seconds = int.TryParse(Environment.GetEnvironmentVariable("NIHONGO_SELFTEST_SECONDS"), out var s) ? s : 90;
-        var start = System.Diagnostics.Stopwatch.StartNew();
-        for (var i = 0; i < seconds * 10; i++)
-        {
-            var n = stereo.Read(block, 0, block.Length);
-            if (n <= 0) break;
-            Buffer.BlockCopy(block, 0, bytes, 0, n * 4);
-            live.TestFeed(bytes, n * 4);
-            var due = (i + 1) * 100 - start.ElapsedMilliseconds;
-            if (due > 0) await Task.Delay((int)due);
-        }
-        await Task.Delay(3000);
-        var cpu = System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime;
-        live.Dispose();
-        log.Add($"Đã đẩy {seconds}s âm thanh trong {start.Elapsed.TotalSeconds:0.0}s; câu chốt {finals.Count}, dòng tạm {partials}, hàng đợi còn {live.TestQueued}; CPU tổng {cpu.TotalSeconds:0.0}s; RAM {Environment.WorkingSet / 1048576} MB");
-        lock (finals) foreach (var l in finals) log.Add($"  [{l.At:mm\\:ss}] {l.Text}");
-        if (finals.Count > 0)
-            try { log.Add("  dịch câu cuối: " + await Web.TranslateAsync(finals[^1].Text)); } catch (Exception ex) { log.Add("  dịch lỗi: " + ex.Message); }
     }
     // ---------------------------------------------------------------- bố cục màn video (giữ từ lần trước)
     static async Task Video(MainWindow w, string dir, List<string> log)

@@ -1,7 +1,7 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Nihongo.Desktop.MainWindow"
-        Title="Ôn N2"
+        Title="Ôn thi N2 · N1"
         Width="1320" Height="840" MinWidth="960" MinHeight="620"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI Variable Text, Segoe UI, Yu Gothic UI, Meiryo UI"
@@ -16,7 +16,7 @@
         <Button x:Name="NavToggle" DockPanel.Dock="Top" HorizontalAlignment="Center" Margin="0,0,0,16"
                 Width="40" Height="40" Padding="0" CornerRadius="12" BorderThickness="0"
                 Background="{StaticResource Accent}" Click="OnNavToggle" ToolTip.Tip="Thu gọn / mở rộng thanh bên (Ctrl+B)">
-          <TextBlock Text="N2" Foreground="White" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          <TextBlock Text="日" FontFamily="Yu Gothic UI, Meiryo UI" Foreground="White" FontWeight="Bold" FontSize="19" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Button>
         <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" />
       </DockPanel>

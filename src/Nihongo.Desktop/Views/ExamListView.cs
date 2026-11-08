@@ -9,17 +9,23 @@ namespace Nihongo.Desktop.Views;
 /// <summary>Danh sách đề làm được ở chế độ thi thử bấm giờ, chia theo loại; hiện điểm lần gần nhất và đề đang làm dở.</summary>
 sealed class ExamListView : UserControl
 {
-    public ExamListView()
+    public ExamListView() => Render();
+
+    void Render()
     {
         var results = App.Progress.Results().Where(r => r.Kind == "exam").GroupBy(r => r.SetId).ToDictionary(g => g.Key, g => g.First());
-        var all = ExamCatalog.All;
-        var body = Col(12, Header("Thi thử bấm giờ", "Làm cả đề trong thời gian thật (N2: 105 phút cho 言語知識・読解). Thoát giữa chừng thì bài làm được lưu, mở lại là làm tiếp."));
+        var everything = ExamCatalog.All;
+        var level = LevelTabs.Current;
+        var all = everything.Where(e => LevelTabs.Of(e.Level) == level).ToList();
+        var body = Col(12,
+            Header("Thi thử bấm giờ", "Làm cả đề trong thời gian thật (N2: 105 phút, N1: 110 phút cho 言語知識・読解; J.TEST: 80 phút phần đọc). Thoát giữa chừng thì bài làm được lưu."),
+            LevelTabs.Bar(l => everything.Count(e => LevelTabs.Of(e.Level) == l), Render));
 
         var drafts = all.Where(e => ExamView.HasDraft(e.Id)).ToList();
         if (drafts.Count > 0)
             body.Children.Add(Panel("Đang làm dở", Col(8, drafts.Select(e => ExamRow(e, results)).ToArray())));
 
-        foreach (var group in all.GroupBy(e => e.Level == "N1" ? "N1 (để sau kỳ thi)" : e.KindLabel))
+        foreach (var group in all.GroupBy(e => e.KindLabel))
         {
             var rows = Col(0);
             var first = true;

@@ -17,9 +17,10 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <PackageReference Include="System.Speech" Version="10.0.14" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <!-- Phụ đề máy (Services/LiveCaption.cs): thu âm thanh loopback + nhận dạng tiếng Nhật SenseVoice chạy trên máy. -->
-    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
-    <PackageReference Include="org.k2fsa.sherpa.onnx" Version="2.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Tranh ukiyo-e phạm vi công cộng cho băng ảnh trang Hôm nay (Views/Artwork.cs). -->
+    <AvaloniaResource Include="Assets\anh\*.jpg" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />

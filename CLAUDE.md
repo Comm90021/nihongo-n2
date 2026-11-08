@@ -115,19 +115,18 @@ Dữ liệu nạp bằng `ImportExtra` (Importer), đọc bằng `ContentStore.E
 - `Views/BrowserView.cs`: trang web nhúng có thanh địa chỉ, link mở cửa sổ mới thì mở luôn trong khung, nút hỏi Gemini đoạn bôi đen.
 - Tự kiểm: `NIHONGO_SELFTEST=extra` (chạy trên bản sao dữ liệu: có ghi setting).
 
-## Phụ đề máy cho anime/video (`Services/LiveCaption.cs`, `Views/CaptionPane.cs`, nút "Phụ đề máy" ở `BrowserView`)
-- User chọn chạy trên máy (08/11/2026). NAudio `WasapiLoopbackCapture` (âm thanh cả máy, float 48kHz stereo) → `WdlResampler` 16kHz mono → Silero VAD (im 0,3s chốt câu, tối đa 8s) → SenseVoice int8 (sherpa-onnx `OfflineRecognizer`, 2 luồng) → dịch bằng `Web.TranslateAsync`. Không lưu gì.
-- SenseVoice **không có streaming thật**: câu đang nói thì cứ ~1 giây giải mã lại phần đã nghe (dòng tạm mờ). Đo: 0,13s xử lý / 1s lời nói; RAM +~330MB; 150s âm thanh xử lý kịp thời gian thực.
-- Model ở `data/models` (`scripts/tai_model.ps1`). **Bản 2025-09-09 ra chữ Hán kiểu Trung, mất kana: dùng bản 2024-07-17.**
-- Thư viện gốc sherpa-onnx không mở được đường dẫn có chữ có dấu, ổ D tắt tên 8.3 → `LiveCaption.ModelDir()` tạo junction `%LOCALAPPDATA%\NihongoN2\models`.
-- Loopback im hẳn khi máy không phát gì: luồng xử lý tự đưa 0,5s lặng để chốt câu cuối. Phụ đề không vẽ đè lên video được (WebView2 là cửa sổ riêng) nên là cột bên phải.
-- Chưa làm: chỉ thu tiếng của tiến trình WebView2 (process loopback; NAudio 2.2.1 có cấu trúc nhưng chưa có hàm dựng sẵn).
-- Tự kiểm: `NIHONGO_SELFTEST=caption` + `NIHONGO_SELFTEST_AUDIO=<file>` (đẩy file vào như loopback, không phát ra loa); thêm `NIHONGO_SELFTEST_LOOPBACK=1` để thử thu thật 6 giây.
+## Tên app, ảnh, cấp độ (08/11/2026)
+- Tên hiển thị "Ôn thi N2 · N1" (file exe vẫn là NihongoN2.exe để không gãy lối tắt/script), logo chữ 日. Lối tắt `../Ôn thi N2 N1.lnk`.
+- Băng ảnh trang Hôm nay (`Views/Artwork.cs`): 6 tranh ukiyo-e Hokusai/Hiroshige phạm vi công cộng/CC0 từ Wikimedia Commons, `Assets/anh/*.jpg` (AvaloniaResource, ~2,9MB), mỗi ngày một bức. Không dùng ảnh anime (bản quyền, repo công khai). Vẽ bằng ImageBrush: dùng Image thì ảnh 1400px làm trang tràn ngang.
+- `Views/LevelTabs.cs`: chọn N2 / N1 / J.TEST (setting `level_tab`) dùng chung cho Thi thử, Đọc hiểu, Nghe hiểu. Đọc hiểu N1/J.TEST = phần đọc của đề JSON (`LevelTabs.ReadingPart`: N2 từ 問題10, N1 từ 問題8, J.TEST phần 2).
+
+## Phụ đề máy (đã bỏ 08/11/2026)
+- Đã thử: NAudio loopback + Silero VAD + SenseVoice int8 (sherpa-onnx) chạy trên máy. Bài nghe JLPT nhận dạng tốt, nhưng anime thật sai nhiều và chữ chỉ ra sau khi dứt câu; user thấy vô dụng nên bỏ hẳn (commit 2654933 còn code nếu cần). Lưu ý nếu làm lại: sherpa-onnx không mở được đường dẫn có dấu; bản SenseVoice 2025-09-09 ra chữ Hán kiểu Trung.
 
 ## Đề N1 thật và J.TEST (Gemini V24, V25)
 - Đề đọc: `antigravity_out/V24_de_n1_that/exams`, `V25_jtest/exams` nạp như đề JSON (source `real_n1`, `jtest`). J.TEST chỉ đếm câu đúng (thang điểm riêng), bỏ phần 記述. Kỳ chưa có đề đọc (189) để tên `.json.cho_de`.
 - Nghe: `listening/*.json` → `ImportListeningJson`; số phương án ghi trong items (`"3.21=2/3"`). Trang đầu phần Nghe: trường `page` trong JSON nếu có; N1 lô 1 có bảng sửa tay (2020-12: 23, 2019-12: 30); J.TEST A-C luôn trang 32.
-- 08/11/2026 đã đối chiếu đáp án với file gốc: N1 12/2021 69/69, J.TEST 187 và 188 75/75.
+- 08/11/2026 đã đối chiếu đáp án với file gốc: N1 12/2021 69/69, 12/2017 70/70; J.TEST 184–188 đều 75/75. Lô V27 (HQ N1, 非凡 N1, 非凡 N2 số 3) ghi vào ntigravity_out/V27_de_n1_hq_feifan/exams.
 
 ## Đo được (06/11/2026, i7-8650U)
 Mở cửa sổ khoảng 1,0–1,1 giây. RAM khoảng 135MB, khi xem PDF khoảng 230MB. File exe 76MB. Bản nén chỉ 23MB nhưng mở mất 3,3 giây nên không dùng.
