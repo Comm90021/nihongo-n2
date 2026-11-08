@@ -93,7 +93,25 @@ sealed class TodayView : UserControl
             () => App.Shell.Show(new ReadingSessionView(nextRead!, m9: false)), nextRead is not null);
         Step(nextExam is null, "Thi thử cả đề (nên làm 1–2 đề mỗi tuần)", nextExam?.Title ?? "Đã làm hết", $"{nextExam?.Minutes ?? 105} phút", "Bắt đầu",
             () => App.Shell.Show(new ExamView(nextExam!)), nextExam is not null);
-        var planCard = Panel("Kế hoạch hôm nay", plan, Text($"{doneCount} / 6 xong", 13, muted: true));
+        var steps = 6;
+        // 電験 và thẻ hội thoại: chỉ hiện khi đã có câu/thẻ đến hạn, để trang không rối lúc đang dồn sức cho N2.
+        var dueDenken = p.DueIds(SrsKind.Question).Where(id => id.StartsWith("dk:")).ToHashSet();
+        if (dueDenken.Count > 0)
+        {
+            var qs = DenkenView.All.Where(q => dueDenken.Contains(q.SrsId)).ToList();
+            Step(false, "電験: câu sai đến hạn", $"{qs.Count} câu", $"{Math.Max(5, qs.Count * 3)} phút", "Làm",
+                () => App.Shell.Show(new DenkenSessionView(qs, "電験 · câu sai đến hạn", 0, () => App.Shell.ShowSection("today"))), qs.Count > 0);
+            steps++;
+        }
+        var dueKaiwa = p.DueIds(SrsKind.Card).Where(id => id.StartsWith("kw:")).ToHashSet();
+        if (dueKaiwa.Count > 0)
+        {
+            var cards = content.LoadKaiwaCards().Where(c => dueKaiwa.Contains(c.SrsId)).ToList();
+            Step(false, "Thẻ mẫu câu hội thoại đến hạn", $"{cards.Count} thẻ", $"{Math.Max(2, cards.Count / 3)} phút", "Ôn",
+                () => App.Shell.Show(new KaiwaCardView(cards, "Mẫu câu đến hạn")), cards.Count > 0);
+            steps++;
+        }
+        var planCard = Panel("Kế hoạch hôm nay", plan, Text($"{doneCount} / {steps} xong", 13, muted: true));
 
         // ---- biểu đồ thi thử
         var recent = results.Where(r => r.Kind == "exam").Take(6).Reverse().ToList();
