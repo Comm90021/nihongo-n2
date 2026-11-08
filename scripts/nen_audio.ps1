@@ -105,7 +105,10 @@ if ($Rar) {
   New-Item -ItemType Directory $tmpDir | Out-Null
   try {
     Copy-Item -LiteralPath $Rar (Join-Path $tmpDir 'a.rar')
-    Push-Location $tmpDir; tar -xf a.rar; Pop-Location
+    # tar.exe của Windows không đọc được tên file tiếng Trung trong rar (bỏ qua hết): dùng 7-Zip nếu máy có.
+    $7z = 'C:\Program Files\7-Zip\7z.exe'
+    if (Test-Path $7z) { & $7z x -y "-o$tmpDir" (Join-Path $tmpDir 'a.rar') | Out-Null; if ($LASTEXITCODE -ne 0) { throw "7-Zip lỗi $LASTEXITCODE" } }
+    else { Push-Location $tmpDir; tar -xf a.rar; Pop-Location }
     Remove-Item (Join-Path $tmpDir 'a.rar')
     $audio = Get-ChildItem $tmpDir -Recurse -File | Where-Object Extension -in '.mp3', '.wav', '.m4a'
     foreach ($f in $audio) {
