@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -9,7 +10,8 @@ namespace Nihongo.Desktop.Views;
 static partial class Glyph
 {
     public const string Settings = "", Chat = "", Menu = "", Add = "", Copy = "",
-        FullScreen = "", Close = "", Accept = "", People = "";
+        FullScreen = "", Close = "", Accept = "", People = "", Timer = "",
+        Back = "", Forward = "", FlagOutline = "", ZoomIn = "", ZoomOut = "", Sparkle = "";
 }
 
 static partial class Glyph
@@ -29,23 +31,91 @@ static class Ui
     public static IBrush Bad => Brush(App.Current!.FindResource("Bad"));
     static IBrush Brush(object? o) => o as IBrush ?? Brushes.Gray;
 
-    public static TextBlock Text(string text, double size = 15, bool bold = false, bool muted = false, bool wrap = true) => new()
+    public static TextBlock Text(string text, double size = 15, bool bold = false, bool muted = false, bool wrap = true)
     {
-        Text = text,
-        FontSize = size,
-        FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal,
-        Opacity = muted ? 0.62 : 1,
-        TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
-    };
+        var t = new TextBlock
+        {
+            Text = text,
+            FontSize = size,
+            FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal,
+            TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+        };
+        // Chữ phụ dùng màu Muted của giao diện (đủ tương phản cả nền sáng lẫn tối), không làm mờ bằng Opacity.
+        if (muted) t.Bind(TextBlock.ForegroundProperty, t.GetResourceObservable("Muted"));
+        return t;
+    }
 
-    public static TextBlock Title(string text) => Text(text, 26, bold: true).Also(t => t.FontWeight = FontWeight.Bold);
+    /// <summary>Gắn màu từ bảng màu giao diện (đổi sáng/tối là đổi theo).</summary>
+    public static T Tint<T>(this T c, string resource) where T : Control
+    {
+        switch (c)
+        {
+            case TextBlock tb: tb.Bind(TextBlock.ForegroundProperty, tb.GetResourceObservable(resource)); break;
+            case TemplatedControl tc: tc.Bind(TemplatedControl.ForegroundProperty, tc.GetResourceObservable(resource)); break;
+        }
+        return c;
+    }
+
+    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontWeight = FontWeight.Bold; t.LetterSpacing = -0.4; });
 
     /// <summary>Tiêu đề trang kèm dòng mô tả.</summary>
     public static StackPanel Header(string title, string subtitle) =>
-        Col(4, Title(title), Text(subtitle, 14, muted: true)).Also(p => p.Margin = new Thickness(0, 0, 0, 8));
+        Col(4, Title(title), Text(subtitle, 14, muted: true)).Also(p => p.Margin = new Thickness(0, 0, 0, 12));
 
     public static TextBlock Section(string text) =>
-        Text(text.ToUpperInvariant(), 12, bold: true, muted: true).Also(t => { t.Margin = new Thickness(2, 14, 0, 2); t.LetterSpacing = 0.8; });
+        Text(text, 16, bold: true).Also(t => t.Margin = new Thickness(2, 12, 0, 4));
+
+    /// <summary>Nhãn nhỏ có màu: "" (chàm), "warn", "good", "bad", "plain".</summary>
+    public static Border Badge(string text, string kind = "")
+    {
+        var b = new Border { Classes = { "chip" }, Child = Text(text, 12, bold: true, wrap: false), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
+        if (kind != "") b.Classes.Add(kind);
+        return b;
+    }
+
+    /// <summary>Thẻ có tiêu đề và (tuỳ chọn) chữ hoặc nút bên phải tiêu đề.</summary>
+    public static Border Panel(string title, Control body, Control? right = null) =>
+        Card(Col(14, right is null ? Text(title, 16, bold: true) : Line(Text(title, 16, bold: true), right), body), 0);
+
+    /// <summary>Ô số liệu kiểu bản mẫu: nhãn nhỏ, số to, dòng phụ, và một control tuỳ chọn ở dưới.</summary>
+    public static Border Stat(string label, string value, string sub, Control? extra = null) => Card(Col(10,
+        Text(label, 13, muted: true).Also(t => t.FontWeight = FontWeight.Medium),
+        Row(8, Text(value, 30, bold: true, wrap: false).Also(t => { t.FontWeight = FontWeight.Bold; t.LetterSpacing = -0.6; }), Text(sub, 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+        extra), 0);
+
+    /// <summary>
+    /// Gắn màu theo bảng màu sáng/tối cho một thuộc tính bất kỳ. Không dùng App.Current.FindResource với các màu
+    /// trong ThemeDictionaries: ngoài cây giao diện nó trả về UnsetValue và làm app chết khi ép kiểu.
+    /// </summary>
+    public static T Themed<T>(this T c, AvaloniaProperty property, string resource) where T : Control
+    {
+        c.Bind(property, c.GetResourceObservable(resource));
+        return c;
+    }
+
+    /// <summary>Đường kẻ ngang mảnh màu viền thẻ.</summary>
+    public static Border Divider() => new Border { Height = 1 }.Themed(Border.BackgroundProperty, "CardBorder");
+
+    /// <summary>Nhóm nút chọn một (bộ lọc). Bấm nút nào thì nút đó sáng và gọi <paramref name="changed"/>.</summary>
+    public static WrapPanel Segmented(string[] labels, int selected, Action<int> changed)
+    {
+        var p = new WrapPanel();
+        var buttons = new List<Button>();
+        for (var i = 0; i < labels.Length; i++)
+        {
+            var idx = i;
+            var b = new Button { Content = labels[i], Classes = { "seg" }, Margin = new Thickness(0, 0, 6, 6) };
+            b.Classes.Set("on", i == selected);
+            b.Click += (_, _) => { foreach (var x in buttons) x.Classes.Set("on", x == b); changed(idx); };
+            buttons.Add(b);
+            p.Children.Add(b);
+        }
+        return p;
+    }
+
+    /// <summary>Thanh tiến độ mảnh bo tròn.</summary>
+    public static ProgressBar Bar(double value, double max, double height = 8) =>
+        new() { Minimum = 0, Maximum = Math.Max(1, max), Value = value, Height = height, MinHeight = height };
 
     public static TextBlock Icon(string glyph, double size = 18, IBrush? brush = null)
     {
@@ -84,7 +154,7 @@ static class Ui
     public static Border Tile(string value, string label, string glyph) => Card(Row(14, IconBadge(glyph),
         Col(0, Text(value, 24, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text(label, 13, muted: true))), 0);
 
-    public static Border Chip(string text) => new() { Classes = { "chip" }, Child = Text(text, 12, wrap: false).Also(t => t.Foreground = Accent) };
+    public static Border Chip(string text) => new() { Classes = { "chip" }, Child = Text(text, 12, wrap: false) };
 
     public static StackPanel Col(double spacing, params Control?[] children)
     {

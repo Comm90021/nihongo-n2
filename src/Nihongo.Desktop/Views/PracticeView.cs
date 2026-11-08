@@ -11,7 +11,8 @@ sealed class PracticeView : UserControl
 
     public PracticeView()
     {
-        var qs = App.Content.Questions;
+        // Câu của đề thi thử JSON (HQ, 非凡, dự đoán; có cả N1) chỉ làm trong chế độ Thi thử, không trộn vào luyện từng dạng.
+        var qs = App.Content.Questions.Where(q => q.Source != "mock").ToList();
         var exams = qs.Where(q => q.IsExam).GroupBy(q => q.SourceTitle).OrderByDescending(g => g.First().Id[..14]).ToList();
 
         var examList = Col(6);

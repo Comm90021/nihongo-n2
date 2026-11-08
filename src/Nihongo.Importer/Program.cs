@@ -31,6 +31,7 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
         CREATE TABLE listening_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, mp3 TEXT, script_pdf TEXT, exam_pdf TEXT, page_from INTEGER, items TEXT);
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
           last_page INTEGER, m9_from INTEGER, m9_to INTEGER, reading_from INTEGER, reading_to INTEGER, answers TEXT);
+        CREATE TABLE exam(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, level TEXT, source TEXT, minutes INTEGER, pages TEXT);
         """);
 
     var examCorpus = new StringBuilder();
@@ -41,9 +42,10 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var sets = ImportReading(db);
     var listening = ImportListening(db);
     var sources = ImportSources(db);
+    var exams = ImportExams(db);
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -404,6 +406,60 @@ int ImportSources(SqliteConnection db)
     tx.Commit();
     Console.WriteLine($"Nguồn báo và kênh video: {n}");
     return n;
+}
+
+// ---------------------------------------------------------------- đề thi thử dạng JSON (Gemini V16: HQ, 非凡; V18: đề dự đoán)
+// Mỗi file exams/<id>.json: {id,title,level,source,minutes,items:[{mondai,no,instruction,passage_id,stem,options,answer(0-3),explain_vi,pdf,page}],passages:[{id,mondai,text}]}.
+// Câu hỏi vào bảng question với source = "mock", source_title = id đề; đề vào bảng exam.
+int ImportExams(SqliteConnection db)
+{
+    using var tx = db.BeginTransaction();
+    var ord = 1_000_000; // sau mọi câu hỏi khác
+    var count = 0;
+    var skipped = 0;
+    foreach (var folder in new[] { P("antigravity_out", "V18_de_du_doan", "exams"), P("antigravity_out", "V16_de_hq_feifan", "exams") })
+    {
+        if (!Directory.Exists(folder)) continue;
+        foreach (var file in Directory.GetFiles(folder, "*.json").Order())
+        {
+            JsonObject e;
+            try { e = JsonNode.Parse(File.ReadAllText(file))!.AsObject(); }
+            catch (Exception ex) { Console.WriteLine($"  bỏ {Path.GetFileName(file)}: JSON hỏng ({ex.Message})"); continue; }
+            var examId = e["id"]?.ToString() ?? Path.GetFileNameWithoutExtension(file);
+            var passages = (e["passages"]?.AsArray() ?? []).Where(p => p?["id"] is not null).ToDictionary(p => p!["id"]!.ToString(), p => p!["text"]?.ToString() ?? "");
+            var pages = new Dictionary<string, object>();
+            var instruction = new Dictionary<int, string>();
+            var added = 0;
+            foreach (var it in e["items"]?.AsArray() ?? [])
+            {
+                var mondai = it!["mondai"]?.GetValue<int>() ?? 0;
+                var no = it["no"]?.GetValue<int>() ?? 0;
+                var options = (it["options"]?.AsArray() ?? []).Select(o => o?.ToString() ?? "").ToArray();
+                var answer = it["answer"]?.GetValue<int>() ?? -1;
+                if (mondai <= 0 || no <= 0 || options.Length < 3 || answer < 0 || answer >= options.Length) { skipped++; continue; }
+                if (it["instruction"]?.ToString() is { Length: > 0 } ins) instruction[mondai] = ins;
+                var qid = $"{examId}-q{no}";
+                var context = it["passage_id"]?.ToString() is { Length: > 0 } pid ? passages.GetValueOrDefault(pid, "") : "";
+                Exec(db, "INSERT OR REPLACE INTO question VALUES($id,$o,$src,$st,$m,$sn,$n,$t,$w,$c,$op,$ov,$a,$fs,$tp,$pt,$why)",
+                    ("$id", qid), ("$o", ord++), ("$src", "mock"), ("$st", examId), ("$m", mondai), ("$sn", instruction.GetValueOrDefault(mondai, "")),
+                    ("$n", no), ("$t", it["stem"]?.ToString() ?? ""), ("$w", ""), ("$c", context),
+                    ("$op", JsonSerializer.Serialize(options)), ("$ov", JsonSerializer.Serialize(options.Select(_ => "").ToArray())), ("$a", answer + 1),
+                    ("$fs", ""), ("$tp", ""), ("$pt", ""), ("$why", it["explain_vi"]?.ToString() ?? ""));
+                if (it["pdf"]?.ToString() is { Length: > 0 } pdf && it["page"]?.GetValue<int>() is int page and > 0)
+                    pages[qid] = new { pdf, page };
+                added++;
+            }
+            if (added == 0) continue;
+            Exec(db, "INSERT OR REPLACE INTO exam VALUES($i,$o,$t,$l,$s,$m,$p)", ("$i", examId), ("$o", count), ("$t", e["title"]?.ToString() ?? examId),
+                ("$l", e["level"]?.ToString() ?? "N2"), ("$s", e["source"]?.ToString() ?? ""), ("$m", e["minutes"]?.GetValue<int>() ?? 105),
+                ("$p", JsonSerializer.Serialize(pages)));
+            count++;
+            Console.WriteLine($"  đề {examId}: {added} câu");
+        }
+    }
+    tx.Commit();
+    Console.WriteLine($"Đề thi thử JSON: {count} đề (bỏ {skipped} câu thiếu dữ liệu)");
+    return count;
 }
 
 // ---------------------------------------------------------------- tiện ích

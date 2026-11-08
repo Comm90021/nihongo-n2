@@ -133,6 +133,18 @@ public sealed class ProgressStore
         _srs.Values.Where(e => e.Kind == SrsKind.Question && e.Box < MasteredBox && e.Reason != WrongReason.None)
             .GroupBy(e => e.Reason).ToDictionary(g => g.Key, g => g.Count());
 
+    /// <summary>Số lần làm và số lần đúng của từng câu/thẻ (bảng attempt).</summary>
+    public Dictionary<string, (int Correct, int Total)> AttemptStats()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT item_id, SUM(correct), COUNT(*) FROM attempt GROUP BY item_id";
+        using var r = cmd.ExecuteReader();
+        var d = new Dictionary<string, (int, int)>();
+        while (r.Read()) d[r.GetString(0)] = (r.GetInt32(1), r.GetInt32(2));
+        return d;
+    }
+
     public HashSet<string> SeenQuestions()
     {
         using var c = Open();

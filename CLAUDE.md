@@ -31,6 +31,7 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
    - V4 ghép Hán Việt theo từng chữ.
 3. Tần suất: từ có ≥2 ký tự và có chữ Hán thì đếm mọi lần xuất hiện. Từ kana hoặc 1 chữ chỉ đếm khi là phương án hoặc từ được hỏi, vì đếm chuỗi con làm `ある` lên 239 lần.
 4. Đọc hiểu: V7 (32 đề thật, trang và đáp án Mondai 9–14) xếp trước, sau đó là 34 đề luyện của `40 ĐỀ N2.pdf`.
+**08/11/2026: kho `../N2_ĐỀ CÁC NĂM/` (PDF + MP3 32 kỳ) và `../download file/` không còn trên máy** (không có trong Thùng rác; `D:\Study\N2_ĐỀ CÁC NĂM` chỉ còn `HE_THONG_ON_THI_N2_2026`). Không phải Claude hay Gemini xóa (đã rà nhật ký). Khi chưa khôi phục: **không chạy Importer** (sẽ mất bộ đọc hiểu/nghe trong noi_dung.db), đóng gói bằng `build.ps1 -SkipData`.
 5. Nghe hiểu: 32 kỳ trong `../N2_ĐỀ CÁC NĂM/<kỳ>/` (1 MP3, 1 PDF script, đề PDF). Trang đề Nghe bắt đầu ngay sau trang cuối Đọc hiểu (V7). Đáp án đọc từ phần `## II.` của `TONG_HOP_XUAT_FILE/04_Dap_An_Tung_Nam_MD`; đã đối chiếu 07/2010 với file chính thức. Mondai 4 chỉ có 3 phương án. Phát âm thanh bằng `Windows.Media.Playback.MediaPlayer` (`Services/Audio.cs`).
 
 6. Đọc hiểu luyện: V6 (60 bài Thaolejp, 174 câu, đáp án từ trang 解答 của sách) nạp thành câu hỏi `source=dokkai`, Mondai 10, mỗi câu mang cả bài đọc trong `context`. Từ mới của V6 vào nhóm "Từ mới đọc hiểu".
@@ -79,8 +80,19 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 - RSS kênh YouTube (`feeds/videos.xml`) trả 404. Lấy video kênh bằng POST `youtubei/v1/browse` với `params=EgZ2aWRlb3PyBgQKAjoA` (tab Video), đọc `lockupViewModel`. Thời gian đăng chỉ có dạng "3時間前", đổi ra giờ ước chừng.
 - Bài và video đã mở lưu trong bảng `media` của `tien_do.db`; mở lại không tải hay dịch lại.
 
+## Thi thử bấm giờ (`Views/ExamView.cs`, `Views/ExamListView.cs`, `Services/ExamCatalog.cs`)
+- Đề thật: 問題1–8 từ bảng question (mã `chjlpt-YYYY-MM-…`) ghép với 問題9–14 của bộ đọc hiểu cùng kỳ (`real-YYYY-MM`: trang PDF + đáp án, chọn 1–4). PDF không còn trên máy thì chỉ thi 問題1–8.
+- Đề JSON (Gemini V16 HQ/非凡, V18 dự đoán): Importer `ImportExams` đọc `antigravity_out/V16_de_hq_feifan/exams/*.json` và `V18_de_du_doan/exams/*.json` → bảng `exam` + câu `source="mock"`, `source_title=<id đề>`, answer lưu 1-based. Câu mock không trộn vào Luyện đề.
+- Bài làm dở lưu ở setting `exam_draft:<id>`; nộp bài thì chấm 言語知識 (問題≤9) / 読解 (≥10) quy đổi ước lượng /60 mỗi phần, câu sai vào SRS, kết quả `SaveResult("exam:<id>")`. Trong lúc thi ẩn thanh bên (`SetRailVisible`).
+
+## Từ vựng 4 đáp án (`Services/VocabQuiz.cs`, `Views/VocabQuizView.cs`, `Views/VocabView.cs`)
+- Dạng: 読み (nhiễu = 2 bẫy trường âm/っ/dấu đục từ `Perturb`, rồi cách đọc của từ cùng chữ Hán), 表記 (từ đồng âm, cùng chữ Hán, cùng âm đầu), 意味, 文脈 (khoét từ trong câu ví dụ). Nhiễu cùng loại từ; từ toàn kana gom riêng để nhiễu cũng là trạng từ/từ láy.
+- Thẻ lật `FlashView` chỉ còn cho sổ tay (từ không có cách đọc kana).
+
 ## Giao diện
-- Bảng màu theo giao diện sáng/tối trong `App.axaml` (`PageBg`, `CardBg`, `CardBorder`, `AccentSoft`, `Ink`). Kiểu `card`, `hero`, `chip`, nút `primary`, `ghost`, `option`.
+- Bản mẫu đã duyệt 08/11/2026: https://claude.ai/artifact/3c1M8rxRKSQWihfc3Bwifp (Hôm nay, Thi thử, Đọc báo). Tối giản, thẻ phẳng viền 1px bo 16, chàm `#4338CA`, dải biểu tượng 84px (thu gọn 64px).
+- Bảng màu sáng/tối trong `App.axaml`: `PageBg`, `CardBg`, `CardBorder`, `AccentSoft`, `AccentInk`, `Ink`, `Muted`, `Track`, `Warn/Good/Bad(Soft|Ink)`. Kiểu: `card`, `chip` (+`warn|good|bad|plain`), nút `primary`, `strong`, `ghost`, `link`, `seg`/`seg on`, `option` (+`selected|correct|wrong`), `cell` (ô số câu).
+- Hàm dựng: `Ui.Stat`, `Panel`, `Badge`, `Bar`, `Segmented`, `Divider`, `Tint`/`Themed`. **Màu trong ThemeDictionaries không lấy bằng `App.Current.FindResource`** (ra UnsetValue, app chết khi mở): dùng `Tint`/`Themed` (binding theo giao diện).
 - Biểu tượng: font Segoe Fluent Icons của hệ thống (mã ở `Views/Ui.cs`, lớp `Glyph`). Không bao giờ gán `Foreground = null` (chữ thành trong suốt, đã dính 2 lần).
 
 ## Đo được (06/11/2026, i7-8650U)

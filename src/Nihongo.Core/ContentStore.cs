@@ -90,6 +90,31 @@ public sealed class ContentStore
         }
     }
 
+    public IReadOnlyList<ExamInfo> LoadExams()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT id,title,level,source,minutes,pages FROM exam ORDER BY ord";
+        try
+        {
+            using var r = cmd.ExecuteReader();
+            var list = new List<ExamInfo>();
+            while (r.Read())
+            {
+                var pages = new Dictionary<string, ExamPage>();
+                if (System.Text.Json.Nodes.JsonNode.Parse(r.GetString(5)) is System.Text.Json.Nodes.JsonObject o)
+                    foreach (var (qid, v) in o)
+                        if (v?["pdf"]?.ToString() is { Length: > 0 } pdf) pages[qid] = new ExamPage(pdf, v["page"]?.GetValue<int>() ?? 1);
+                list.Add(new ExamInfo(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetInt32(4), pages));
+            }
+            return list;
+        }
+        catch (SqliteException)
+        {
+            return []; // dữ liệu cũ chưa có bảng exam
+        }
+    }
+
     public IReadOnlyList<ListeningSet> LoadListeningSets()
     {
         using var c = Open();

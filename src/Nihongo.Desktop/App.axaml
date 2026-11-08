@@ -2,59 +2,79 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Nihongo.Desktop.App"
              RequestedThemeVariant="Default">
+  <!--
+    Hệ thống giao diện (bản mẫu đã duyệt 08/11/2026): tối giản, thẻ phẳng viền 1px, bo 16,
+    màu chàm #4338CA làm điểm nhấn, khoảng cách theo thang 4/8/12/16/24.
+  -->
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="PageBg">#F4F6FB</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#F6F7F9</SolidColorBrush>
           <SolidColorBrush x:Key="CardBg">#FFFFFF</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBorder">#E4E8F2</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#EBEEF6</SolidColorBrush>
-          <SolidColorBrush x:Key="RowHover">#F1F4FB</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentSoft">#E3E8F6</SolidColorBrush>
-          <SolidColorBrush x:Key="Ink">#1B2133</SolidColorBrush>
-          <SolidColorBrush x:Key="SoftButton">#EEF1F8</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#E5E7EB</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="RowHover">#F3F4F6</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#EEF0FF</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentInk">#3730A3</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#111827</SolidColorBrush>
+          <SolidColorBrush x:Key="Muted">#5B6474</SolidColorBrush>
+          <SolidColorBrush x:Key="Track">#EEF0F4</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="Strong">#111827</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnSoft">#FEF3C7</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnInk">#92400E</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodSoft">#DCFCE7</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodInk">#166534</SolidColorBrush>
+          <SolidColorBrush x:Key="BadSoft">#FEE2E2</SolidColorBrush>
+          <SolidColorBrush x:Key="BadInk">#991B1B</SolidColorBrush>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="PageBg">#0E1018</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBg">#181B26</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBorder">#262A38</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#131620</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#0F1117</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#181B24</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#272B37</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#141720</SolidColorBrush>
           <SolidColorBrush x:Key="RowHover">#1F2331</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentSoft">#263055</SolidColorBrush>
-          <SolidColorBrush x:Key="Ink">#E8EBF5</SolidColorBrush>
-          <SolidColorBrush x:Key="SoftButton">#222636</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#262B4A</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentInk">#A5B4FC</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#E7E9F0</SolidColorBrush>
+          <SolidColorBrush x:Key="Muted">#9AA1B2</SolidColorBrush>
+          <SolidColorBrush x:Key="Track">#262A36</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#181B24</SolidColorBrush>
+          <SolidColorBrush x:Key="Strong">#E7E9F0</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnSoft">#3B2A10</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnInk">#FCD34D</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodSoft">#12301F</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodInk">#86EFAC</SolidColorBrush>
+          <SolidColorBrush x:Key="BadSoft">#3A1717</SolidColorBrush>
+          <SolidColorBrush x:Key="BadInk">#FCA5A5</SolidColorBrush>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
       <FontFamily x:Key="ReadFont">Yu Gothic UI, Meiryo, Segoe UI</FontFamily>
       <x:Double x:Key="ReadSize">19</x:Double>
       <x:Double x:Key="ReadLine">30</x:Double>
       <x:Double x:Key="ReadViSize">15</x:Double>
-      <SolidColorBrush x:Key="Accent">#5368A4</SolidColorBrush>
-      <SolidColorBrush x:Key="Good">#16A34A</SolidColorBrush>
+      <SolidColorBrush x:Key="Accent">#4338CA</SolidColorBrush>
+      <SolidColorBrush x:Key="AccentHover">#3730A3</SolidColorBrush>
+      <SolidColorBrush x:Key="Good">#15803D</SolidColorBrush>
       <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>
-      <LinearGradientBrush x:Key="Hero" StartPoint="0%,0%" EndPoint="100%,100%">
-        <GradientStop Color="#4F63A8" Offset="0" />
-        <GradientStop Color="#7A5BC7" Offset="1" />
-      </LinearGradientBrush>
+      <SolidColorBrush x:Key="Warn">#D97706</SolidColorBrush>
+      <SolidColorBrush x:Key="Hero">#4338CA</SolidColorBrush>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
 
+    <!-- Thẻ -->
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource CardBg}" />
       <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="14" />
-      <Setter Property="Padding" Value="18" />
-      <Setter Property="BoxShadow" Value="0 1 2 0 #0F000000, 0 6 18 0 #0A000000" />
+      <Setter Property="CornerRadius" Value="16" />
+      <Setter Property="Padding" Value="20" />
     </Style>
-    <Style Selector="Border.hero">
-      <Setter Property="Background" Value="{StaticResource Hero}" />
-      <Setter Property="CornerRadius" Value="18" />
-      <Setter Property="Padding" Value="26,22" />
-      <Setter Property="BoxShadow" Value="0 10 30 0 #335368A4" />
+    <Style Selector="Border.flat">
+      <Setter Property="Padding" Value="0" />
     </Style>
     <Style Selector="Border.row">
       <Setter Property="Background" Value="Transparent" />
@@ -62,57 +82,212 @@
     <Style Selector="Border.row:pointerover">
       <Setter Property="Background" Value="{DynamicResource RowHover}" />
     </Style>
+
+    <!-- Nhãn nhỏ -->
     <Style Selector="Border.chip">
       <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
-      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="8,3" />
     </Style>
+    <Style Selector="Border.chip TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+    </Style>
+    <Style Selector="Border.chip.warn">
+      <Setter Property="Background" Value="{DynamicResource WarnSoft}" />
+    </Style>
+    <Style Selector="Border.chip.warn TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource WarnInk}" />
+    </Style>
+    <Style Selector="Border.chip.good">
+      <Setter Property="Background" Value="{DynamicResource GoodSoft}" />
+    </Style>
+    <Style Selector="Border.chip.good TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource GoodInk}" />
+    </Style>
+    <Style Selector="Border.chip.bad">
+      <Setter Property="Background" Value="{DynamicResource BadSoft}" />
+    </Style>
+    <Style Selector="Border.chip.bad TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource BadInk}" />
+    </Style>
+    <Style Selector="Border.chip.plain">
+      <Setter Property="Background" Value="{DynamicResource Track}" />
+    </Style>
+    <Style Selector="Border.chip.plain TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
 
+    <!-- Nút: mặc định viền mảnh, primary màu chàm, strong màu mực, ghost trong suốt -->
     <Style Selector="Button">
       <Setter Property="CornerRadius" Value="10" />
-      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="FontWeight" Value="Medium" />
       <Setter Property="Background" Value="{DynamicResource SoftButton}" />
-      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource RowHover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
     </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderThickness" Value="0" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
     <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="#46599A" />
+      <Setter Property="Background" Value="{StaticResource AccentHover}" />
       <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.strong">
+      <Setter Property="Background" Value="{DynamicResource Strong}" />
+      <Setter Property="Foreground" Value="{DynamicResource PageBg}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.strong:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Strong}" />
+      <Setter Property="Foreground" Value="{DynamicResource PageBg}" />
+      <Setter Property="Opacity" Value="0.88" />
     </Style>
     <Style Selector="Button.ghost">
       <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
     </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="6,6" />
+    </Style>
+
+    <!-- Nút chọn liền nhau (bộ lọc): đang chọn thì nền chàm nhạt -->
+    <Style Selector="Button.seg">
+      <Setter Property="Padding" Value="12,7" />
+      <Setter Property="FontSize" Value="13.5" />
+      <Setter Property="CornerRadius" Value="9" />
+    </Style>
+    <Style Selector="Button.seg.on">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.seg.on:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+    </Style>
+
+    <!-- Phương án trả lời -->
     <Style Selector="Button.option">
       <Setter Property="Background" Value="{DynamicResource CardBg}" />
       <Setter Property="BorderBrush" Value="{DynamicResource CardBorder}" />
       <Setter Property="BorderThickness" Value="1.5" />
       <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="16,12" />
+      <Setter Property="Padding" Value="16,13" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
     </Style>
     <Style Selector="Button.option:pointerover /template/ ContentPresenter">
       <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
       <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
     </Style>
+    <Style Selector="Button.option.selected">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    </Style>
+    <Style Selector="Button.option.correct">
+      <Setter Property="BorderBrush" Value="{StaticResource Good}" />
+      <Setter Property="Background" Value="{DynamicResource GoodSoft}" />
+    </Style>
+    <Style Selector="Button.option.wrong">
+      <Setter Property="BorderBrush" Value="{StaticResource Bad}" />
+      <Setter Property="Background" Value="{DynamicResource BadSoft}" />
+    </Style>
 
+    <!-- Ô số câu trong bài thi -->
+    <Style Selector="Button.cell">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+      <Setter Property="BorderBrush" Value="#D1D5DB" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+    <Style Selector="Button.cell.done">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.cell.flag">
+      <Setter Property="Background" Value="{DynamicResource WarnSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource WarnInk}" />
+      <Setter Property="BorderBrush" Value="{StaticResource Warn}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+    <Style Selector="Button.cell.current">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.cell.right">
+      <Setter Property="Background" Value="{DynamicResource GoodSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource GoodInk}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.cell.wrongcell">
+      <Setter Property="Background" Value="{DynamicResource BadSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource BadInk}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- Thanh bên dạng dải biểu tượng -->
     <Style Selector="ListBox.nav ListBoxItem">
-      <Setter Property="Padding" Value="12,10" />
-      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="4,8,4,7" />
+      <Setter Property="CornerRadius" Value="12" />
       <Setter Property="Margin" Value="0,2" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+    </Style>
+    <Style Selector="ListBox.nav ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource RowHover}" />
     </Style>
     <Style Selector="ListBox.nav ListBoxItem:selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
     </Style>
     <Style Selector="ListBox.nav ListBoxItem:selected TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
       <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Tab gọn hơn mặc định của Fluent -->
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="CornerRadius" Value="10" />
     </Style>
     <Style Selector="ProgressBar">
       <Setter Property="Foreground" Value="{StaticResource Accent}" />
-      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Background" Value="{DynamicResource Track}" />
+      <Setter Property="CornerRadius" Value="99" />
+      <Setter Property="MinHeight" Value="6" />
     </Style>
   </Application.Styles>
 </Application>

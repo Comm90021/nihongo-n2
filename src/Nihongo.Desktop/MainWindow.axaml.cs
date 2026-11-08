@@ -15,8 +15,9 @@ public partial class MainWindow : Window
         ("today", "Hôm nay", Views.Glyph.Home),
         ("vocab", "Từ vựng", Views.Glyph.Library),
         ("practice", "Luyện đề", Views.Glyph.Education),
+        ("exam", "Thi thử", Views.Glyph.Timer),
         ("reading", "Đọc hiểu", Views.Glyph.Reading),
-        ("listening", "Nghe hiểu", Views.Glyph.Headphone),
+        ("listening", "Nghe", Views.Glyph.Headphone),
         ("media", "Báo & Video", Views.Glyph.News),
         ("gemini", "Gemini", Views.Glyph.Chat),
         ("settings", "Cài đặt", Views.Glyph.Settings),
@@ -28,22 +29,20 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        NavToggle.Content = Ui.Icon(Views.Glyph.Menu, 18);
         AutomationProperties.SetName(NavToggle, "Thu gọn thanh bên");
         foreach (var (tag, label, glyph) in Sections)
         {
-            var text = new TextBlock { Text = label, FontSize = 15, VerticalAlignment = VerticalAlignment.Center };
+            var text = new TextBlock { Text = label, FontSize = 11, FontWeight = Avalonia.Media.FontWeight.Medium, TextAlignment = Avalonia.Media.TextAlignment.Center, TextWrapping = Avalonia.Media.TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center };
             _labels.Add(text);
             var item = new ListBoxItem
             {
                 Tag = tag,
-                Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { Ui.Icon(glyph, 17), text } },
+                Content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, Children = { Ui.Icon(glyph, 20).Also(i => i.HorizontalAlignment = HorizontalAlignment.Center), text } },
             };
             AutomationProperties.SetName(item, label);
             ToolTip.SetTip(item, label);
             Nav.Items.Add(item);
         }
-        Footer.Text = $"{App.Content.Meta("vocab")} từ · {App.Content.Meta("questions")} câu · {App.Content.Meta("listening_sets")} đề nghe\nDữ liệu {App.Content.Meta("built_at").Replace('T', ' ')[..16]}";
         SetCompact(Prefs.NavCompact);
         KeyDown += OnKey;
         Nav.SelectedIndex = 0;
@@ -57,23 +56,23 @@ public partial class MainWindow : Window
     void OnKey(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; }
-        else if (e.Key == Key.B && e.KeyModifiers == KeyModifiers.Control) { SetCompact(NavPane.Width > 100); e.Handled = true; }
+        else if (e.Key == Key.B && e.KeyModifiers == KeyModifiers.Control) { SetCompact(NavPane.Width > 70); e.Handled = true; }
         else if (e.Key == Key.Escape && WindowState == WindowState.FullScreen) { WindowState = WindowState.Maximized; e.Handled = true; }
     }
 
     public void ToggleFullScreen() => WindowState = WindowState == WindowState.FullScreen ? WindowState.Maximized : WindowState.FullScreen;
 
-    void OnNavToggle(object? sender, RoutedEventArgs e) => SetCompact(NavPane.Width > 100);
+    void OnNavToggle(object? sender, RoutedEventArgs e) => SetCompact(NavPane.Width > 70);
 
-    /// <summary>Thanh bên thu gọn chỉ còn biểu tượng (rộng 68) để màn đọc rộng hơn.</summary>
+    /// <summary>Dải biểu tượng: 84px có chữ dưới biểu tượng, thu gọn còn 64px chỉ biểu tượng.</summary>
     public void SetCompact(bool compact, bool save = true)
     {
         if (save) { Prefs.SetNavCompact(compact); _navBeforeDock = null; }
-        NavPane.Width = compact ? 68 : 220;
-        NavPane.Padding = compact ? new Avalonia.Thickness(8, 18) : new Avalonia.Thickness(14, 18);
-        Brand.IsVisible = Footer.IsVisible = !compact;
+        NavPane.Width = compact ? 64 : 84;
         foreach (var l in _labels) l.IsVisible = !compact;
     }
+    /// <summary>Ẩn dải biểu tượng khi đang thi thử để tập trung; rời màn thi thì hiện lại.</summary>
+    public void SetRailVisible(bool visible) => NavPane.IsVisible = visible;
 
     /// <summary>Thay nội dung chính. Màn hình con (thẻ học, quiz) gọi lại hàm này khi xong.</summary>
     public void Show(Control view)
@@ -94,6 +93,7 @@ public partial class MainWindow : Window
             "listening" => new ListeningListView(),
             "media" => new MediaView(),
             "settings" => new SettingsView(),
+            "exam" => new ExamListView(),
             _ => new TodayView(),
         });
     }

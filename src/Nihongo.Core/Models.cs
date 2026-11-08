@@ -55,6 +55,12 @@ public sealed record ListeningItem(int Mondai, string Label, int Answer)
 /// <summary>Nguồn tự cập nhật: feed báo (kind=feed) hoặc kênh YouTube (kind=channel). Score: số câu tách được trung bình, hoặc tỉ lệ video có phụ đề thủ công.</summary>
 public sealed record Source(string Id, string Kind, string Name, string Topic, string Level, string Url, string StartMarker, string EndMarker, string Note, double Score);
 
+/// <summary>Trang PDF gốc của một câu (Mondai 14 có bảng, hình).</summary>
+public sealed record ExamPage(string Pdf, int Page);
+
+/// <summary>Đề thi thử dạng JSON (HQ, 非凡, đề dự đoán). Câu hỏi nằm trong bảng question với source="mock", source_title=Id.</summary>
+public sealed record ExamInfo(string Id, string Title, string Level, string Source, int Minutes, IReadOnlyDictionary<string, ExamPage> Pages);
+
 public sealed record ListeningSet(string Id, string Title, string Mp3, string ScriptPdf, string ExamPdf, int PageFrom, IReadOnlyList<ListeningItem> Items);
 
 public sealed record ReadingSet(
