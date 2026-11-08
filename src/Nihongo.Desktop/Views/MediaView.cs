@@ -314,7 +314,7 @@ sealed class MediaView : UserControl
         foreach (var (url, kind, title, lines) in media)
         {
             var count = JsonSerializer.Deserialize(lines, MediaJson.Default.ListMediaLine)?.Count ?? 0;
-            var label = kind == "video" ? "Video" : "Bài báo";
+            var label = kind switch { "video" => "Video", "book" => "Truyện", _ => "Bài báo" };
             if (kind == "video" && Web.YouTubeId(url) is { } id && _watch.TryGetValue(id, out var w))
                 label += w.Done ? " · ✓ đã học" : w.Duration > 0 ? $" · đã xem {w.Position / w.Duration:P0}" : "";
             list.Children.Add(Card(Line(

@@ -15,7 +15,7 @@ namespace Nihongo.Desktop.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "video" or "ui";
+    public static bool Enabled => Mode is "video" or "ui" or "extra";
 
     public static async void Run(MainWindow w)
     {
@@ -25,6 +25,7 @@ static class SelfTest
         try
         {
             if (Mode == "video") await Video(w, dir, log);
+            else if (Mode == "extra") await Extra(w, dir, log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -69,6 +70,56 @@ static class SelfTest
         w.TestSelectNav("settings"); await Task.Delay(1000); Shot(w, dir, "9_cai_dat");
     }
 
+    // ---------------------------------------------------------------- thư viện, hội thoại, 電験
+    static async Task Extra(MainWindow w, string dir, List<string> log)
+    {
+        await Task.Delay(1200);
+        var p = App.Progress;
+        log.Add($"Dữ liệu: 電験 {DenkenView.All.Count} câu, Kaiwa {App.Content.LoadKaiwa().Count} chủ đề / {App.Content.LoadKaiwaCards().Count} thẻ, 面接 {App.Content.LoadInterview().Count}, truyện {App.Content.LoadBooks().Count}, nguồn web {Sites.All(includeHidden: true).Count}");
+        for (var i = 0; i < 4; i++) { w.Show(new LibraryView(i)); await Task.Delay(i == 2 ? 1500 : 900); Shot(w, dir, $"1_thu_vien_{i}"); }
+
+        // Thêm, sửa, ẩn nguồn rồi đặt lại: kiểm lưu cấu hình trong tien_do.db.
+        Sites.Add("anime", "Trang thử", "https://example.com/");
+        var mine = Sites.All("anime").First(s => s.UserAdded);
+        Sites.Edit(mine, "Trang thử 2", "https://example.org/");
+        var edited = Sites.All("anime").First(s => s.Id == mine.Id);
+        var aozora = Sites.All("read").First();
+        Sites.Remove(aozora);
+        var hiddenOk = Sites.All("read").All(s => s.Id != aozora.Id) && Sites.All("read", includeHidden: true).Any(s => s.Id == aozora.Id);
+        Sites.Reset(aozora);
+        Sites.Remove(edited);
+        log.Add($"Quản lý nguồn: thêm+sửa {(edited.Name == "Trang thử 2" && edited.Url == "https://example.org/" ? "OK" : "LỖI")}, ẩn {(hiddenOk ? "OK" : "LỖI")}, đặt lại {(Sites.All("read").Any(s => s.Id == aozora.Id) ? "OK" : "LỖI")}, xoá {(Sites.All("anime").Any(s => s.UserAdded) ? "LỖI" : "OK")}");
+        var (ok, text) = await Sites.CheckAsync(aozora);
+        log.Add($"Kiểm trạng thái {aozora.Name}: {(ok ? "OK" : "LỖI")} {text}");
+
+        // Truyện 青空文庫: tải, tách câu, mở màn đọc.
+        var book = App.Content.LoadBooks().FirstOrDefault();
+        if (book is not null)
+        {
+            try
+            {
+                var (_, lines) = await Web.FetchAozoraAsync(book.Url);
+                log.Add($"青空文庫「{book.Title}」: {lines.Count} câu; đầu: {string.Join(" / ", lines.Take(3).Select(l => l.Ja))}");
+                log.Add($"  còn sót ruby/thẻ HTML: {lines.Count(l => l.Ja.Contains('<') || l.Ja.Contains('《'))}");
+                w.Show(new MediaReaderView(book.Url, "book", book.Title, lines)); await Task.Delay(1500); Shot(w, dir, "2_doc_truyen");
+            }
+            catch (Exception ex) { log.Add($"青空文庫 LỖI: {ex.Message}"); }
+        }
+
+        for (var i = 0; i < 3; i++) { p.SetSetting("kw_tab", i.ToString()); w.Show(new KaiwaView()); await Task.Delay(900); Shot(w, dir, $"3_hoi_thoai_{i}"); }
+        var topic = App.Content.LoadKaiwa().First();
+        w.Show(new KaiwaPracticeView(topic.Questions.Select(q => new KaiwaPrompt(q.Ja, q.Vi, "", "", "")).ToList(), topic.Jp, topic.Register)); await Task.Delay(800); Shot(w, dir, "4_luyen_noi");
+        var iv = App.Content.LoadInterview();
+        w.Show(new KaiwaPracticeView(iv.Select(q => new KaiwaPrompt(q.Q, q.Vi, q.Answer, q.AnswerVi, q.Tip)).ToList(), "面接", "")); await Task.Delay(800); Shot(w, dir, "5_phong_van");
+        var cards = App.Content.LoadKaiwaCards().Take(3).ToList();
+        w.Show(new KaiwaCardView(cards, "Thẻ thử")); await Task.Delay(600); Shot(w, dir, "6_the_mau_cau");
+
+        for (var i = 0; i < 4; i++) { p.SetSetting("dk_tab", i.ToString()); w.Show(new DenkenView()); await Task.Delay(900); Shot(w, dir, $"7_denken_{i}"); }
+        var dk = DenkenView.All.Where(q => q.Choice > 0).Take(3).Concat(DenkenView.All.Where(q => q.Choice == 0).Take(1)).ToList();
+        log.Add($"電験: câu chấm tự động {DenkenView.All.Count(q => q.Choice > 0)}, tự chấm {DenkenView.All.Count(q => q.Choice == 0)}; dạng: {string.Join(", ", DenkenView.All.GroupBy(q => q.KindGroup).Select(g => $"{g.Key} {g.Count()}"))}");
+        w.Show(new DenkenSessionView(dk, "Tự kiểm 電験", 0, () => { })); await Task.Delay(6000); Shot(w, dir, "8_denken_lam_bai");
+        w.Show(new DenkenSessionView(dk, "Tự kiểm 電験 thi", 90, () => { }, "dk:test")); await Task.Delay(3000); Shot(w, dir, "9_denken_thi");
+    }
     // ---------------------------------------------------------------- bố cục màn video (giữ từ lần trước)
     static async Task Video(MainWindow w, string dir, List<string> log)
     {

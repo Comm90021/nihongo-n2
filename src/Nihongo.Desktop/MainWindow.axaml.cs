@@ -19,6 +19,9 @@ public partial class MainWindow : Window
         ("reading", "Đọc hiểu", Views.Glyph.Reading),
         ("listening", "Nghe", Views.Glyph.Headphone),
         ("media", "Báo & Video", Views.Glyph.News),
+        ("library", "Thư viện", Views.Glyph.Book),
+        ("kaiwa", "Hội thoại", Views.Glyph.People),
+        ("denken", "電験", Views.Glyph.Lightning),
         ("gemini", "Gemini", Views.Glyph.Chat),
         ("settings", "Cài đặt", Views.Glyph.Settings),
     ];
@@ -94,6 +97,9 @@ public partial class MainWindow : Window
             "media" => new MediaView(),
             "settings" => new SettingsView(),
             "exam" => new ExamListView(),
+            "library" => new LibraryView(),
+            "kaiwa" => new KaiwaView(),
+            "denken" => new DenkenView(),
             _ => new TodayView(),
         });
     }

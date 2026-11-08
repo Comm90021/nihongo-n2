@@ -11,7 +11,7 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 | `src/Nihongo.Core/Quiz` | Logic thuần, có test: `VocabQuiz` (sinh câu 4 đáp án; nguồn từ qua `VocabQuiz.Source`), `ExamScore` (chấm 言語知識/読解, N1 ranh giới 問題7, N2 問題9), `ExamFile` (kiểm file đề JSON) |
 | `src/Nihongo.Core/Text` | `GrammarIndex` (dò mẫu ngữ pháp V12 trong câu), `LinkPicker` (lấy link bài từ trang danh sách theo list_selector) |
 | `src/Nihongo.Tests` | xUnit. `build.ps1` chạy `dotnet test` trước khi đóng gói, đỏ thì dừng. Test dữ liệu đề đọc `../antigravity_out/*/exams` nếu máy có |
-| `scripts/nen_audio.ps1` | Nén file nghe thành .m4a mono 24kHz 32kbps (bộ chuyển mã Windows), kiểm thời lượng rồi mới xóa gốc, bỏ nếu không nhỏ hơn 80%, ghi `../../XOA_LOG.md` |
+| `scripts/nen_audio.ps1` | Nén file nghe thành .m4a mono 24kHz 32kbps (bộ chuyển mã Windows), kiểm thời lượng rồi mới xóa gốc, bỏ nếu không nhỏ hơn 80%, ghi `../../XOA_LOG.md`. File gốc hay bị khóa ngay sau khi nén: script GC + thử xóa lại 15 lần; vẫn khóa thì giữ cả hai (bản cũ từng xóa nhầm bản nén tốt) |
 | `src/Nihongo.Importer` | Dựng `data/noi_dung.db` từ mọi nguồn ở thư mục cha. Chạy lại lúc nào cũng được, mất khoảng 5 giây |
 | `src/Nihongo.Desktop` | Giao diện. View viết bằng C# trong `Views/`, dùng hàm dựng chung `Views/Ui.cs`. PDF vẽ bằng `Windows.Data.Pdf` (`Services/PdfPages.cs`), giọng đọc bằng `System.Speech` |
 | `data/` | `noi_dung.db` (dựng lại được) và `tien_do.db` (**tiến độ của user, không được xóa hay ghi đè**) |
@@ -36,7 +36,7 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 3. Tần suất: từ có ≥2 ký tự và có chữ Hán thì đếm mọi lần xuất hiện. Từ kana hoặc 1 chữ chỉ đếm khi là phương án hoặc từ được hỏi, vì đếm chuỗi con làm `ある` lên 239 lần.
 4. Đọc hiểu: V7 (32 đề thật, trang và đáp án Mondai 9–14) xếp trước, sau đó là 34 đề luyện của `40 ĐỀ N2.pdf`.
 **08/11/2026: kho `../N2_ĐỀ CÁC NĂM/` từng biến mất rồi được user chép lại** (`download file/` vẫn chưa có). Trước khi chạy Importer luôn kiểm kho này còn đủ: thiếu thì Importer bỏ bộ đọc hiểu/nghe. File nghe đã được nén thành `.m4a` (Importer nhận cả `.m4a` lẫn `.mp3`). Đề N1 thật ở `../Đề thi N1 các năm/` (23 kỳ, ảnh quét; Gemini V24 bóc).
-5. Nghe hiểu: 32 kỳ trong `../N2_ĐỀ CÁC NĂM/<kỳ>/` (1 MP3, 1 PDF script, đề PDF). Trang đề Nghe bắt đầu ngay sau trang cuối Đọc hiểu (V7). Đáp án đọc từ phần `## II.` của `TONG_HOP_XUAT_FILE/04_Dap_An_Tung_Nam_MD`; đã đối chiếu 07/2010 với file chính thức. Mondai 4 chỉ có 3 phương án. Phát âm thanh bằng `Windows.Media.Playback.MediaPlayer` (`Services/Audio.cs`).
+5. Nghe hiểu: 32 kỳ trong `../N2_ĐỀ CÁC NĂM/<kỳ>/` (1 MP3, 1 PDF script, đề PDF). Trang đề Nghe bắt đầu ngay sau trang cuối Đọc hiểu (V7). Đáp án: thư mục MD `TONG_HOP_XUAT_FILE/04_Dap_An_Tung_Nam_MD` **đã mất (08/11/2026)**; Importer đọc `../antigravity_out/C03_dap_an_nghe/listening_answers.json` (987 câu, trích từ bản dựng trước; gốc đã đối chiếu với file chính thức). MD có lại thì Importer ưu tiên MD. Câu dạng `5.3-1` là 問題5 câu 3 câu hỏi 1. Mondai 4 chỉ có 3 phương án. Phát âm thanh bằng `Windows.Media.Playback.MediaPlayer` (`Services/Audio.cs`).
 
 6. Đọc hiểu luyện: V6 (60 bài Thaolejp, 174 câu, đáp án từ trang 解答 của sách) nạp thành câu hỏi `source=dokkai`, Mondai 10, mỗi câu mang cả bài đọc trong `context`. Từ mới của V6 vào nhóm "Từ mới đọc hiểu".
 
@@ -106,9 +106,18 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 - Hàm dựng: `Ui.Stat`, `Panel`, `Badge`, `Bar`, `Segmented`, `Divider`, `Tint`/`Themed`. **Màu trong ThemeDictionaries không lấy bằng `App.Current.FindResource`** (ra UnsetValue, app chết khi mở): dùng `Tint`/`Themed` (binding theo giao diện).
 - Biểu tượng: font Segoe Fluent Icons của hệ thống (mã ở `Views/Ui.cs`, lớp `Glyph`). Không bao giờ gán `Foreground = null` (chữ thành trong suốt, đã dính 2 lần).
 
+## Mở rộng 08/11/2026: Thư viện, Hội thoại, 電験
+Dữ liệu nạp bằng `ImportExtra` (Importer), đọc bằng `ContentStore.Extra.cs` (bảng chưa có thì trả rỗng).
+- **電験** (`Views/DenkenView.cs`): 2.088 câu đề năm 1・2・3種 từ sổ ôn của user (V23, `antigravity_out/V23_denken`), mã `dk-<cấp>-<đuôi url>`, SRS `dk:<id>`. Đề bài và lời giải là trang denken-ou.com mở trong WebHost; script `HideScript` che từ tiêu đề 【ワンポイント解説】/【解答】 trở xuống tới khi trả lời. Đáp án dạng `(n)` chấm tự động (908 câu), còn lại tự chấm. Thi thử theo năm + môn (法規 65 phút, 電力・管理 120, 機械・制御 60, còn lại 90), kết quả `SaveResult(kind="denken")`. Dạng câu gốc lẫn Việt/Nhật, gộp bằng `KindGroup`.
+- **Hội thoại** (`Views/KaiwaView.cs`): 26 chủ đề / 492 câu hỏi và 85 thẻ mẫu câu (C01, trích từ artifact Kaiwa của user bằng `extract_kaiwa.mjs`), 20 câu 面接 có trả lời mẫu (C02, Claude soạn). Thẻ SRS `kw:<id>` kiểu Card. Sửa câu, đóng vai, phỏng vấn thử: điền lời nhắc vào Gemini (`AskGemini`), không tự chấm bằng máy.
+- **Thư viện** (`Views/LibraryView.cs`): 100 truyện 青空文庫 (`Web.FetchAozoraAsync`: Shift_JIS, `div.main_text`, bỏ rt/rp) mở trong `MediaReaderView` với kind `book`; trang đọc, anime (kênh YouTube chính thức qua browse API; dịch vụ trả phí chỉ mở trang), trang user tự gán.
+- **Quản lý nguồn** (`Services/Sites.cs`): nguồn mặc định là bảng `site` (V22, chỉ nguồn hợp pháp). Chỉnh sửa của user lưu ở setting `sites` trong tien_do.db: `added` (nguồn thêm), `edits` (đổi tên/tên miền), `hidden` (ẩn nguồn mặc định). Không hardcode trang lậu; user tự gán link và tự chịu trách nhiệm.
+- `Views/BrowserView.cs`: trang web nhúng có thanh địa chỉ, link mở cửa sổ mới thì mở luôn trong khung, nút hỏi Gemini đoạn bôi đen.
+- Tự kiểm: `NIHONGO_SELFTEST=extra` (chạy trên bản sao dữ liệu: có ghi setting).
+
 ## Đo được (06/11/2026, i7-8650U)
 Mở cửa sổ khoảng 1,0–1,1 giây. RAM khoảng 135MB, khi xem PDF khoảng 230MB. File exe 76MB. Bản nén chỉ 23MB nhưng mở mất 3,3 giây nên không dùng.
 
 ## Kiểm thử
-Chưa có test tự động trong repo. Cách đã dùng: script PowerShell dùng UI Automation, chọn mục menu theo `AutomationProperties.Name`, bấm nút theo tên, rồi chụp màn hình. Bôi đen chữ thì giả lập kéo chuột bằng `SetCursorPos` + `mouse_event` (UIA không bôi đen được). Script .ps1 có tiếng Việt phải lưu UTF-8 có BOM. Test chạy trên tien_do.db thật: dọn những gì test thêm vào (kênh theo dõi, video đã mở) sau khi xong.
+Test tự động: src/Nihongo.Tests (xUnit, 56 test). Tự kiểm trong app: NIHONGO_SELFTEST=ui|video|extra. Cách cũ: script PowerShell dùng UI Automation, chọn mục menu theo `AutomationProperties.Name`, bấm nút theo tên, rồi chụp màn hình. Bôi đen chữ thì giả lập kéo chuột bằng `SetCursorPos` + `mouse_event` (UIA không bôi đen được). Script .ps1 có tiếng Việt phải lưu UTF-8 có BOM. Test chạy trên tien_do.db thật: dọn những gì test thêm vào (kênh theo dõi, video đã mở) sau khi xong.
 - **Màn có khung WebView2 thì UI Automation không đọc được cây control.** Đừng bấm chuột theo tọa độ: user hay đang dùng máy, app không lên được phía trước, và bấm sẽ trúng cửa sổ khác (suýt bấm vào Zalo của user). Dùng tự kiểm trong app: `NIHONGO_SELFTEST=video` + `NIHONGO_SELFTEST_OUT=<thư mục>` (`Services/SelfTest.cs`). App tự mở video đã lưu (tắt tiếng, không giành focus, không ghi tiến độ xem), đo vị trí câu đang phát, kiểm đồng bộ, kiểm chồng lấn, chụp ảnh bản vẽ ở tỉ lệ 1:1 (chụp theo 150% thì danh sách ảo hóa vẽ lệch trong ảnh), rồi tự đóng.

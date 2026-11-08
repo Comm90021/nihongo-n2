@@ -62,7 +62,19 @@ function Process-One([string]$in, [string]$out, [string]$label) {
     if ($mb2 -gt $mb1 * 0.8) { Remove-Item -LiteralPath $tmp -Force; $stats.skip++; "BỎ  {0:N1}→{1:N1}MB không nhỏ hơn đủ, giữ gốc: {2}" -f $mb1, $mb2, $label; return }
     $stats.before += $mb1; $stats.after += $mb2; $stats.ok++
     if (-not $KeepOriginal) {
-      Remove-Item -LiteralPath $in -Force
+      # Bộ chuyển mã và Shell (đọc thời lượng) có thể còn giữ file gốc một lúc: giải phóng rồi thử xóa lại.
+      # Lần chạy 08/11 17:51 vì lỗi này mà bản nén tốt bị xóa theo (file gốc vẫn còn).
+      $deleted = $false
+      for ($i = 0; $i -lt 15 -and -not $deleted; $i++) {
+        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+        try { Remove-Item -LiteralPath $in -Force -ErrorAction Stop; $deleted = $true } catch { Start-Sleep -Seconds 2 }
+      }
+      if (-not $deleted) {
+        # Giữ cả hai: bản nén đã kiểm thì không bỏ. Lần chạy sau thấy .m4a đủ nhỏ sẽ không nén lại; xóa gốc bằng tay.
+        if ($tmp -ne $out) { Move-Item -LiteralPath $tmp $out -Force }
+        "GIỮ {0}: nén xong nhưng file gốc đang bị khóa, chưa xóa gốc" -f $label
+        return
+      }
       if ($tmp -ne $out) { Move-Item -LiteralPath $tmp $out }
       Add-Content -LiteralPath $Log -Encoding UTF8 -Value ("| nén audio | {0} → .m4a | {1:N1} → {2:N1} |" -f $label, $mb1, $mb2)
     }

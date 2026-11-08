@@ -145,6 +145,34 @@ static partial class Web
         return (title, lines);
     }
 
+    // ---------------------------------------------------------------- 青空文庫
+    [GeneratedRegex(@"<rp>[\s\S]*?</rp>|<rt>[\s\S]*?</rt>", RegexOptions.IgnoreCase)]
+    private static partial Regex RubyReading();
+
+    /// <summary>
+    /// Truyện trên 青空文庫 (hết bản quyền, được phép dùng tự do): HTML mã Shift_JIS, thân truyện nằm trong div.main_text.
+    /// Bỏ phần cách đọc ruby (rt/rp) để câu sạch; app có tra từ khi bôi đen nên không mất cách đọc.
+    /// </summary>
+    public static async Task<(string Title, List<MediaLine> Lines)> FetchAozoraAsync(string url, CancellationToken ct = default)
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var bytes = await Http.GetByteArrayAsync(url, ct);
+        var head = Encoding.ASCII.GetString(bytes, 0, Math.Min(bytes.Length, 2048));
+        var html = (head.Contains("utf-8", StringComparison.OrdinalIgnoreCase) ? Encoding.UTF8 : Encoding.GetEncoding("shift_jis")).GetString(bytes);
+        var title = WebUtility.HtmlDecode(TitleTag().Match(html) is { Success: true } t ? (t.Groups[1].Success ? t.Groups[1].Value : t.Groups[2].Value) : url).Trim();
+        var s = html.IndexOf("class=\"main_text\"", StringComparison.Ordinal);
+        if (s < 0) throw new InvalidOperationException("Trang này không có phần thân truyện (div.main_text).");
+        var e = html.IndexOf("class=\"bibliographical_information\"", s, StringComparison.Ordinal);
+        var body = html[(html.IndexOf('>', s) + 1)..(e > s ? e : html.Length)];
+        body = RubyReading().Replace(body, "");
+        body = Regex.Replace(body, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+        var text = WebUtility.HtmlDecode(Tag().Replace(body, ""));
+        var lines = text.Split('\n').Select(p => p.Trim().TrimStart('　')).Where(p => p != "")
+            .SelectMany(SplitSentences).Select(x => new MediaLine { Ja = x }).ToList();
+        if (lines.Count == 0) throw new InvalidOperationException("Không tách được câu nào.");
+        return (title, lines);
+    }
+
     static IEnumerable<string> SplitSentences(string text) =>
         Sentence().Matches(text).Select(m => m.Value.Trim()).Where(s => s.Length > 1);
 

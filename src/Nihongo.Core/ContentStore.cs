@@ -1,10 +1,10 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Data.Sqlite;
 
 namespace Nihongo.Core;
 
 /// <summary>Đọc noi_dung.db (chỉ đọc). Nạp một lần rồi giữ trong bộ nhớ, đủ nhanh cho vài chục nghìn dòng.</summary>
-public sealed class ContentStore
+public sealed partial class ContentStore
 {
     readonly string _connection;
     IReadOnlyList<VocabItem>? _vocab;
@@ -15,7 +15,7 @@ public sealed class ContentStore
         _connection = new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadOnly }.ToString();
     }
 
-    SqliteConnection Open()
+    internal SqliteConnection Open()
     {
         var c = new SqliteConnection(_connection);
         c.Open();

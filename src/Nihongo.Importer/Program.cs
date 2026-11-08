@@ -28,6 +28,14 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
         CREATE TABLE question(id TEXT PRIMARY KEY, ord INTEGER, source TEXT, source_title TEXT, mondai INTEGER, section_name TEXT, number INTEGER,
           text TEXT, word TEXT, context TEXT, options TEXT, options_vi TEXT, answer INTEGER, full_sentence TEXT, topic TEXT, point TEXT, why TEXT);
         CREATE TABLE source(id TEXT PRIMARY KEY, kind TEXT, name TEXT, topic TEXT, level TEXT, url TEXT, start_marker TEXT, end_marker TEXT, note TEXT, score REAL, list_selector TEXT);
+        CREATE TABLE denken(id TEXT PRIMARY KEY, ord INTEGER, level TEXT, subject_code TEXT, subject_name TEXT, stage TEXT, year_label TEXT, year INTEGER, qno INTEGER,
+          topic_code TEXT, topic_name TEXT, method TEXT, formula TEXT, difficulty INTEGER, answer TEXT, kind TEXT, url TEXT, week INTEGER);
+        CREATE TABLE kaiwa_topic(key TEXT PRIMARY KEY, ord INTEGER, jp TEXT, vi TEXT, register TEXT);
+        CREATE TABLE kaiwa_q(id TEXT PRIMARY KEY, topic TEXT, ord INTEGER, ja TEXT, vi TEXT);
+        CREATE TABLE kaiwa_card(id TEXT PRIMARY KEY, deck TEXT, deck_label TEXT, ord INTEGER, vi TEXT, ja TEXT, point TEXT, explain TEXT);
+        CREATE TABLE mensetsu(id TEXT PRIMARY KEY, ord INTEGER, cat TEXT, q TEXT, vi TEXT, a TEXT, av TEXT, tip TEXT);
+        CREATE TABLE site(id TEXT PRIMARY KEY, ord INTEGER, area TEXT, name TEXT, url TEXT, integration TEXT, embeddable INTEGER, note TEXT);
+        CREATE TABLE book(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, author TEXT, chars INTEGER, length TEXT, url TEXT);
         CREATE TABLE grammar(id TEXT PRIMARY KEY, pattern TEXT, level TEXT, regex TEXT, meaning_vi TEXT, connect TEXT, nuance TEXT, confusable TEXT, exam_count INTEGER, examples TEXT);
         CREATE TABLE listening_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, mp3 TEXT, script_pdf TEXT, exam_pdf TEXT, page_from INTEGER, items TEXT);
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
@@ -45,9 +53,10 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var sources = ImportSources(db);
     var exams = ImportExams(db);
     var grammar = ImportGrammar(db, LoadSentences(db));
+    var extra = ImportExtra(db);
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -337,6 +346,9 @@ int ImportListening(SqliteConnection db)
     var answersDir = Path.Combine(archive, "TONG_HOP_XUAT_FILE", "04_Dap_An_Tung_Nam_MD");
     var realFile = P("antigravity_out", "V7_doc_hieu_de_that", "reading_real.json");
     if (!Directory.Exists(archive) || !File.Exists(realFile)) return 0;
+    // Thư mục MD đáp án mất ngày 08/11/2026; đáp án phần Nghe đã trích sẵn ra JSON từ bản dựng trước.
+    var savedFile = P("antigravity_out", "C03_dap_an_nghe", "listening_answers.json");
+    var savedAnswers = File.Exists(savedFile) ? JsonNode.Parse(File.ReadAllText(savedFile))?["exams"] : null;
     using var tx = db.BeginTransaction();
     var ord = 0;
     foreach (var n in JsonNode.Parse(File.ReadAllText(realFile))!.AsArray().OrderByDescending(x => x!["exam"]!.ToString()))
@@ -348,19 +360,24 @@ int ImportListening(SqliteConnection db)
         var mp3 = Directory.GetFiles(folder, "*.m4a").Concat(Directory.GetFiles(folder, "*.mp3")).FirstOrDefault();
         var script = Directory.GetFiles(folder, "*.pdf").FirstOrDefault(f => Path.GetFileName(f).Contains("script", StringComparison.OrdinalIgnoreCase));
         var md = Path.Combine(answersDir, $"Dap_An_JLPT_N2_{exam.Replace('-', '_')}.md");
-        if (mp3 is null || script is null || !File.Exists(md)) { Console.WriteLine($"  thiếu file nghe {exam}"); continue; }
+        var saved = savedAnswers?[exam]?.AsArray().Select(x => x!.ToString()).ToList();
+        if (mp3 is null || script is null || (!File.Exists(md) && saved is null)) { Console.WriteLine($"  thiếu file nghe {exam}"); continue; }
 
-        var text = File.ReadAllText(md);
-        var part = text[(text.IndexOf("## II.", StringComparison.Ordinal) is var i and >= 0 ? i : 0)..];
         var items = new List<string>();
-        foreach (var block in Regex.Split(part, @"### 問題\s*").Skip(1))
+        if (File.Exists(md))
         {
-            var mondai = Regex.Match(block, @"^\d").Value;
-            var labels = Regex.Match(block, @"\| Câu \|(.*)").Groups[1].Value.Split('|').Select(s => s.Trim()).Where(s => s != "").ToList();
-            var keys = Regex.Match(block, @"\| \*\*Đáp án\*\* \|(.*)").Groups[1].Value.Split('|').Select(s => s.Replace("*", "").Trim()).Where(s => s != "").ToList();
-            for (var k = 0; k < Math.Min(labels.Count, keys.Count); k++)
-                if (int.TryParse(keys[k], out var a)) items.Add($"{mondai}.{labels[k]}={a}");
+            var text = File.ReadAllText(md);
+            var part = text[(text.IndexOf("## II.", StringComparison.Ordinal) is var i and >= 0 ? i : 0)..];
+            foreach (var block in Regex.Split(part, @"### 問題\s*").Skip(1))
+            {
+                var mondai = Regex.Match(block, @"^\d").Value;
+                var labels = Regex.Match(block, @"\| Câu \|(.*)").Groups[1].Value.Split('|').Select(s => s.Trim()).Where(s => s != "").ToList();
+                var keys = Regex.Match(block, @"\| \*\*Đáp án\*\* \|(.*)").Groups[1].Value.Split('|').Select(s => s.Replace("*", "").Trim()).Where(s => s != "").ToList();
+                for (var k = 0; k < Math.Min(labels.Count, keys.Count); k++)
+                    if (int.TryParse(keys[k], out var a)) items.Add($"{mondai}.{labels[k]}={a}");
+            }
         }
+        else items = saved!;
         if (items.Count == 0) continue;
         Exec(db, "INSERT INTO listening_set VALUES($i,$o,$t,$m,$s,$e,$p,$it)",
             ("$i", $"listen-{exam}"), ("$o", ord++), ("$t", $"Đề thật {exam[5..]}/{exam[..4]}"), ("$m", mp3), ("$s", script), ("$e", examPdf),
@@ -446,6 +463,10 @@ int ImportExams(SqliteConnection db)
     foreach (var folder in new[] { P("antigravity_out", "V18_de_du_doan", "exams"), P("antigravity_out", "V16_de_hq_feifan", "exams") })
     {
         if (!Directory.Exists(folder)) continue;
+        // Bản sửa tay (sua_cau.json cạnh thư mục exams): {"<id đề>": {"<số câu>": {stem?, options?, answer?, explain_vi?}}}.
+        // Claude viết sau khi kiểm chéo bằng giải mù (V19); không sửa file gốc của Gemini.
+        var fixFile = Path.Combine(Path.GetDirectoryName(folder)!, "sua_cau.json");
+        var fixes = File.Exists(fixFile) ? JsonNode.Parse(File.ReadAllText(fixFile))!.AsObject() : new JsonObject();
         foreach (var file in Directory.GetFiles(folder, "*.json").Order())
         {
             JsonObject e;
@@ -456,8 +477,11 @@ int ImportExams(SqliteConnection db)
             var pages = new Dictionary<string, object>();
             var instruction = new Dictionary<int, string>();
             var added = 0;
+            var examFix = fixes[examId] as JsonObject;
             foreach (var it in e["items"]?.AsArray() ?? [])
             {
+                if (examFix?[it!["no"]?.ToString() ?? ""] is JsonObject fx)
+                    foreach (var (key, value) in fx) it![key] = value?.DeepClone();
                 var mondai = it!["mondai"]?.GetValue<int>() ?? 0;
                 var no = it["no"]?.GetValue<int>() ?? 0;
                 var options = (it["options"]?.AsArray() ?? []).Select(o => o?.ToString() ?? "").ToArray();
@@ -488,6 +512,98 @@ int ImportExams(SqliteConnection db)
     return count;
 }
 
+// ---------------------------------------------------------------- khu mở rộng: Denken (V23), Kaiwa (C01, từ artifact của user), Phỏng vấn (C02), nguồn đọc/anime (V22)
+(int Denken, int Kaiwa) ImportExtra(SqliteConnection db)
+{
+    using var tx = db.BeginTransaction();
+    int dk = 0, kw = 0;
+    var dkFile = P("antigravity_out", "V23_denken", "denken_questions.json");
+    var topicFile = P("antigravity_out", "V23_denken", "topics.json");
+    if (File.Exists(dkFile))
+    {
+        var topics = File.Exists(topicFile) ? JsonNode.Parse(File.ReadAllText(topicFile))!.AsObject() : new JsonObject();
+        var seen = new HashSet<string>();
+        foreach (var q in JsonNode.Parse(File.ReadAllText(dkFile))!.AsArray())
+        {
+            var level = q!["level"]!.ToString();
+            var subject = q["subject_code"]!.ToString();
+            var url = q["solution_url"]?.ToString() ?? "";
+            // Mã câu: cấp + trang giải (duy nhất cho một câu đề năm); cùng câu xuất hiện nhiều tuần trong lịch thì chỉ lấy một lần.
+            var id = $"dk-{level}-{url.TrimEnd('/').Split('/').Last()}";
+            if (!seen.Add(id)) continue;
+            var topicCode = q["topic_code"]?.ToString() ?? "";
+            var topic = topics[level]?[$"{subject}:{topicCode}"];
+            Exec(db, "INSERT INTO denken VALUES($i,$o,$l,$s,$sn,$st,$yl,$y,$q,$tc,$tn,$m,$fo,$d,$a,$k,$u,$w)", ("$i", id), ("$o", dk), ("$l", level), ("$s", subject),
+                ("$sn", q["subject_name"]?.ToString() ?? ""), ("$st", q["stage"]?.ToString() ?? ""), ("$yl", q["year_label"]?.ToString() ?? ""), ("$y", q["year"]?.GetValue<int>() ?? 0),
+                ("$q", q["qno"]?.GetValue<int>() ?? 0), ("$tc", topicCode), ("$tn", topic?["topic_name"]?.ToString() ?? ""), ("$m", topic?["solution_method"]?.ToString() ?? ""),
+                ("$fo", topic?["formula"]?.ToString() ?? ""), ("$d", q["difficulty"]?.GetValue<int>() ?? 0), ("$a", q["answer"]?.ToString() ?? ""), ("$k", q["kind"]?.ToString() ?? ""),
+                ("$u", url), ("$w", q["week"]?.GetValue<int>() ?? 0));
+            dk++;
+        }
+    }
+    var kwFile = P("antigravity_out", "C01_kaiwa", "kaiwa.json");
+    if (File.Exists(kwFile))
+    {
+        var k = JsonNode.Parse(File.ReadAllText(kwFile))!;
+        var to = 0;
+        foreach (var t in k["topics"]!.AsArray())
+        {
+            var key = t!["key"]!.ToString();
+            Exec(db, "INSERT INTO kaiwa_topic VALUES($k,$o,$j,$v,$r)", ("$k", key), ("$o", to++), ("$j", t["jp"]!.ToString()), ("$v", t["vi"]!.ToString()), ("$r", t["register"]?.ToString() ?? ""));
+            var i = 0;
+            foreach (var q in t["questions"]!.AsArray())
+            { Exec(db, "INSERT INTO kaiwa_q VALUES($i,$t,$o,$j,$v)", ("$i", $"kw-{key}-{++i:000}"), ("$t", key), ("$o", i), ("$j", q!["ja"]!.ToString()), ("$v", q["vi"]?.ToString() ?? "")); kw++; }
+        }
+        foreach (var d in k["decks"]!.AsArray())
+        {
+            var key = d!["key"]!.ToString();
+            var i = 0;
+            foreach (var c in d["cards"]!.AsArray())
+                Exec(db, "INSERT INTO kaiwa_card VALUES($i,$d,$l,$o,$v,$j,$p,$e)", ("$i", $"kc-{key}-{++i:000}"), ("$d", key), ("$l", $"{d["label"]} · {d["jp"]}"), ("$o", i),
+                    ("$v", c!["vi"]!.ToString()), ("$j", c["ja"]!.ToString()), ("$p", c["point"]?.ToString() ?? ""), ("$e", c["explain"]?.ToString() ?? ""));
+        }
+    }
+    var msFile = P("antigravity_out", "C02_mensetsu", "mensetsu.json");
+    if (File.Exists(msFile))
+    {
+        var i = 0;
+        foreach (var q in JsonNode.Parse(File.ReadAllText(msFile))!["questions"]!.AsArray())
+            Exec(db, "INSERT INTO mensetsu VALUES($i,$o,$c,$q,$v,$a,$av,$t)", ("$i", $"ms-{++i:000}"), ("$o", i), ("$c", q!["cat"]!.ToString()), ("$q", q["q"]!.ToString()),
+                ("$v", q["vi"]!.ToString()), ("$a", q["a"]!.ToString()), ("$av", q["av"]!.ToString()), ("$t", q["tip"]!.ToString()));
+    }
+    // Nguồn web mặc định (V22: chỉ nguồn hợp pháp). Người dùng thêm/sửa/ẩn nguồn trong app (setting "sites" ở tien_do.db, xem Desktop/Services/Sites.cs).
+    var so = 0;
+    foreach (var (area, file) in new[] { ("read", "sources_read.json"), ("anime", "sources_anime.json") })
+    {
+        var path = P("antigravity_out", "V22_nguon_doc_anime", file);
+        if (!File.Exists(path)) continue;
+        foreach (var s in JsonNode.Parse(File.ReadAllText(path))!.AsArray())
+        {
+            var url = s!["url"]?.ToString() ?? "";
+            var cid = s["channel_id"]?.ToString() ?? "";
+            if (url == "" && cid == "") continue;
+            if (cid != "") url = $"https://www.youtube.com/feeds/videos.xml?channel_id={cid}";
+            var integration = cid != "" ? "youtube" : s["proposed_integration"]?.ToString() ?? s["integration"]?.ToString() ?? "";
+            Exec(db, "INSERT OR REPLACE INTO site VALUES($i,$o,$a,$n,$u,$g,$e,$no)", ("$i", $"{area}:{s["id"]?.ToString() ?? s["name"]!.ToString()}"), ("$o", so++), ("$a", area),
+                ("$n", s["name"]!.ToString()), ("$u", url), ("$g", integration), ("$e", s["embeddable"]?.GetValue<bool>() == true ? 1 : 0), ("$no", s["recommendation"]?.ToString() ?? s["note"]?.ToString() ?? s["license_terms"]?.ToString() ?? ""));
+        }
+    }
+    var books = P("antigravity_out", "V22_nguon_doc_anime", "aozora_top100.csv");
+    if (File.Exists(books))
+    {
+        var i = 0;
+        foreach (var line in File.ReadLines(books).Skip(1))
+        {
+            var c = line.Split(',');
+            if (c.Length < 8) continue;
+            Exec(db, "INSERT OR REPLACE INTO book VALUES($i,$o,$t,$a,$c,$l,$u)", ("$i", $"aozora-{c[0]}"), ("$o", i++), ("$t", c[1]), ("$a", c[2]),
+                ("$c", int.TryParse(c[3], out var ch) ? ch : 0), ("$l", c[4]), ("$u", c[6]));
+        }
+    }
+    tx.Commit();
+    Console.WriteLine($"Denken: {dk} câu · Kaiwa: {kw} câu hỏi · nguồn web: {so}");
+    return (dk, kw);
+}
 // Câu tiếng Nhật trong đề thật (câu hỏi + bài đọc) để đo độ rộng của regex ngữ pháp.
 List<string> LoadSentences(SqliteConnection db)
 {

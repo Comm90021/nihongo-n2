@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -19,6 +19,11 @@ static partial class Glyph
     public const string Home = "", Library = "", Education = "", Reading = "", Headphone = "",
         News = "", Video = "", Save = "", Calendar = "", Check = "", Play = "",
         Light = "", Refresh = "", Flag = "", Search = "";
+}
+
+static partial class Glyph
+{
+    public const string Lightning = "\uE945", Book = "\uE82D", Globe = "\uE774";
 }
 
 /// <summary>Hàm dựng control dùng chung để các màn hình viết ngắn gọn bằng C#.</summary>
