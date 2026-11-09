@@ -230,6 +230,50 @@ static class Ui
         return b;
     }
 
+    /// <summary>
+    /// Khung bên phải kéo giãn được: tay nắm 6px ở mép trái, kéo để đổi bề rộng, nhớ trong setting "w:&lt;key&gt;".
+    /// Trả về khung bọc ngoài; đặt khung này vào chỗ của <paramref name="pane"/>. Ẩn/hiện bằng IsVisible của khung bọc.
+    /// </summary>
+    public static DockPanel Resizable(Control pane, string key, double width, double min = 240, double max = 900)
+    {
+        var saved = double.TryParse(App.Progress.Setting("w:" + key, ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w) ? w : width;
+        var line = new Border { Width = 2, HorizontalAlignment = HorizontalAlignment.Center, CornerRadius = new CornerRadius(1), Opacity = 0 }.Themed(Border.BackgroundProperty, "Accent");
+        var grip = new Border { Width = 10, Background = Brushes.Transparent, Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeWestEast), Child = line };
+        ToolTip.SetTip(grip, "Kéo để đổi bề rộng");
+        DockPanel.SetDock(grip, Dock.Left);
+        var host = new DockPanel { Width = Math.Clamp(saved, min, max), Children = { grip, pane } };
+        // Khung bên trong tự ẩn/hiện (bảng tra, cột Gemini) thì khung bọc ẩn/hiện theo, không để lại tay nắm trơ trọi.
+        host.IsVisible = pane.IsVisible;
+        pane.PropertyChanged += (_, e) => { if (e.Property == Visual.IsVisibleProperty) host.IsVisible = pane.IsVisible; };
+        double startX = 0, startW = 0;
+        var dragging = false;
+        grip.PointerEntered += (_, _) => line.Opacity = 0.6;
+        grip.PointerExited += (_, _) => { if (!dragging) line.Opacity = 0; };
+        grip.PointerPressed += (_, e) =>
+        {
+            dragging = true;
+            startX = e.GetPosition(null).X;
+            startW = host.Width;
+            e.Pointer.Capture(grip);
+            e.Handled = true;
+        };
+        grip.PointerMoved += (_, e) =>
+        {
+            if (!dragging) return;
+            // Tay nắm ở mép trái: kéo sang trái là khung rộng ra.
+            host.Width = Math.Clamp(startW - (e.GetPosition(null).X - startX), min, max);
+        };
+        grip.PointerReleased += (_, e) =>
+        {
+            if (!dragging) return;
+            dragging = false;
+            line.Opacity = 0;
+            e.Pointer.Capture(null);
+            App.Progress.SetSetting("w:" + key, host.Width.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        };
+        return host;
+    }
+
     public static ScrollViewer Scroll(Control child) => new() { Content = child, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
 
     public static string Clock(int seconds) => $"{Math.Max(0, seconds) / 60:00}:{Math.Max(0, seconds) % 60:00}";

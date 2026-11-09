@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Layout;
@@ -26,6 +26,8 @@ sealed class VocabView : UserControl
     readonly TextBlock _found = Text("", 13, muted: true);
     readonly TextBlock _ready = Text("", 13, muted: true);
     readonly ContentControl _detail = new();
+    readonly TextBlock _summary = Text("", 13, muted: true);
+    DockPanel _detailHost = null!;
 
     public VocabView()
     {
@@ -34,36 +36,49 @@ sealed class VocabView : UserControl
         _search.TextChanged += (_, _) => RefreshList();
 
         Control Filter(string label, Control c) => Col(6, Text(label, 12.5, muted: true).Also(t => t.FontWeight = FontWeight.Medium), c);
-        var launcher = Card(Col(14,
-            Line(Text("Luyện từ 4 đáp án", 17, bold: true), _ready),
+        // Bộ lọc thu gọn thành 1 dòng tóm tắt (mặc định), bấm "Bộ lọc" mới mở 4 hàng chọn. Nhớ trạng thái.
+        var filters = Col(14,
             Filter("Cấp", Segmented(Levels, _level, i => { _level = i; Changed(); })),
             Filter("Nhóm", Segmented(Groups, _group, i => { _group = i; Changed(); })),
-            Line(Filter("Dạng câu", Segmented(Kinds, _kind, i => { _kind = i; Changed(); })),
-                Col(6, Text("Số câu", 12.5, muted: true), Segmented(Counts.Select(c => c.ToString()).ToArray(), _count, i => { _count = i; Changed(); }))),
-            Row(10, Btn("Bắt đầu", Start, primary: true).Also(b => b.Padding = new Thickness(22, 10)),
-                Text("Phím 1–4 để chọn, Enter sang câu sau. Sai thì từ đó vào lịch ôn ngày mai.", 13, muted: true))), 0);
+            Ui.Wrap(Filter("Dạng câu", Segmented(Kinds, _kind, i => { _kind = i; Changed(); })),
+                Filter("Số câu", Segmented(Counts.Select(c => c.ToString()).ToArray(), _count, i => { _count = i; Changed(); }))),
+            Text("Phím 1–4 để chọn, Enter sang câu sau. Sai thì từ đó vào lịch ôn ngày mai.", 13, muted: true));
+        filters.IsVisible = App.Progress.Setting("vocab_filters", "0") == "1";
+        var toggle = Btn(filters.IsVisible ? "Bộ lọc ▴" : "Bộ lọc ▾", () => { });
+        toggle.Click += (_, _) =>
+        {
+            filters.IsVisible = !filters.IsVisible;
+            toggle.Content = filters.IsVisible ? "Bộ lọc ▴" : "Bộ lọc ▾";
+            App.Progress.SetSetting("vocab_filters", filters.IsVisible ? "1" : "0");
+        };
+        var launcher = Card(Col(14,
+            Line(Col(2, Text("Luyện từ 4 đáp án", 16, bold: true), _summary),
+                Row(8, toggle, Btn("Bắt đầu", Start, primary: true).Also(b => b.Padding = new Thickness(22, 10)))),
+            filters), 0).Also(c => c.Padding = new Thickness(18, 14));
 
         var listCard = Card(new DockPanel
         {
             Children =
             {
-                Line(_search, _found).Also(l => { DockPanel.SetDock(l, Dock.Top); l.Margin = new Thickness(0, 0, 0, 10); }),
+                Ui.Wrap(_search, _found).Also(l => { DockPanel.SetDock(l, Dock.Top); l.Margin = new Thickness(0, 0, 0, 6); }),
                 _list,
             },
         }, 0).Also(c => c.Padding = new Thickness(16));
 
-        var bottom = new Grid { ColumnDefinitions = new ColumnDefinitions("*,340"), ColumnSpacing = 16, Margin = new Thickness(0, 16, 0, 0) };
-        Grid.SetColumn(_detail, 1);
+        // Khung chi tiết: ẩn tới khi bấm một từ, có nút đóng, kéo mép trái để đổi bề rộng.
+        _detailHost = Ui.Resizable(_detail, "vocab_detail", 360, 280, 680);
+        _detailHost.IsVisible = false;
+        _detailHost.Margin = new Thickness(12, 0, 0, 0);
+        var bottom = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 14, 0, 0) };
+        Grid.SetColumn(_detailHost, 1);
         bottom.Children.Add(listCard);
-        bottom.Children.Add(_detail);
+        bottom.Children.Add(_detailHost);
 
-        var top = Col(16, Header("Từ vựng", "Học bằng câu hỏi 4 đáp án đúng kiểu đề: đọc kanji, viết kanji, nghĩa, điền từ vào câu."), launcher);
+        var top = Col(14, Header("Từ vựng", "Học bằng câu hỏi 4 đáp án đúng kiểu đề: đọc kanji, viết kanji, nghĩa, điền từ vào câu."), launcher);
         DockPanel.SetDock(top, Dock.Top);
         Content = new DockPanel { Children = { top, bottom } };
         Changed();
-        _detail.Content = Card(Text("Bấm một từ trong danh sách để xem chi tiết.", 13.5, muted: true), 0);
     }
-
     IEnumerable<VocabItem> Selection()
     {
         IEnumerable<VocabItem> list = App.Content.Vocab;
@@ -91,6 +106,7 @@ sealed class VocabView : UserControl
     {
         var n = Selection().Count();
         _ready.Text = $"{n:N0} từ phù hợp";
+        _summary.Text = $"{Levels[_level]} · {Groups[_group]} · {Kinds[_kind]} · {Counts[_count]} câu · {n:N0} từ phù hợp";
         RefreshList();
     }
 
@@ -113,7 +129,7 @@ sealed class VocabView : UserControl
         var pool = Selection().Take(600).OrderBy(v => p.Get(v.CardId) is { } e ? e.Box : -1).ThenBy(_ => rng.Next()).ToList();
         QuizKind? kind = _kind == 0 ? null : (QuizKind)(_kind - 1);
         var qs = VocabQuiz.Build(pool, kind, Counts[_count]);
-        if (qs.Count == 0) { _ready.Text = "Nhóm này không đủ từ để ra dạng câu đã chọn. Đổi dạng hoặc nhóm khác."; return; }
+        if (qs.Count == 0) { _summary.Text = "Nhóm này không đủ từ để ra dạng câu đã chọn. Đổi dạng hoặc nhóm khác."; return; }
         App.Shell.Show(new VocabQuizView(qs, $"Từ vựng {(_level < 3 ? Levels[_level] : "")} · {Groups[_group]}"));
     }
 
@@ -149,6 +165,9 @@ sealed class VocabView : UserControl
             var qs = new[] { QuizKind.Reading, QuizKind.Writing, QuizKind.Meaning, QuizKind.Context }.Select(k => VocabQuiz.Make(v, k)).OfType<VocabQuestion>().ToList();
             if (qs.Count > 0) App.Shell.Show(new VocabQuizView(qs, v.Word));
         }, primary: true));
-        _detail.Content = Card(body, 0);
+        _detail.Content = Card(Col(6,
+            Line(new Control(), IconBtn(Glyph.Close, "Đóng khung chi tiết", () => { _detailHost.IsVisible = false; _list.SelectedItem = null; }).Also(b => b.Classes.Add("ghost"))),
+            body), 0);
+        _detailHost.IsVisible = true;
     }
 }

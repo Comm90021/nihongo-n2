@@ -59,9 +59,14 @@ sealed class ExamView : UserControl
         var bar = new Border { Classes = { "card" }, Padding = new Thickness(14, 10), Child = top };
         DockPanel.SetDock(bar, Dock.Top);
 
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,*"), ColumnSpacing = 20, Margin = new Thickness(0, 16, 0, 0) };
-        Grid.SetColumn(_right, 1);
+        // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột.
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,14,*"), Margin = new Thickness(0, 16, 0, 0) };
+        var splitter = new GridSplitter { Width = 14, Background = Brushes.Transparent, ResizeDirection = GridResizeDirection.Columns };
+        ToolTip.SetTip(splitter, "Kéo để đổi bề rộng hai cột");
+        Grid.SetColumn(splitter, 1);
+        Grid.SetColumn(_right, 2);
         body.Children.Add(_left);
+        body.Children.Add(splitter);
         body.Children.Add(_right);
         Content = new DockPanel { Children = { bar, body } };
 

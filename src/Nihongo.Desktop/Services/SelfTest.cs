@@ -15,7 +15,7 @@ namespace Nihongo.Desktop.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "video" or "ui" or "extra";
+    public static bool Enabled => Mode is "video" or "ui" or "extra" or "sizes" or "dich";
 
     public static async void Run(MainWindow w)
     {
@@ -26,6 +26,8 @@ static class SelfTest
         {
             if (Mode == "video") await Video(w, dir, log);
             else if (Mode == "extra") await Extra(w, dir, log);
+            else if (Mode == "sizes") await Sizes(w, dir, log);
+            else if (Mode == "dich") await Dich(log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -128,6 +130,49 @@ static class SelfTest
         log.Add($"電験: câu chấm tự động {DenkenView.All.Count(q => q.Choice > 0)}, tự chấm {DenkenView.All.Count(q => q.Choice == 0)}; dạng: {string.Join(", ", DenkenView.All.GroupBy(q => q.KindGroup).Select(g => $"{g.Key} {g.Count()}"))}");
         w.Show(new DenkenSessionView(dk, "Tự kiểm 電験", 0, () => { })); await Task.Delay(6000); Shot(w, dir, "8_denken_lam_bai");
         w.Show(new DenkenSessionView(dk, "Tự kiểm 電験 thi", 90, () => { }, "dk:test")); await Task.Delay(3000); Shot(w, dir, "9_denken_thi");
+    }
+    // ---------------------------------------------------------------- mọi mục ở 3 cỡ cửa sổ + toàn màn hình
+    static async Task Sizes(MainWindow w, string dir, List<string> log)
+    {
+        string[] tags = ["today", "vocab", "practice", "exam", "reading", "listening", "media", "library", "kaiwa", "denken", "settings"];
+        foreach (var (wd, ht) in new[] { (960, 620), (1366, 768), (1920, 1080) })
+        {
+            w.WindowState = Avalonia.Controls.WindowState.Normal;
+            w.Width = wd; w.Height = ht;
+            await Task.Delay(800);
+            foreach (var tag in tags)
+            {
+                w.TestSelectNav(tag);
+                await Task.Delay(tag is "media" or "today" ? 1800 : 900);
+                Shot(w, dir, $"{wd}_{tag}");
+            }
+            log.Add($"{wd}x{ht}: cửa sổ thật {w.ClientSize.Width:0}x{w.ClientSize.Height:0}");
+        }
+        w.TestSelectNav("today");
+        w.WindowState = Avalonia.Controls.WindowState.FullScreen;
+        await Task.Delay(1500);
+        Shot(w, dir, "full_today");
+        log.Add($"Toàn màn hình: {w.ClientSize.Width:0}x{w.ClientSize.Height:0}");
+        w.WindowState = Avalonia.Controls.WindowState.Normal;
+    }
+    // ---------------------------------------------------------------- dịch theo đoạn: so với bản dịch từng câu cũ
+    static async Task Dich(List<string> log)
+    {
+        var m = App.Progress.Media().FirstOrDefault(x => x.Kind == "article");
+        if (m.Url is null) { log.Add("Không có bài báo đã lưu"); return; }
+        var old = System.Text.Json.JsonSerializer.Deserialize(m.Lines, MediaJson.Default.ListMediaLine) ?? [];
+        // Bài lưu cũ chưa có số đoạn: tải lại trang để lấy đoạn.
+        var (_, fresh) = await Web.FetchArticleAsync(m.Url);
+        await Web.TranslateLinesAsync(fresh, _ => { }, default);
+        var groups = Nihongo.Core.Text.ParagraphTranslate.Group(fresh);
+        log.Add($"{m.Title}: {fresh.Count} câu, {groups.Count} đoạn; câu ghi ↑ (dịch gộp ở câu trên): {fresh.Count(l => l.Vi == Nihongo.Core.Text.ParagraphTranslate.SeeAbove)}");
+        var oldByJa = old.GroupBy(l => l.Ja).ToDictionary(g => g.Key, g => g.First().Vi);
+        foreach (var l in fresh.Take(12))
+        {
+            log.Add("JA : " + l.Ja);
+            log.Add("CŨ: " + oldByJa.GetValueOrDefault(l.Ja, "(không có)"));
+            log.Add("MỚI: " + l.Vi);
+        }
     }
     // ---------------------------------------------------------------- bố cục màn video (giữ từ lần trước)
     static async Task Video(MainWindow w, string dir, List<string> log)

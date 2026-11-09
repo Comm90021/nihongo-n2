@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Nihongo.Core;
+using Nihongo.Core.Text;
 
 namespace Nihongo.Desktop.Services;
 
@@ -73,37 +74,41 @@ static partial class Web
         return (first is JsonArray arr ? arr[0]?.ToString() : first?.ToString())?.Trim() ?? "";
     }
 
-    /// <summary>Dịch nhiều câu: gộp thành lô khoảng 1.500 ký tự, mỗi câu một dòng; lô nào lệch số dòng thì dịch lẻ từng câu.</summary>
+    /// <summary>
+    /// Dịch theo đoạn (09/11/2026): gom câu thành đoạn (<see cref="ParagraphTranslate.Group"/>), gửi Google mỗi đoạn một dòng
+    /// trong lô ~1.400 chữ, rồi chia bản dịch lại cho từng câu. Lô nào trả lệch số dòng thì dịch lẻ từng đoạn.
+    /// Bộ nhớ dịch dùng khóa là cả đoạn, nên bản dịch từng câu cũ không bị dùng lại.
+    /// </summary>
     public static async Task TranslateLinesAsync(IReadOnlyList<MediaLine> lines, Action<int> onDone, CancellationToken ct)
     {
-        var pending = lines.Select((l, i) => (l, i)).Where(x => x.l.Vi == "").ToList();
-        foreach (var (l, i) in pending.Where(x => App.Progress.CachedTranslation(x.l.Ja.Trim()) is not null).ToList())
+        void Assign(List<int> group, string vi)
         {
-            l.Vi = App.Progress.CachedTranslation(l.Ja.Trim())!;
-            onDone(i);
-            pending.RemoveAll(p => p.i == i);
+            var parts = ParagraphTranslate.Distribute(vi, group.Count);
+            for (var k = 0; k < group.Count; k++) { lines[group[k]].Vi = parts[k]; onDone(group[k]); }
         }
-        var batch = new List<(MediaLine l, int i)>();
+        var batch = new List<(List<int> Group, string Text)>();
         async Task Run()
         {
             if (batch.Count == 0) return;
-            var joined = string.Join("\n", batch.Select(b => b.l.Ja.Replace('\n', ' ')));
-            var result = (await TranslateAsync(joined, ct)).Split('\n');
+            var result = (await TranslateAsync(string.Join("\n", batch.Select(b => b.Text)), ct)).Split('\n');
             if (result.Length == batch.Count)
-                for (var k = 0; k < batch.Count; k++) { batch[k].l.Vi = result[k].Trim(); App.Progress.CacheTranslation(batch[k].l.Ja.Trim(), batch[k].l.Vi); onDone(batch[k].i); }
+                for (var k = 0; k < batch.Count; k++) { App.Progress.CacheTranslation(batch[k].Text, result[k].Trim()); Assign(batch[k].Group, result[k]); }
             else
-                foreach (var (l, i) in batch) { l.Vi = await TranslateAsync(l.Ja, ct); onDone(i); }
+                foreach (var (g, text) in batch) Assign(g, await TranslateAsync(text, ct));
             batch.Clear();
         }
-        foreach (var p in pending)
+        foreach (var group in ParagraphTranslate.Group(lines))
         {
             ct.ThrowIfCancellationRequested();
-            batch.Add(p);
-            if (batch.Sum(b => b.l.Ja.Length) > 900) await Run();
+            if (group.All(i => lines[i].Vi != "")) continue;
+            var text = ParagraphTranslate.Join(group.Select(i => lines[i].Ja));
+            if (text == "") continue;
+            if (App.Progress.CachedTranslation(text) is { } cached) { Assign(group, cached); continue; }
+            batch.Add((group, text));
+            if (batch.Sum(b => b.Text.Length) > 1400) await Run();
         }
         await Run();
     }
-
     // ---------------------------------------------------------------- bài báo
     [GeneratedRegex(@"<(script|style|noscript|header|footer|nav|aside)[\s\S]*?</\1>", RegexOptions.IgnoreCase)]
     private static partial Regex Noise();
@@ -140,7 +145,8 @@ static partial class Web
             .Where(p => p.Count(IsJapanese) >= 15 && p.Contains('。') && Stamp().Matches(p).Count < 2)
             .Select(p => PageChrome().Replace(headline.Length > 4 ? p.Replace(headline, "") : p, " ").Trim())
             .ToList();
-        var lines = paragraphs.SelectMany(SplitSentences).Select(s => new MediaLine { Ja = s }).ToList();
+        // Ghi số đoạn cho từng câu để dịch theo đoạn (có ngữ cảnh) thay vì từng câu rời.
+        var lines = paragraphs.SelectMany((p, i) => SplitSentences(p).Select(s => new MediaLine { Ja = s, Para = i })).ToList();
         if (lines.Count == 0) throw new InvalidOperationException("Không tìm thấy đoạn văn tiếng Nhật nào trong trang này.");
         return (title, lines);
     }
@@ -168,7 +174,7 @@ static partial class Web
         body = Regex.Replace(body, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
         var text = WebUtility.HtmlDecode(Tag().Replace(body, ""));
         var lines = text.Split('\n').Select(p => p.Trim().TrimStart('　')).Where(p => p != "")
-            .SelectMany(SplitSentences).Select(x => new MediaLine { Ja = x }).ToList();
+            .SelectMany((p, i) => SplitSentences(p).Select(x => new MediaLine { Ja = x, Para = i })).ToList();
         if (lines.Count == 0) throw new InvalidOperationException("Không tách được câu nào.");
         return (title, lines);
     }

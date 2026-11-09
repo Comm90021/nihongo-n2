@@ -2,28 +2,57 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Nihongo.Desktop.MainWindow"
         Title="Ôn thi N2 · N1"
-        Width="1320" Height="840" MinWidth="960" MinHeight="620"
+        Icon="/Assets/app.ico"
+        Width="1320" Height="840" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI Variable Text, Segoe UI, Yu Gothic UI, Meiryo UI"
         FontSize="15"
         Foreground="{DynamicResource Ink}"
         Background="{DynamicResource PageBg}">
   <DockPanel>
-    <!-- Dải biểu tượng: rộng 84 (có chữ) hoặc 64 (thu gọn, Ctrl+B) -->
+    <!-- Dải biểu tượng: rộng 84 (có chữ) hoặc 64 (thu gọn, Ctrl+B; tự thu khi cửa sổ hẹp) -->
     <Border x:Name="NavPane" DockPanel.Dock="Left" Width="84" Padding="8,18,8,12"
             Background="{DynamicResource NavBg}" BorderBrush="{DynamicResource CardBorder}" BorderThickness="0,0,1,0">
       <DockPanel>
         <Button x:Name="NavToggle" DockPanel.Dock="Top" HorizontalAlignment="Center" Margin="0,0,0,16"
                 Width="40" Height="40" Padding="0" CornerRadius="12" BorderThickness="0"
-                Background="{StaticResource Accent}" Click="OnNavToggle" ToolTip.Tip="Thu gọn / mở rộng thanh bên (Ctrl+B)">
+                Background="#BC002D" Click="OnNavToggle" ToolTip.Tip="Thu gọn / mở rộng thanh bên (Ctrl+B)">
           <TextBlock Text="日" FontFamily="Yu Gothic UI, Meiryo UI" Foreground="White" FontWeight="Bold" FontSize="19" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Button>
-        <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" />
+        <Button x:Name="QuitButton" DockPanel.Dock="Bottom" HorizontalAlignment="Stretch" Margin="0,8,0,0" Classes="ghost"
+                Click="OnQuit" ToolTip.Tip="Thoát app (tiến độ và bài thi dở đã tự lưu)">
+          <StackPanel Spacing="4" HorizontalAlignment="Center">
+            <TextBlock Text="&#xE7E8;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="18" HorizontalAlignment="Center" />
+            <TextBlock x:Name="QuitLabel" Text="Thoát" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <!-- Cửa sổ thấp: danh sách mục cuộn bằng con lăn (thanh cuộn ẩn), không đè lên nút Thoát. -->
+        <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" ClipToBounds="True"
+                 ScrollViewer.VerticalScrollBarVisibility="Hidden" />
       </DockPanel>
     </Border>
-    <Grid Margin="32,24,32,20">
-      <ContentControl x:Name="Host" />
-      <ContentControl x:Name="GeminiSlot" IsVisible="False" />
+    <Grid>
+      <Grid x:Name="Main" Margin="32,24,32,20">
+        <ContentControl x:Name="Host" />
+        <ContentControl x:Name="GeminiSlot" IsVisible="False" />
+      </Grid>
+      <!-- Khi toàn màn hình thanh tiêu đề Windows bị ẩn: cụm nút nhỏ góc trên phải để thu nhỏ / thoát toàn màn hình / đóng. -->
+      <StackPanel x:Name="FullScreenBar" Orientation="Horizontal" Spacing="4" IsVisible="False"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,8,0">
+        <Button Classes="ghost" Padding="10,6" Click="OnMinimize" ToolTip.Tip="Thu nhỏ">
+          <TextBlock Text="&#xE921;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+        </Button>
+        <Button Classes="ghost" Padding="10,6" Click="OnExitFullScreen" ToolTip.Tip="Thoát toàn màn hình (Esc)">
+          <TextBlock Text="&#xE73F;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+        </Button>
+        <Button Classes="ghost" Padding="10,6" Click="OnQuit" ToolTip.Tip="Đóng app">
+          <TextBlock Text="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" />
+        </Button>
+      </StackPanel>
+      <Border x:Name="Toast" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,14,0,0"
+              Padding="16,8" CornerRadius="10" Background="#E6202124">
+        <TextBlock x:Name="ToastText" Foreground="White" FontSize="13" />
+      </Border>
     </Grid>
   </DockPanel>
 </Window>

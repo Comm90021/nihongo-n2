@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Layout;
 using Nihongo.Core;
 using static Nihongo.Desktop.Views.Ui;
@@ -209,9 +209,9 @@ sealed class DenkenSessionView : UserControl
         var bar = Line(Row(10, Btn("← Thoát", Exit), Text(title, 18, bold: true, wrap: false), _counter),
             Row(8, _clock, minutes > 0 ? Btn("Nộp bài", Submit, primary: true) : null));
         DockPanel.SetDock(bar, Dock.Top);
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,380"), ColumnSpacing = 14, Margin = new Avalonia.Thickness(0, 10, 0, 0) };
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 6, Margin = new Avalonia.Thickness(0, 10, 0, 0) };
         var frame = new Border { CornerRadius = new Avalonia.CornerRadius(12), ClipToBounds = true, Child = _web };
-        var side = Scroll(_panel);
+        var side = Ui.Resizable(Scroll(_panel), "dk_side", 380, 300, 760);
         Grid.SetColumn(side, 1);
         grid.Children.Add(frame);
         grid.Children.Add(side);

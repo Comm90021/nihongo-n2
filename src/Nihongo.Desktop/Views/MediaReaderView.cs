@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
@@ -59,7 +59,7 @@ sealed class MediaReaderView : UserControl, IGeminiDock
 
         _toggleVi = Btn("", ToggleAll);
         UpdateToggle();
-        var side = new SidePane("pane_article", _lookup, 300) { Margin = new Thickness(16, 0, 0, 0) };
+        var side = new SidePane("pane_article", _lookup);
         var geminiToggle = Btn("Gemini", _gemini.Toggle).Also(b => b.Classes.Add("strong"));
         var lookupWasOpen = false;
         _gemini.Changed += open =>
@@ -68,17 +68,18 @@ sealed class MediaReaderView : UserControl, IGeminiDock
             if (open) { lookupWasOpen = side.IsVisible; side.SetOpen(false, save: false); }
             else side.SetOpen(lookupWasOpen, save: false);
         };
-        _gemini.Width = 420;
-        _gemini.Margin = new Thickness(16, 0, 0, 0);
-        DockPanel.SetDock(_gemini, Dock.Right);
-        DockPanel.SetDock(side, Dock.Right);
+        // Bảng tra và cột Gemini kéo giãn được (mép trái), nhớ bề rộng.
+        var sideHost = Ui.Resizable(side, "pane_article", 300, 240, 620).Also(h => h.Margin = new Thickness(8, 0, 0, 0));
+        var geminiHost = Ui.Resizable(_gemini, "gemini_dock", 420, 320, 900).Also(h => h.Margin = new Thickness(8, 0, 0, 0));
+        DockPanel.SetDock(geminiHost, Dock.Right);
+        DockPanel.SetDock(sideHost, Dock.Right);
 
         // Thanh trên: quay lại, nguồn, cỡ chữ, bản dịch, bảng tra, Gemini.
         var zoomBox = Row(0, IconBtn(Glyph.ZoomOut, "Thu nhỏ chữ (Ctrl −)", () => Zoom(-1)), _zoom.Also(z => z.Margin = new Thickness(8, 0)), IconBtn(Glyph.ZoomIn, "Phóng to chữ (Ctrl +)", () => Zoom(1)));
         var bar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 12 };
         Control[] cells = [IconBtn(Glyph.Back, "Quay lại danh sách", App.Shell.BackToSection),
             Col(2, Text(title, 17, bold: true).Also(t => { t.TextTrimming = TextTrimming.CharacterEllipsis; t.TextWrapping = TextWrapping.NoWrap; }), _progress),
-            Row(8, zoomBox, _toggleVi, side.Toggle, Btn("Trang gốc", () => OpenUrl(url)), IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen), geminiToggle)];
+            Row(8, zoomBox, _toggleVi, side.Toggle, Btn("Dịch lại theo đoạn", Retranslate).Also(b => ToolTip.SetTip(b, "Dịch cả đoạn để có ngữ cảnh (bài đã lưu trước đây dịch từng câu rời)")), Btn("Trang gốc", () => OpenUrl(url)), IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen), geminiToggle)];
         for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; bar.Children.Add(cells[i]); }
         var top = Col(10, new Border { Classes = { "card" }, Padding = new Thickness(12, 8), Child = bar }, _readBar);
         DockPanel.SetDock(top, Dock.Top);
@@ -86,7 +87,7 @@ sealed class MediaReaderView : UserControl, IGeminiDock
 
         // Cột đọc giới hạn bề rộng cho dễ đọc, căn giữa.
         var column = new Border { Classes = { "card" }, Padding = new Thickness(28, 16), MaxWidth = 860, Child = _rows };
-        Content = new DockPanel { Children = { top, _gemini, side, column } };
+        Content = new DockPanel { Children = { top, geminiHost, sideHost, column } };
         UpdateZoomLabel();
         _ = TranslateAll();
     }
@@ -175,6 +176,13 @@ sealed class MediaReaderView : UserControl, IGeminiDock
         void Update() => _readBar.Value = sv.Extent.Height <= sv.Viewport.Height ? 100 : 100 * sv.Offset.Y / (sv.Extent.Height - sv.Viewport.Height);
         sv.ScrollChanged += (_, _) => Update();
         Update();
+    }
+
+    /// <summary>Xoá bản dịch hiện có (bài đã lưu trước 09/11 dịch từng câu rời) và dịch lại theo đoạn.</summary>
+    void Retranslate()
+    {
+        foreach (var l in _lines) l.Vi = "";
+        _ = TranslateAll();
     }
 
     async Task TranslateAll()

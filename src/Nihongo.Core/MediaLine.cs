@@ -11,6 +11,9 @@ public sealed class MediaLine : INotifyPropertyChanged
     public string Ja { get; set; } = "";
     public double StartSeconds { get; set; } = -1;
 
+    /// <summary>Số thứ tự đoạn văn (bài báo, truyện) để dịch theo đoạn; -1 với phụ đề hoặc dữ liệu cũ.</summary>
+    public int Para { get; set; } = -1;
+
     public string Vi
     {
         get => _vi;

@@ -8,6 +8,7 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- Không chép file tài liệu .xml của các gói vào thư mục đóng gói. -->
     <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
@@ -21,6 +22,7 @@
   <ItemGroup>
     <!-- Tranh ukiyo-e phạm vi công cộng cho băng ảnh trang Hôm nay (Views/Artwork.cs). -->
     <AvaloniaResource Include="Assets\anh\*.jpg" />
+    <AvaloniaResource Include="Assets\app.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />

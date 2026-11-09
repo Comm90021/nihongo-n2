@@ -18,10 +18,12 @@ public partial class MainWindow : Window
         ("exam", "Thi thử", Views.Glyph.Timer),
         ("reading", "Đọc hiểu", Views.Glyph.Reading),
         ("listening", "Nghe", Views.Glyph.Headphone),
+        ("-", "", ""), // vạch ngăn: trên là ôn thi, dưới là phần mở rộng
         ("media", "Báo & Video", Views.Glyph.News),
         ("library", "Thư viện", Views.Glyph.Book),
         ("kaiwa", "Hội thoại", Views.Glyph.People),
         ("denken", "電験", Views.Glyph.Lightning),
+        ("-", "", ""),
         ("gemini", "Gemini", Views.Glyph.Chat),
         ("settings", "Cài đặt", Views.Glyph.Settings),
     ];
@@ -35,6 +37,15 @@ public partial class MainWindow : Window
         AutomationProperties.SetName(NavToggle, "Thu gọn thanh bên");
         foreach (var (tag, label, glyph) in Sections)
         {
+            if (tag == "-")
+            {
+                Nav.Items.Add(new ListBoxItem
+                {
+                    IsEnabled = false, Focusable = false, MinHeight = 0, Padding = new Avalonia.Thickness(8, 6),
+                    Content = new Border { Height = 1, Opacity = 0.7 }.Themed(Border.BackgroundProperty, "CardBorder"),
+                });
+                continue;
+            }
             var text = new TextBlock { Text = label, FontSize = 11, FontWeight = Avalonia.Media.FontWeight.Medium, TextAlignment = Avalonia.Media.TextAlignment.Center, TextWrapping = Avalonia.Media.TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center };
             _labels.Add(text);
             var item = new ListBoxItem
@@ -48,6 +59,9 @@ public partial class MainWindow : Window
         }
         SetCompact(Prefs.NavCompact);
         KeyDown += OnKey;
+        // Cửa sổ hẹp: tự thu thanh bên và lề để nội dung không bị cắt; rộng lại thì trả về lựa chọn của người dùng.
+        SizeChanged += (_, e) => { ApplyWidth(e.NewSize.Width); ApplyHeight(e.NewSize.Height); };
+        PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) OnWindowState(); };
         Nav.SelectedIndex = 0;
         if (SelfTest.Enabled)
         {
@@ -65,6 +79,43 @@ public partial class MainWindow : Window
 
     public void ToggleFullScreen() => WindowState = WindowState == WindowState.FullScreen ? WindowState.Maximized : WindowState.FullScreen;
 
+    bool _narrow;
+    void ApplyWidth(double width)
+    {
+        var narrow = width < 1100;
+        Main.Margin = narrow ? new Avalonia.Thickness(16, 14, 16, 12) : new Avalonia.Thickness(32, 24, 32, 20);
+        if (narrow == _narrow) return;
+        _narrow = narrow;
+        if (_navBeforeDock is null) SetCompact(narrow || Prefs.NavCompact, save: false);
+    }
+
+    /// <summary>Cửa sổ thấp: mục thanh bên sát hơn (bỏ khoảng đệm) để đủ chỗ cho 12 mục.</summary>
+    void ApplyHeight(double height)
+    {
+        var pad = height < 760 ? new Avalonia.Thickness(4, 4, 4, 3) : new Avalonia.Thickness(4, 8, 4, 7);
+        foreach (var item in Nav.Items.OfType<ListBoxItem>()) if (item.IsEnabled) item.Padding = pad;
+        NavToggle.Margin = new Avalonia.Thickness(0, 0, 0, height < 760 ? 8 : 16);
+    }
+
+    void OnWindowState()
+    {
+        var full = WindowState == WindowState.FullScreen;
+        FullScreenBar.IsVisible = full;
+        if (full) ShowToast("Toàn màn hình · Esc để thoát · nút góc trên phải để thu nhỏ hoặc đóng");
+    }
+
+    async void ShowToast(string text)
+    {
+        ToastText.Text = text;
+        Toast.IsVisible = true;
+        await Task.Delay(3500);
+        if (ToastText.Text == text) Toast.IsVisible = false;
+    }
+
+    void OnQuit(object? sender, RoutedEventArgs e) => Close();
+    void OnMinimize(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    void OnExitFullScreen(object? sender, RoutedEventArgs e) => WindowState = WindowState.Maximized;
+
     void OnNavToggle(object? sender, RoutedEventArgs e) => SetCompact(NavPane.Width > 70);
 
     /// <summary>Dải biểu tượng: 84px có chữ dưới biểu tượng, thu gọn còn 64px chỉ biểu tượng.</summary>
@@ -73,6 +124,8 @@ public partial class MainWindow : Window
         if (save) { Prefs.SetNavCompact(compact); _navBeforeDock = null; }
         NavPane.Width = compact ? 64 : 84;
         foreach (var l in _labels) l.IsVisible = !compact;
+        QuitLabel.IsVisible = !compact;
+        QuitLabel.IsVisible = !compact;
     }
     /// <summary>Ẩn dải biểu tượng khi đang thi thử để tập trung; rời màn thi thì hiện lại.</summary>
     public void SetRailVisible(bool visible) => NavPane.IsVisible = visible;

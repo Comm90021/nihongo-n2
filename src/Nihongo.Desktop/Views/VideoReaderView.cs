@@ -68,7 +68,7 @@ sealed class VideoReaderView : UserControl, IGeminiDock
 
         var side = new SidePane("pane_video", _lookup) { Margin = new Thickness(0, 4, 0, 0) };
         var header = Line(Col(2, Text(title, 20, bold: true), _status),
-            Row(8, _done, IconBtn(Glyph.Copy, "Chép link video (kèm thời điểm đang xem)", CopyLink),
+            Row(8, _done, Btn("Dịch lại theo đoạn", Retranslate), IconBtn(Glyph.Copy, "Chép link video (kèm thời điểm đang xem)", CopyLink),
                 IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen), Btn("Quay lại", App.Shell.BackToSection)));
         DockPanel.SetDock(header, Dock.Top);
 
@@ -225,6 +225,13 @@ sealed class VideoReaderView : UserControl, IGeminiDock
         var link = $"https://youtu.be/{_videoId}{(_position > 5 ? $"?t={(int)_position}" : "")}";
         if (TopLevel.GetTopLevel(this)?.Clipboard is { } clip) await clip.SetTextAsync(link);
         _status.Text = $"Đã chép link: {link}";
+    }
+
+    /// <summary>Xoá bản dịch hiện có (bài đã lưu trước 09/11 dịch từng câu rời) và dịch lại theo đoạn.</summary>
+    void Retranslate()
+    {
+        foreach (var l in _lines) l.Vi = "";
+        _ = TranslateAll();
     }
 
     async Task TranslateAll()

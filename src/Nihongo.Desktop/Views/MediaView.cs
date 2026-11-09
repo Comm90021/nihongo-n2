@@ -170,9 +170,10 @@ sealed class MediaView : UserControl
 
         BuildTopics();
         var tools = Col(8,
-            Row(8, search, Btn("Tìm", () => _ = Search(search.Text ?? ""), primary: true), manualOnly, _hideDone),
+            // WrapPanel: cửa sổ hẹp thì ô tìm và các hộp chọn tự xuống dòng thay vì bị cắt.
+            Ui.Wrap(search, Btn("Tìm", () => _ = Search(search.Text ?? ""), primary: true), manualOnly, _hideDone),
             chips,
-            Row(8, follow, Btn("Theo dõi", () => _ = AddFollow())),
+            Ui.Wrap(follow, Btn("Theo dõi", () => _ = AddFollow())),
             topics);
         DockPanel.SetDock(tools, Dock.Top);
         // Mở sẵn chủ đề đầu tiên.
