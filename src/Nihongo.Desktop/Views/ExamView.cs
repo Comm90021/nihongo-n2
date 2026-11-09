@@ -143,7 +143,8 @@ sealed class ExamView : UserControl
         var sameGroup = _items.Select((x, i) => (x, i)).Where(p => p.x.Passage == item.Passage).Select(p => p.x.No).ToList();
         var head = Row(8, Badge(MondaiLabel(item)), Text(sameGroup.Count > 1 ? $"Câu {sameGroup.Min()}–{sameGroup.Max()}" : $"Câu {item.No}", 12, muted: true));
         var instruction = item.Q?.SectionName is { Length: > 0 } ins ? Text(ins, 13.5, muted: true) : null;
-        var text = Reading(new SelectableTextBlock { Text = item.Passage, TextWrapping = TextWrapping.Wrap });
+        // Bài đọc có thể chứa bảng markdown (đề toàn chữ, V33): Passage.Build vẽ thành bảng.
+        var text = Passage.Build(item.Passage);
         return Card(new DockPanel
         {
             Children =

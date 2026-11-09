@@ -78,6 +78,16 @@ static class SelfTest
             w.Show(new ExamListView()); await Task.Delay(800); Shot(w, dir, $"c_thi_{tag}");
         }
         LevelTabs.Current = "N2";
+        // Câu có bảng markdown (đề toàn chữ V33): vẽ thành bảng thay cho trang PDF.
+        var tableExam = all.FirstOrDefault(e => e.Items.Any(i => i.Passage.Contains("|---")));
+        if (tableExam is not null)
+        {
+            var tv = new ExamView(tableExam);
+            w.Show(tv); await Task.Delay(800);
+            tv.TestGo(tableExam.Items.ToList().FindIndex(i => i.Passage.Contains("|---"))); await Task.Delay(800);
+            Shot(w, dir, "d_bang_chu");
+            log.Add($"Bảng chữ: {tableExam.Title}");
+        }
         w.TestSelectNav("settings"); await Task.Delay(1000); Shot(w, dir, "9_cai_dat");
     }
 
@@ -172,6 +182,26 @@ static class SelfTest
             log.Add("JA : " + l.Ja);
             log.Add("CŨ: " + oldByJa.GetValueOrDefault(l.Ja, "(không có)"));
             log.Add("MỚI: " + l.Vi);
+        }
+
+        // Báo tiếng Trung: mỗi nguồn tải danh sách; nguồn đầu tiên tải 1 bài và dịch zh→vi theo đoạn.
+        var zh = App.Content.LoadSources().Where(s => s.Kind == "feed_zh").ToList();
+        log.Add($"Báo tiếng Trung: {zh.Count} nguồn");
+        var first = true;
+        foreach (var s in zh)
+        {
+            try
+            {
+                var items = await Web.FetchFeedAsync(s);
+                log.Add($"  {s.Name}: {items.Count} bài");
+                if (!first || items.Count == 0) continue;
+                first = false;
+                var (title, lines) = await Web.FetchArticleAsync(items[0].Link, default, s.StartMarker, s.EndMarker);
+                await Web.TranslateLinesAsync(lines, _ => { }, default, "zh");
+                log.Add($"  Bài: {title} · {lines.Count} câu");
+                foreach (var l in lines.Take(4)) { log.Add("  ZH : " + l.Ja); log.Add("  VI : " + l.Vi); }
+            }
+            catch (Exception ex) { log.Add($"  {s.Name}: LỖI {ex.Message}"); }
         }
     }
     // ---------------------------------------------------------------- bố cục màn video (giữ từ lần trước)

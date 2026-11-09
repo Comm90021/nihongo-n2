@@ -50,7 +50,7 @@ sealed class MediaView : UserControl
             Items =
             {
                 new TabItem { Header = "Video theo chủ đề", Content = VideoTab() },
-                new TabItem { Header = "Báo theo chủ đề", Content = Browse("feed") },
+                new TabItem { Header = "Báo theo chủ đề", Content = NewsTab() },
                 new TabItem { Header = "Dán link", Content = Card(paste) },
                 new TabItem { Header = "Đã mở & sổ tay", Content = Scroll(Saved()) },
             },
@@ -229,6 +229,18 @@ sealed class MediaView : UserControl
 
     // ---------------------------------------------------------------- báo
     // Nguồn V14 (đã kiểm, có giá trị học thuật). Mặc định ẩn bài đã đọc (bài đã mở nằm trong bảng media).
+    /// <summary>Báo tiếng Nhật (V14) và, để giải trí, báo tiếng Trung (V32): một nút chọn ngôn ngữ, không thêm mục mới.</summary>
+    Control NewsTab()
+    {
+        var holder = new ContentControl();
+        string[] langs = ["日本語", "中文 (đọc giải trí)"];
+        var cur = App.Progress.Setting("news_lang", "0") == "1" ? 1 : 0;
+        void Set(int i) { App.Progress.SetSetting("news_lang", i.ToString()); holder.Content = Browse(i == 1 ? "feed_zh" : "feed"); }
+        var bar = Segmented(langs, cur, Set).Also(b => b.Margin = new Thickness(0, 0, 0, 6));
+        DockPanel.SetDock(bar, Dock.Top);
+        Set(cur);
+        return new DockPanel { Children = { bar, holder } };
+    }
     Control Browse(string kind)
     {
         var sources = _sources.Where(s => s.Kind == kind).ToList();
@@ -315,7 +327,7 @@ sealed class MediaView : UserControl
         foreach (var (url, kind, title, lines) in media)
         {
             var count = JsonSerializer.Deserialize(lines, MediaJson.Default.ListMediaLine)?.Count ?? 0;
-            var label = kind switch { "video" => "Video", "book" => "Truyện", _ => "Bài báo" };
+            var label = kind switch { "video" => "Video", "book" => "Truyện", "article_zh" => "Báo Trung", _ => "Bài báo" };
             if (kind == "video" && Web.YouTubeId(url) is { } id && _watch.TryGetValue(id, out var w))
                 label += w.Done ? " · ✓ đã học" : w.Duration > 0 ? $" · đã xem {w.Position / w.Duration:P0}" : "";
             list.Children.Add(Card(Line(
@@ -337,7 +349,7 @@ sealed class MediaView : UserControl
         {
             var id = Web.YouTubeId(url);
             var (title, lines) = id is not null ? await Web.FetchTranscriptAsync(id) : await Web.FetchArticleAsync(url, default, source?.StartMarker ?? "", source?.EndMarker ?? "");
-            var kind = id is not null ? "video" : "article";
+            var kind = id is not null ? "video" : source?.Kind == "feed_zh" ? "article_zh" : "article";
             var key = id is not null ? $"https://youtu.be/{id}" : url;
             var json = JsonSerializer.Serialize(lines, MediaJson.Default.ListMediaLine);
             App.Progress.SaveMedia(key, kind, title, json);

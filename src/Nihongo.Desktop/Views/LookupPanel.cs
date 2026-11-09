@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -20,6 +20,9 @@ sealed class LookupPanel : StackPanel
 
     /// <summary>Báo cho màn chứa bảng mở bảng ra khi người dùng vừa bôi đen.</summary>
     public event Action? Wanted;
+
+    /// <summary>"zh" với báo tiếng Trung: không tra kho từ Nhật, hỏi thẳng Google (zh→vi).</summary>
+    public string Lang { get; init; } = "ja";
 
     public LookupPanel(string source)
     {
@@ -81,7 +84,7 @@ sealed class LookupPanel : StackPanel
             return;
         }
 
-        var (item, matched) = Dict.Lookup(selection);
+        var (item, matched) = Lang == "ja" ? Dict.Lookup(selection) : (null, "");
         var word = item?.Word ?? selection;
         Children.Add(Text(word, 30, bold: true).Also(t => t.FontFamily = new Avalonia.Media.FontFamily("Yu Gothic UI, Meiryo")));
         var meaning = item?.Meaning ?? "";
@@ -97,7 +100,7 @@ sealed class LookupPanel : StackPanel
         {
             var waiting = Text("Không có trong kho từ của app, đang hỏi Google...", 13, muted: true);
             Children.Add(waiting);
-            try { meaning = await Web.TranslateAsync(selection); waiting.Text = "Nghĩa từ Google Dịch (không có trong kho từ của app)."; }
+            try { meaning = await Web.TranslateAsync(selection, default, Lang); waiting.Text = Lang == "ja" ? "Nghĩa từ Google Dịch (không có trong kho từ của app)." : "Nghĩa từ Google Dịch (tiếng Trung)."; }
             catch (Exception ex) { waiting.Text = $"Không dịch được: {ex.Message}"; }
             if (version != _version) return;
             Children.Add(Text(meaning, 17, bold: true).Also(t => t.Foreground = Accent));

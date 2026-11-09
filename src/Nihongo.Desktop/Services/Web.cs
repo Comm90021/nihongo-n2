@@ -23,7 +23,8 @@ static partial class Web
     }
 
     // ---------------------------------------------------------------- dịch
-    public static async Task<string> TranslateAsync(string ja, CancellationToken ct = default)
+    /// <param name="lang">Ngôn ngữ nguồn: "ja" (mặc định) hoặc "zh" cho báo tiếng Trung.</param>
+    public static async Task<string> TranslateAsync(string ja, CancellationToken ct = default, string lang = "ja")
     {
         ja = ja.Trim();
         if (ja == "") return "";
@@ -37,7 +38,7 @@ static partial class Web
             {
                 try
                 {
-                    var vi = attempt % 2 == 0 ? await ViaGtx(ja, ct) : await ViaDict(ja, ct);
+                    var vi = attempt % 2 == 0 ? await ViaGtx(ja, lang, ct) : await ViaDict(ja, lang, ct);
                     if (vi != "") { App.Progress.CacheTranslation(ja, vi); return vi; }
                 }
                 catch (HttpRequestException ex) { last = ex; }
@@ -52,10 +53,10 @@ static partial class Web
         }
     }
 
-    static async Task<string> ViaGtx(string ja, CancellationToken ct)
+    static async Task<string> ViaGtx(string ja, string lang, CancellationToken ct)
     {
         using var content = new FormUrlEncodedContent([new("q", ja)]);
-        using var res = await Http.PostAsync("https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=vi&dt=t", content, ct);
+        using var res = await Http.PostAsync($"https://translate.googleapis.com/translate_a/single?client=gtx&sl={lang}&tl=vi&dt=t", content, ct);
         res.EnsureSuccessStatusCode();
         var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
         var sb = new StringBuilder();
@@ -63,10 +64,10 @@ static partial class Web
         return sb.ToString().Trim();
     }
 
-    static async Task<string> ViaDict(string ja, CancellationToken ct)
+    static async Task<string> ViaDict(string ja, string lang, CancellationToken ct)
     {
         using var content = new FormUrlEncodedContent([new("q", ja)]);
-        using var res = await Http.PostAsync("https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=ja&tl=vi", content, ct);
+        using var res = await Http.PostAsync($"https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl={lang}&tl=vi", content, ct);
         res.EnsureSuccessStatusCode();
         var json = JsonNode.Parse(await res.Content.ReadAsStringAsync(ct));
         // Trả về ["bản dịch"] hoặc [["bản dịch","ja"]] tùy phiên bản.
@@ -79,7 +80,7 @@ static partial class Web
     /// trong lô ~1.400 chữ, rồi chia bản dịch lại cho từng câu. Lô nào trả lệch số dòng thì dịch lẻ từng đoạn.
     /// Bộ nhớ dịch dùng khóa là cả đoạn, nên bản dịch từng câu cũ không bị dùng lại.
     /// </summary>
-    public static async Task TranslateLinesAsync(IReadOnlyList<MediaLine> lines, Action<int> onDone, CancellationToken ct)
+    public static async Task TranslateLinesAsync(IReadOnlyList<MediaLine> lines, Action<int> onDone, CancellationToken ct, string lang = "ja")
     {
         void Assign(List<int> group, string vi)
         {
@@ -90,11 +91,11 @@ static partial class Web
         async Task Run()
         {
             if (batch.Count == 0) return;
-            var result = (await TranslateAsync(string.Join("\n", batch.Select(b => b.Text)), ct)).Split('\n');
+            var result = (await TranslateAsync(string.Join("\n", batch.Select(b => b.Text)), ct, lang)).Split('\n');
             if (result.Length == batch.Count)
                 for (var k = 0; k < batch.Count; k++) { App.Progress.CacheTranslation(batch[k].Text, result[k].Trim()); Assign(batch[k].Group, result[k]); }
             else
-                foreach (var (g, text) in batch) Assign(g, await TranslateAsync(text, ct));
+                foreach (var (g, text) in batch) Assign(g, await TranslateAsync(text, ct, lang));
             batch.Clear();
         }
         foreach (var group in ParagraphTranslate.Group(lines))

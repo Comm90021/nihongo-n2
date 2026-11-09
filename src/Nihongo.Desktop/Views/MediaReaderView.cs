@@ -34,6 +34,8 @@ sealed class MediaReaderView : UserControl, IGeminiDock
     readonly TextBlock _zoom = Text("", 12.5, muted: true, wrap: false);
     readonly ProgressBar _readBar = Bar(0, 100, 3);
     readonly LookupPanel _lookup;
+    /// <summary>Bài báo tiếng Trung lưu với kind "article_zh".</summary>
+    string Lang => _kind == "article_zh" ? "zh" : "ja";
     readonly ListBox _rows;
     readonly Button _toggleVi;
 
@@ -46,7 +48,7 @@ sealed class MediaReaderView : UserControl, IGeminiDock
         _kind = kind;
         _title = title;
         _lines = lines;
-        _lookup = new LookupPanel(title);
+        _lookup = new LookupPanel(title) { Lang = Lang };
         ShowVi = false; // đọc tiếng Nhật trước, cần mới mở bản dịch
         Focusable = true;
         DetachedFromVisualTree += (_, _) => _cts.Cancel();
@@ -101,7 +103,8 @@ sealed class MediaReaderView : UserControl, IGeminiDock
         {
             chips.Children.Clear();
             if (ja.DataContext is not MediaLine line) return;
-            foreach (var h in Grammar.Apply(ja, line.Ja))
+            // Báo tiếng Trung: không tô mẫu ngữ pháp tiếng Nhật.
+            foreach (var h in Lang == "ja" ? Grammar.Apply(ja, line.Ja) : [])
             {
                 var g = h.Point;
                 var chip = Btn(g.Pattern, () => _lookup.ShowGrammar(g, line)).Also(b => { b.Classes.Add("seg"); b.FontSize = 12; b.Padding = new Thickness(8, 2); b.Margin = new Thickness(0, 0, 6, 4); });
@@ -194,7 +197,7 @@ sealed class MediaReaderView : UserControl, IGeminiDock
         Report();
         try
         {
-            await Web.TranslateLinesAsync(_lines, _ => Dispatcher.UIThread.Post(() => { done++; Report(); }), _cts.Token);
+            await Web.TranslateLinesAsync(_lines, _ => Dispatcher.UIThread.Post(() => { done++; Report(); }), _cts.Token, Lang);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _progress.Text = $"Dịch bị gián đoạn ({ex.Message}). Mở lại bài để dịch tiếp phần còn thiếu."; }

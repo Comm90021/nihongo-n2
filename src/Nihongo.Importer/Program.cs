@@ -471,6 +471,18 @@ int ImportSources(SqliteConnection db)
                 f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "",
                 $"{f["kind"]} · {publisher} · {f["note"]}".Trim(' ', '·'), f["avg_chars"]?.GetValue<double>() ?? 0, f["list_selector"]?.ToString() ?? "");
         }
+    // Báo tiếng Trung (V32, đọc giải trí). Claude kiểm 09/11/2026: bỏ people.com.cn (RSS ngừng cập nhật từ 2025) và storm.mg.
+    var zh = P("antigravity_out", "V32_bao_tieng_trung", "sources_zh.json");
+    if (File.Exists(zh))
+        foreach (var f in JsonNode.Parse(File.ReadAllText(zh))!.AsArray())
+        {
+            var id = f!["id"]!.ToString();
+            // storm.mg chuyển hướng https → http khi có Accept-Language tiếng Nhật; .NET không theo chuyển hướng hạ cấp.
+            if (id.StartsWith("people_daily") || id.StartsWith("storm_")) continue;
+            Add(id, "feed_zh", f["name"]!.ToString(), f["topic"]?.ToString() ?? "Khác", f["lang"]?.ToString() == "zh-Hant" ? "繁體" : "简体", f["url"]!.ToString(),
+                f["start_marker"]?.ToString() ?? "", f["end_marker"]?.ToString() ?? "", $"{f["publisher"]} · {f["note"]}".Trim(' ', '·'),
+                f["avg_chars"]?.GetValue<double>() ?? 0, f["list_selector"]?.ToString() ?? "");
+        }
     var seen = new HashSet<string>();
     var channels = P("antigravity_out", "V15_video_gia_tri", "channels.json");
     if (File.Exists(channels))
@@ -528,8 +540,12 @@ int ImportExams(SqliteConnection db)
         // Claude viết sau khi kiểm chéo bằng giải mù (V19); không sửa file gốc của Gemini.
         var fixFile = Path.Combine(Path.GetDirectoryName(folder)!, "sua_cau.json");
         var fixes = File.Exists(fixFile) ? JsonNode.Parse(File.ReadAllText(fixFile))!.AsObject() : new JsonObject();
-        foreach (var file in Directory.GetFiles(folder, "*.json").Order())
+        foreach (var original in Directory.GetFiles(folder, "*.json").Order())
         {
+            // V33 (09/11/2026): bản sao đầy đủ của đề, đã thay trang PDF (bảng, tờ rơi) bằng bảng markdown. Có thì dùng bản này;
+            // sua_cau.json vẫn lấy ở thư mục gốc. Claude đã kiểm: không đổi câu, phương án, đáp án nào.
+            var v33File = P("antigravity_out", "V33_bang_thanh_chu", "exams", Path.GetFileName(original));
+            var file = File.Exists(v33File) ? v33File : original;
             JsonObject e;
             try { e = JsonNode.Parse(File.ReadAllText(file))!.AsObject(); }
             catch (Exception ex) { Console.WriteLine($"  bỏ {Path.GetFileName(file)}: JSON hỏng ({ex.Message})"); continue; }
