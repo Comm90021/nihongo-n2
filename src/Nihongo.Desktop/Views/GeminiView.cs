@@ -80,6 +80,26 @@ sealed class GeminiView : UserControl
         _status.Text = "Chưa điền được (có thể chưa đăng nhập). Câu hỏi đã chép vào clipboard, bấm Ctrl+V vào ô chat.";
     }
 
+    /// <summary>
+    /// Đọc câu trả lời mới nhất của Gemini trên trang. Trả về "" nếu không đọc được (Google đổi giao diện, chưa có câu trả lời):
+    /// khi đó người dùng bấm nút Copy của Gemini rồi app lấy từ clipboard.
+    /// </summary>
+    public async Task<string> LastAnswerAsync()
+    {
+        try
+        {
+            var core = await _web.Ready;
+            const string Script = """
+                (function(){const sel=['model-response message-content','message-content','.model-response-text','.markdown'];
+                for(const s of sel){const n=document.querySelectorAll(s);if(n.length){const t=n[n.length-1].innerText;if(t&&t.trim())return t;}}
+                return '';})()
+                """;
+            var raw = await core.ExecuteScriptAsync(Script);
+            return System.Text.Json.Nodes.JsonNode.Parse(raw) is { } n ? n.GetValue<string>().Trim() : "";
+        }
+        catch (Exception ex) { Log.Error("Gemini.LastAnswer", ex); return ""; }
+    }
+
     /// <summary>Lời nhắc chuẩn khi hỏi về một câu tiếng Nhật đang đọc hoặc nghe.</summary>
     public static string PromptFor(string sentence, string word = "") =>
         $"Tôi đang học JLPT N2. Giải thích bằng tiếng Việt câu tiếng Nhật sau: dịch tự nhiên, cách đọc các từ khó, " +

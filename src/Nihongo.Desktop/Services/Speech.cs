@@ -9,6 +9,11 @@ static class Speech
     static SpeechSynthesizer? _synth;
     static bool _failed;
 
+    public static void Stop()
+    {
+        try { _synth?.SpeakAsyncCancelAll(); } catch { }
+    }
+
     public static void Say(string text)
     {
         if (_failed || string.IsNullOrWhiteSpace(text)) return;

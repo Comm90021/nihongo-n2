@@ -18,6 +18,7 @@ public partial class MainWindow : Window
         ("exam", "Thi thử", Views.Glyph.Timer),
         ("reading", "Đọc hiểu", Views.Glyph.Reading),
         ("listening", "Nghe", Views.Glyph.Headphone),
+        ("knowledge", "Kiến thức", Views.Glyph.Lightbulb),
         ("-", "", ""), // vạch ngăn: trên là ôn thi, dưới là phần mở rộng
         ("media", "Báo & Video", Views.Glyph.News),
         ("library", "Thư viện", Views.Glyph.Book),
@@ -152,6 +153,7 @@ public partial class MainWindow : Window
             "exam" => new ExamListView(),
             "library" => new LibraryView(),
             "kaiwa" => new KaiwaView(),
+            "knowledge" => new KnowledgeView(),
             "denken" => new DenkenView(),
             _ => new TodayView(),
         });
@@ -238,6 +240,9 @@ public partial class MainWindow : Window
         else view = ShowGemini();
         if (prompt != "") await view.Ask(prompt);
     }
+
+    /// <summary>Câu trả lời mới nhất của Gemini (rỗng nếu không đọc được). Dùng khi lưu lời giải chữa bài.</summary>
+    internal Task<string> GeminiLastAnswer() => Gemini.LastAnswerAsync();
 
     public async Task SignOutGoogle() => await ShowGemini().SignOutAsync();
 

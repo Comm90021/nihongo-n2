@@ -75,6 +75,40 @@ public sealed class ProgressStoreTests : IDisposable
     }
 
     [Fact]
+    public void GhiCauSaiVaLoiGiaiDaLuu()
+    {
+        _p.LogWrong("q1", 2, "s1");
+        _p.LogWrong("q2", 0, "s1");
+        _p.LogWrong("q3", 4, "s2");
+        Assert.Equal(2, _p.Wrongs("s1").Count);
+        Assert.Equal(3, _p.Wrongs().Count);
+        Assert.Equal(0, _p.Wrongs("s1").First(w => w.ItemId == "q2").Picked);
+        Assert.Null(_p.Explain("q1"));
+        _p.SaveExplain("q1", "lần 1");
+        _p.SaveExplain("q1", "lần 2");
+        Assert.Equal("lần 2", _p.Explain("q1")!.Text);
+    }
+
+    [Fact]
+    public void MoFileTienDoCuThiTaoBangMoiVaGiuDuLieu()
+    {
+        _p.Review("q9", SrsKind.Question, false);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        var path = Path.Combine(_dir, "tien_do.db");
+        using (var c = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            c.Open();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "DROP TABLE wrong; DROP TABLE explain;";
+            cmd.ExecuteNonQuery();
+        }
+        var reopened = new ProgressStore(path);
+        Assert.True(reopened.Known("q9"));
+        reopened.LogWrong("q9", 1, "s");
+        Assert.Single(reopened.Wrongs());
+    }
+
+    [Fact]
     public void SaoLuuGiuDungSoBan()
     {
         var backups = Path.Combine(_dir, "sao_luu");

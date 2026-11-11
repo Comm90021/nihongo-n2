@@ -14,7 +14,9 @@ namespace Nihongo.Desktop.Views;
 /// </summary>
 sealed class TodayView : UserControl
 {
-    static readonly DateOnly ExamDay = new(2026, 12, 6);
+    /// <summary>Ngày thi và cấp thi chỉnh ở Cài đặt (setting exam_day dạng yyyy-MM-dd, exam_level); mặc định N2 06/12/2026.</summary>
+    public static DateOnly ExamDay => DateOnly.TryParseExact(App.Progress.Setting("exam_day"), "yyyy-MM-dd", out var d) ? d : new DateOnly(2026, 12, 6);
+    public static string ExamLevel => App.Progress.Setting("exam_level", "N2");
     const int NewWords = 20, NewGrammar = 15;
     static readonly string[] WeekDays = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
 
@@ -51,7 +53,7 @@ sealed class TodayView : UserControl
             Col(6, Text($"{WeekDays[(int)now.DayOfWeek]}, {now:dd/MM/yyyy}", 13, muted: true), Title("Hôm nay")),
             Card(Row(14,
                 Text($"{days}", 34, bold: true).Also(t => t.FontWeight = FontWeight.Bold).Tint("AccentInk"),
-                Col(2, Text("ngày tới kỳ thi", 14, bold: true), Text("JLPT N2 · Chủ nhật 06/12/2026", 12, muted: true))), 0).Also(c => c.Padding = new Thickness(18, 12)));
+                Col(2, Text("ngày tới kỳ thi", 14, bold: true), Text($"JLPT {ExamLevel} · {WeekDays[(int)ExamDay.DayOfWeek]} {ExamDay:dd/MM/yyyy}", 12, muted: true))), 0).Also(c => c.Padding = new Thickness(18, 12)));
 
         // ---- 3 ô số liệu
         var stats = Columns(16,

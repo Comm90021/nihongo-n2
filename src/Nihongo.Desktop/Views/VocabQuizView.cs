@@ -102,8 +102,10 @@ sealed class VocabQuizView : UserControl
                 list.Children.Add(Line(Row(10, Text(v.Word, 16, bold: true), Text(v.Reading, 14, muted: true)), Text(v.Meaning, 14, muted: true).Also(t => t.MaxWidth = 420)));
             body.Children.Add(Panel($"Từ làm sai ({_wrong.Distinct().Count()})", list));
         }
-        body.Children.Add(Row(8,
-            Btn("Làm lại các từ sai", () => App.Shell.Show(new VocabQuizView(VocabQuiz.Build(_wrong.Distinct(), null, 50), "Ôn lại từ sai")), primary: true, enabled: _wrong.Count > 0),
+        body.Children.Add(Ui.Wrap(
+            _wrong.Count > 0 ? Btn("Chữa các từ sai với Gemini", () => _ = App.Shell.AskGemini(ReviewPrompt.VocabPrompt(_title,
+                _wrong.Distinct().Select(v => (v.Word, v.Reading, v.Meaning)))), primary: true) : null,
+            Btn("Làm lại các từ sai", () => App.Shell.Show(new VocabQuizView(VocabQuiz.Build(_wrong.Distinct(), null, 50), "Ôn lại từ sai")), primary: false, enabled: _wrong.Count > 0),
             Btn("Về danh sách từ", App.Shell.BackToSection)));
         return Card(body, 0).Also(c => c.Padding = new Thickness(28, 24));
     }

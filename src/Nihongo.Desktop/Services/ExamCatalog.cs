@@ -24,6 +24,7 @@ sealed record ExamDef(string Id, string Title, string Kind, string Level, int Mi
         "feifan" => "非凡 (Trung Quốc)",
         "real_n1" => "Đề thật N1",
         "jtest" => "J.TEST A-C",
+        "mo_phong" => "Đề mô phỏng 30 câu (có Nghe)",
         _ => "Đề luyện",
     };
 }
@@ -65,15 +66,21 @@ static partial class ExamCatalog
             var n = 0;
             var items = g.OrderBy(q => q.Mondai).ThenBy(q => q.Number).Select(q => new ExamItem(q.Mondai, ++n, q, "", 0, 0, q.Answer)).ToList();
             var full = reading.TryGetValue(setId, out var set);
-            if (full) { items.AddRange(PdfItems(set!)); used.Add(setId); }
-            // Thiếu PDF thì vẫn thi được phần 問題1–8 (khoảng 50 phút theo tỉ lệ số câu).
-            list.Add(new ExamDef($"exam-{(setId != "" ? setId : g.Key)}", full ? g.Key : $"{g.Key} (問題1–8, thiếu PDF đọc hiểu)", "real", "N2", full ? 105 : 50, items));
+            // V30 (09/11/2026): 問題9–14 đã có dạng chữ trong bảng question thì dùng luôn, không ghép thêm trang PDF (sẽ trùng câu).
+            var hasText = items.Any(i => i.Mondai >= 9);
+            var hasLang = items.Any(i => i.Mondai <= 8);
+            if (full) used.Add(setId);
+            if (full && !hasText) items.AddRange(PdfItems(set!));
+            var complete = hasLang && (full || hasText);
+            // Thiếu PDF thì vẫn thi được phần 問題1–8 (khoảng 50 phút theo tỉ lệ số câu); kỳ chỉ có 問題9–14 (07/2026) thi 70 phút.
+            var title = complete ? g.Key : hasLang ? $"{g.Key} (問題1–8, thiếu PDF đọc hiểu)" : $"{g.Key} (問題9–14)";
+            list.Add(new ExamDef($"exam-{(setId != "" ? setId : g.Key)}", title, "real", "N2", complete ? 105 : hasLang ? 50 : 70, items));
         }
         // Kỳ chỉ có phần đọc hiểu (ví dụ 07/2026).
         foreach (var set in reading.Values.Where(s => !used.Contains(s.Id)))
             list.Add(new ExamDef($"exam-{set.Id}", $"{set.Title} (問題9–14)", "real", "N2", 70, PdfItems(set).ToList()));
 
-        string[] order = ["du_doan", "real", "real_n1", "hq", "feifan", "jtest"];
+        string[] order = ["du_doan", "real", "real_n1", "mo_phong", "hq", "feifan", "jtest"];
         return list.OrderBy(e => e.Level == "N2" ? 0 : e.Level == "N1" ? 1 : 2).ThenBy(e => Array.IndexOf(order, e.Kind) is var i and >= 0 ? i : 9)
             // Đề thật (N2, N1) và J.TEST: kỳ mới nhất trước; đề luyện theo số thứ tự.
             .ThenByDescending(e => e.Kind is "real" or "real_n1" or "jtest" ? e.Id : "").ThenBy(e => e.Id).ToList();

@@ -15,7 +15,7 @@ namespace Nihongo.Desktop.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "video" or "ui" or "extra" or "sizes" or "dich";
+    public static bool Enabled => Mode is "video" or "ui" or "extra" or "sizes" or "dich" or "review";
 
     public static async void Run(MainWindow w)
     {
@@ -28,6 +28,7 @@ static class SelfTest
             else if (Mode == "extra") await Extra(w, dir, log);
             else if (Mode == "sizes") await Sizes(w, dir, log);
             else if (Mode == "dich") await Dich(log);
+            else if (Mode == "review") await Review(w, dir, log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -165,6 +166,27 @@ static class SelfTest
         log.Add($"Toàn màn hình: {w.ClientSize.Width:0}x{w.ClientSize.Height:0}");
         w.WindowState = Avalonia.Controls.WindowState.Normal;
     }
+    // ---------------------------------------------------------------- chữa bài (ghi vào tien_do.db: chỉ chạy trên bản sao dữ liệu)
+    static async Task Review(MainWindow w, string dir, List<string> log)
+    {
+        await Task.Delay(1200);
+        var qs = App.Content.Questions.Where(q => q.IsExam && q.Mondai == 7).Take(3)
+            .Concat(App.Content.Questions.Where(q => q.IsExam && q.Mondai == 10 && q.Context != "").Take(2)).ToList();
+        log.Add($"Câu thử: {qs.Count} (có bài đọc: {qs.Count(q => q.Context != "")})");
+        var session = "selftest";
+        var items = qs.Select(q => { var picked = q.Answer % 4 + 1; App.Progress.LogWrong(q.Id, picked, session); return ReviewView.From(q, picked); }).ToList();
+        log.Add($"Bảng wrong: {App.Progress.Wrongs(session).Count} dòng (đã ghi {items.Count})");
+        foreach (var p in ReviewPrompt.Build("Tự kiểm", "N2", items)) log.Add($"  Phần {p.Index}/{p.Count}: {p.Prompt.Length} ký tự, câu {string.Join(",", p.Numbers)}");
+        App.Progress.SaveExplain(items[0].Id, "Lời giải thử");
+        var view = new ReviewView("Tự kiểm", "N2", items, () => { });
+        w.Show(view); await Task.Delay(1200); Shot(w, dir, "r1_chua_bai");
+        view.OpenGemini(); await Task.Delay(7000); Shot(w, dir, "r2_mo_gemini");
+        log.Add($"Gemini: {w.TestGeminiStatus()}");
+        w.Show(new PracticeView()); await Task.Delay(1000); Shot(w, dir, "r3_luyen_de");
+        var result = ExamCatalog.All.FirstOrDefault(e => e.Kind == "real" && e.Items.Any(i => i.Mondai >= 9 && i.Q is not null));
+        log.Add($"Đề thật dạng chữ: {(result is null ? "KHÔNG có" : $"{result.Title}: {result.Items.Count} câu, PDF {result.Items.Count(i => i.HasPdf)}, {result.Minutes} phút")}");
+    }
+
     // ---------------------------------------------------------------- dịch theo đoạn: so với bản dịch từng câu cũ
     static async Task Dich(List<string> log)
     {

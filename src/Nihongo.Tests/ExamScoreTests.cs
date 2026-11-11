@@ -36,6 +36,17 @@ public class ExamScoreTests
         Assert.True(s.AboveFloor);
     }
 
+    [Fact]
+    public void NgheLaPhanThuBa()
+    {
+        // Đề mô phỏng: 聴解 問題1–5 lưu thành mondai 101–105.
+        var s = ExamScore.From(Make(1, 10, 10).Concat(Make(10, 7, 7)).Concat(Make(101, 2, 7)), "N2");
+        Assert.Equal((10, 7, 2, 7), (s.LangTotal, s.ReadTotal, s.Listen, s.ListenTotal));
+        Assert.Equal(17, s.ScaledListen);  // 60 × 2/7 = 17,1
+        Assert.Equal(180, s.Max);
+        Assert.False(s.AboveFloor);
+    }
+
     [Theory]
     [InlineData("N2", 8, true)]
     [InlineData("N2", 9, true)]

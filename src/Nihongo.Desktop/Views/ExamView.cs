@@ -37,6 +37,7 @@ sealed class ExamView : UserControl
     int _pdfPage, _pdfFirst, _pdfLast, _zoom = 100;
     int _current, _remain, _usedBefore;
     bool _submitted, _confirming;
+    List<WrongItem> _wrongItems = [];
     string DraftKey => $"exam_draft:{_exam.Id}";
 
     public ExamView(ExamDef exam)
@@ -48,7 +49,7 @@ sealed class ExamView : UserControl
         Focusable = true;
         KeyDown += OnKey;
         AttachedToVisualTree += (_, _) => { Focus(); App.Shell.SetRailVisible(false); };
-        DetachedFromVisualTree += (_, _) => { _timer.Stop(); if (!_submitted) SaveDraft(); App.Shell.SetRailVisible(true); };
+        DetachedFromVisualTree += (_, _) => { _timer.Stop(); Speech.Stop(); if (!_submitted) SaveDraft(); App.Shell.SetRailVisible(true); };
 
         _clockPill = new Border { Classes = { "chip" }, Padding = new Thickness(14, 9), CornerRadius = new CornerRadius(10), Child = Row(8, Icon(Glyph.Timer, 16).Tint("AccentInk"), _clock.Tint("AccentInk")) };
         _submit = Btn("Nộp bài", Submit, primary: true);
@@ -125,7 +126,7 @@ sealed class ExamView : UserControl
         var grid = GridCard();
         if (item.HasPdf || item.Passage != "")
         {
-            _left.Content = item.HasPdf ? PdfCard(item) : PassageCard(item);
+            _left.Content = item.HasPdf ? PdfCard(item) : IsListening(item) ? ListeningCard(item) : PassageCard(item);
             _right.Content = Scroll(Col(14, question, grid));
         }
         else
@@ -136,7 +137,10 @@ sealed class ExamView : UserControl
         _progress.Text = $"{_exam.KindLabel} · Đã làm {_picked.Count} / {_items.Count} câu";
     }
 
-    static string MondaiLabel(ExamItem it) => it.Q is null && it.Mondai == 10 ? "問題10–14 · 読解" : $"問題{it.Mondai}";
+    static string MondaiLabel(ExamItem it) => it.Q is null && it.Mondai == 10 ? "問題10–14 · 読解"
+        : it.Mondai > ExamScore.ListeningBase ? $"聴解 問題{it.Mondai - ExamScore.ListeningBase}" : $"問題{it.Mondai}";
+
+    static bool IsListening(ExamItem it) => it.Mondai > ExamScore.ListeningBase;
 
     Control PassageCard(ExamItem item)
     {
@@ -153,6 +157,41 @@ sealed class ExamView : UserControl
                 new ScrollViewer { Content = text, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
             },
         }, 0).Also(b => b.Padding = new Thickness(24, 20));
+    }
+
+    /// <summary>
+    /// 聴解 của đề mô phỏng: không có file âm thanh, lời thoại đọc bằng giọng tiếng Nhật của Windows.
+    /// Lời thoại ẩn tới khi bấm "Hiện lời thoại" hoặc nộp bài. 即時応答 chỉ đọc câu đầu (câu sau là câu trả lời).
+    /// </summary>
+    Control ListeningCard(ExamItem item)
+    {
+        var lines = item.Passage.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();
+        var spoken = item.Mondai == ExamScore.ListeningBase + 4 ? lines.Take(1) : lines;
+        var say = string.Join("。", spoken.Select(SpeechLine));
+        var script = new ContentControl { IsVisible = _submitted, Content = Passage.Build(item.Passage) };
+        var toggle = Btn(_submitted ? "Ẩn lời thoại" : "Hiện lời thoại", () => { });
+        toggle.Click += (_, _) => { script.IsVisible = !script.IsVisible; toggle.Content = script.IsVisible ? "Ẩn lời thoại" : "Hiện lời thoại"; };
+        toggle.Classes.Add("ghost");
+        var head = Row(8, Badge(MondaiLabel(item)), Text($"Câu {item.No}", 12, muted: true));
+        return Card(new DockPanel
+        {
+            Children =
+            {
+                Col(12, head,
+                    Text("Đề mô phỏng không có file âm thanh: bấm Nghe để máy đọc lời thoại (giọng tiếng Nhật của Windows), rồi trả lời bên phải.", 13.5, muted: true),
+                    Row(8, Btn("Nghe", () => Speech.Say(say), primary: true), Btn("Dừng", Speech.Stop).Also(b => b.Classes.Add("ghost")), toggle))
+                    .Also(c => { DockPanel.SetDock(c, Dock.Top); c.Margin = new Thickness(0, 0, 0, 14); }),
+                new ScrollViewer { Content = script, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
+            },
+        }, 0).Also(b => b.Padding = new Thickness(24, 20));
+    }
+
+    /// <summary>Bỏ tên người nói ("男：", "店長「…」", "駅員：") để giọng máy chỉ đọc lời thoại.</summary>
+    static string SpeechLine(string line)
+    {
+        var l = line.Trim();
+        if (System.Text.RegularExpressions.Regex.Match(l, @"^[^「：:]{1,8}「(.*)」$") is { Success: true } q) return q.Groups[1].Value;
+        return System.Text.RegularExpressions.Regex.Replace(l, @"^[^「：:。、]{1,8}[：:]\s*", "");
     }
 
     Control PdfCard(ExamItem item)
@@ -250,6 +289,8 @@ sealed class ExamView : UserControl
                 if (q2.Point != "") body.Children.Add(Text(q2.Point, 15, bold: true));
                 if (q2.Why != "") body.Children.Add(Text(q2.Why, 14));
                 if (q2.FullSentence != "") body.Children.Add(Text($"Câu hoàn chỉnh: {q2.FullSentence}", 13, muted: true));
+                if (q2.Why == "" && q2.Point == "" && App.Progress.Explain(q2.Id) is { } saved)
+                    body.Children.Add(Col(4, Text($"Lời giải của Gemini · lưu {saved.At:dd/MM}", 12, bold: true).Tint("AccentInk"), new SelectableTextBlock { Text = saved.Text, TextWrapping = TextWrapping.Wrap, FontSize = 14 }));
                 if (q2.Why == "" && q2.Point == "")
                     body.Children.Add(Btn("Hỏi Gemini câu này", () => _ = App.Shell.AskGemini(GeminiView.PromptFor($"{q2.Context}\n\n{JpText.Plain(q2.Text)}\n" +
                         string.Join("\n", q2.Options.Select((o, i) => $"{i + 1}. {JpText.Plain(o)}")) + $"\nĐáp án đúng: {item.Answer}"))));
@@ -284,7 +325,7 @@ sealed class ExamView : UserControl
                 wrap.Children.Add(b);
             }
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,*") };
-            var label = Text(g.Key.Split(' ')[0], 11.5, muted: true, wrap: false).Also(t => { t.VerticalAlignment = VerticalAlignment.Top; t.Margin = new Thickness(0, 6, 0, 0); });
+            var label = Text(g.Key.StartsWith("聴解") ? g.Key.Replace(" 問題", " ") : g.Key.Split(' ')[0], 11.5, muted: true, wrap: false).Also(t => { t.VerticalAlignment = VerticalAlignment.Top; t.Margin = new Thickness(0, 6, 0, 0); });
             Grid.SetColumn(wrap, 1);
             row.Children.Add(label);
             row.Children.Add(wrap);
@@ -319,6 +360,7 @@ sealed class ExamView : UserControl
     void Go(int index)
     {
         if (index < 0 || index >= _items.Count || index == _current) return;
+        Speech.Stop();
         _current = index;
         Render();
         Focus();
@@ -345,21 +387,44 @@ sealed class ExamView : UserControl
         var results = _items.Select((it, i) => (it.Mondai, Correct: _picked.GetValueOrDefault(i) == it.Answer)).ToList();
         for (var i = 0; i < _items.Count; i++)
             if (_items[i].Q is { } q) App.Progress.Review(q.Id, SrsKind.Question, results[i].Correct);
+        CollectWrong();
         var score = ExamScore.From(results, _exam.Level);
         var used = _usedBefore + (int)(DateTime.Now - _started).TotalSeconds;
-        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, score.Lang + score.Read, _items.Count, used));
+        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, score.Correct, _items.Count, used));
 
         _submit.Content = "Về danh sách đề";
-        _clock.Text = $"Đúng {score.Lang + score.Read}/{_items.Count}";
+        _clock.Text = $"Đúng {score.Correct}/{_items.Count}";
         _left.Content = Scroll(ResultCard(score, used));
         _right.Content = Scroll(GridCard());
     }
 
 
+    /// <summary>Ghi mọi câu sai và câu bỏ trống vào bảng wrong (cả câu chỉ có trang PDF) và gom lại cho màn Chữa bài.</summary>
+    void CollectWrong()
+    {
+        var session = $"exam:{_exam.Id}:{DateTime.Now:yyyyMMddHHmmss}";
+        _wrongItems = [];
+        for (var i = 0; i < _items.Count; i++)
+        {
+            var it = _items[i];
+            var picked = _picked.GetValueOrDefault(i);
+            if (picked == it.Answer) continue;
+            var label = $"{_exam.Title} · {MondaiLabel(it)} · câu {it.No}";
+            var id = it.Q?.Id ?? $"{_exam.Id}:m{it.Mondai}:q{it.No}";
+            App.Progress.LogWrong(id, picked, session);
+            _wrongItems.Add(it.Q is { } q
+                ? ReviewView.From(q, picked, _exam.Level) with { Label = label }
+                : new WrongItem(id, $"{label} (trang {it.PageFrom} của PDF đề)", ReviewPrompt.GroupOf(it.Mondai, _exam.Level), "", "", [], picked, it.Answer));
+        }
+    }
+
+    Control? ReviewButton() => _wrongItems.Count == 0 ? null
+        : Btn($"Chữa bài ({_wrongItems.Count} câu sai)", () => App.Shell.Show(new ReviewView(_exam.Title, _exam.Level, _wrongItems, () => App.Shell.Show(this))), primary: true);
+
     /// <summary>Điểm quy đổi ước lượng theo tỉ lệ đúng mỗi phần (JLPT chấm theo thang riêng, không công bố cách quy đổi).</summary>
     Control ResultCard(ExamScore s, int used)
     {
-        int lang = s.Lang, langTotal = s.LangTotal, read = s.Read, readTotal = s.ReadTotal, sLang = s.ScaledLang, sRead = s.ScaledRead;
+        int lang = s.Lang, langTotal = s.LangTotal, read = s.Read, readTotal = s.ReadTotal, sLang = s.ScaledLang, sRead = s.ScaledRead, sListen = s.ScaledListen;
         var byMondai = Col(8);
         foreach (var g in _items.Select((it, i) => (it, i)).GroupBy(p => MondaiLabel(p.it)))
         {
@@ -377,7 +442,7 @@ sealed class ExamView : UserControl
                     Row(10, Text($"{right}/{_items.Count}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"câu đúng ({100.0 * right / Math.Max(1, _items.Count):0}%)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
                     Badge($"Thời gian {used / 60} phút", "plain"),
                     Text("J.TEST chấm theo thang riêng; app chỉ đếm câu đúng của phần trắc nghiệm đọc (phần tự viết 記述 không có trong đề).", 12, muted: true),
-                    Row(8, Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                    Ui.Wrap(ReviewButton(), Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: _wrongItems.Count == 0), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
                 Panel("Theo từng phần", byMondai));
         }
         var hasLang = langTotal > 0;
@@ -386,17 +451,18 @@ sealed class ExamView : UserControl
         var max = s.Max;
         var badges = Ui.Wrap(Badge($"Thời gian {used / 60} phút", "plain"));
         if (hasRead) badges.Children.Insert(0, Badge($"読解 {sRead}/60 · đúng {read}/{readTotal}", sRead >= 19 ? "" : "bad").Also(b => b.Margin = new Thickness(0, 0, 8, 8)));
+        if (s.ListenTotal > 0) badges.Children.Insert(0, Badge($"聴解 {sListen}/60 · đúng {s.Listen}/{s.ListenTotal}", sListen >= 19 ? "" : "bad").Also(b => b.Margin = new Thickness(0, 0, 8, 8)));
         if (hasLang) badges.Children.Insert(0, Badge($"言語知識 {sLang}/60 · đúng {lang}/{langTotal}", sLang >= 19 ? "" : "bad").Also(b => b.Margin = new Thickness(0, 0, 8, 8)));
         return Col(14,
             Card(Col(12,
                 Text("Kết quả", 13, muted: true),
-                Row(10, Text($"{sLang + sRead}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"/ {max} điểm (quy đổi ước lượng)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+                Row(10, Text($"{s.Scaled}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"/ {max} điểm (quy đổi ước lượng)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
                 badges,
                 Text(pass
-                    ? "Trên điểm sàn 19/60 mỗi phần. Kỳ thi thật còn phần Nghe (60 điểm); tổng cần từ 90/180 để đỗ."
+                    ? s.ListenTotal > 0 ? "Trên điểm sàn 19/60 mỗi phần; kỳ thi thật cần tổng từ 90/180 (N2) hoặc 100/180 (N1)." : "Trên điểm sàn 19/60 mỗi phần. Kỳ thi thật còn phần Nghe (60 điểm); tổng cần từ 90/180 để đỗ."
                     : "Có phần dưới điểm sàn 19/60: kỳ thi thật sẽ trượt dù tổng điểm cao. Xem lại các câu sai bên phải.", 13.5, muted: true),
                 Text("Điểm quy đổi theo tỉ lệ câu đúng, chỉ để tham khảo; JLPT dùng thang điểm riêng không công bố.", 12, muted: true),
-                Row(8, Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                Ui.Wrap(ReviewButton(), Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: _wrongItems.Count == 0), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
             Panel("Theo từng phần", byMondai));
     }
 

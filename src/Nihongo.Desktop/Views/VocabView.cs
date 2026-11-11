@@ -16,7 +16,8 @@ namespace Nihongo.Desktop.Views;
 sealed class VocabView : UserControl
 {
     static readonly string[] Levels = ["N2", "N1", "N3", "Tất cả"];
-    static readonly string[] Groups = ["Hay ra đề", "Hiragana, trạng từ, sắc thái", "Tiền tố, hậu tố", "Chưa học", "Đến hạn ôn"];
+    static readonly string[] Groups = ["Hay ra đề", "Bộ core", "Phó từ, từ láy", "Hiragana, trạng từ, sắc thái", "Tiền tố, hậu tố", "Chưa học", "Đến hạn ôn"];
+    static readonly string[] LevelOrder = ["N5", "N4", "N3", "N2", "N1"];
     static readonly string[] Kinds = ["Trộn", "読み cách đọc", "表記 chữ Hán", "意味 nghĩa", "文脈 điền từ"];
     static readonly int[] Counts = [10, 20, 30, 50];
 
@@ -81,16 +82,20 @@ sealed class VocabView : UserControl
     }
     IEnumerable<VocabItem> Selection()
     {
-        IEnumerable<VocabItem> list = App.Content.Vocab;
+        IEnumerable<VocabItem> all = App.Content.Vocab;
         var level = _level < 3 ? Levels[_level] : "";
-        if (level != "") list = list.Where(v => v.Level == level);
+        var list = level != "" ? all.Where(v => v.Level == level) : all;
         var p = App.Progress;
-        list = _group switch
+        list = Groups[_group] switch
         {
-            0 => list.Where(v => v.FreqExam > 0 || v.FreqCorpus > 0).OrderByDescending(v => v.FreqExam).ThenByDescending(v => v.FreqCorpus),
-            1 => list.Where(v => v.Kind == VocabKind.Kana || !VocabQuiz.HasKanji(v.Word)),
-            2 => list.Where(v => v.Kind == VocabKind.Affix),
-            3 => list.Where(v => !p.Known(v.CardId)),
+            "Hay ra đề" => list.Where(v => v.FreqExam > 0 || v.FreqCorpus > 0).OrderByDescending(v => v.FreqExam).ThenByDescending(v => v.FreqCorpus),
+            // Bộ core (thư mục "Tạo đề JLPT"): theo danh sách của cấp đang chọn, không theo cột cấp của từ (nhiều từ core N1 được OpenJLPT xếp N2).
+            "Bộ core" => all.Where(v => level is "N2" or "N1" ? v.Sources.Contains($"Bộ core {level}") : v.Sources.Contains("Bộ core")),
+            // Phó từ, từ láy N5–N1: mọi từ tới cấp đang chọn (chọn N2 thì gồm cả N5–N3).
+            "Phó từ, từ láy" => all.Where(v => v.Sources.Contains("Phó từ, từ láy") && (level == "" || Array.IndexOf(LevelOrder, v.Level) <= Array.IndexOf(LevelOrder, level))),
+            "Hiragana, trạng từ, sắc thái" => list.Where(v => v.Kind == VocabKind.Kana || !VocabQuiz.HasKanji(v.Word)),
+            "Tiền tố, hậu tố" => list.Where(v => v.Kind == VocabKind.Affix),
+            "Chưa học" => list.Where(v => !p.Known(v.CardId)),
             _ => DueWords(list),
         };
         return list.Where(VocabQuiz.Usable);

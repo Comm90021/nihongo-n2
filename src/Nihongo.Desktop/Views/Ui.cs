@@ -175,10 +175,10 @@ static class Ui
         return p;
     }
 
-    public static WrapPanel Wrap(params Control[] children)
+    public static WrapPanel Wrap(params Control?[] children)
     {
         var p = new WrapPanel();
-        foreach (var c in children) { c.Margin = new Thickness(0, 0, 8, 8); p.Children.Add(c); }
+        foreach (var c in children) { if (c is null) continue; c.Margin = new Thickness(0, 0, 8, 8); p.Children.Add(c); }
         return p;
     }
 

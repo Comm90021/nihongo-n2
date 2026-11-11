@@ -41,6 +41,8 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
         CREATE TABLE reading_set(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, kind TEXT, pdf_path TEXT, m9_page INTEGER, reading_page INTEGER,
           last_page INTEGER, m9_from INTEGER, m9_to INTEGER, reading_from INTEGER, reading_to INTEGER, answers TEXT);
         CREATE TABLE exam(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, level TEXT, source TEXT, minutes INTEGER, pages TEXT);
+        CREATE TABLE doc(id TEXT PRIMARY KEY, ord INTEGER, title TEXT, note TEXT, body TEXT);
+        CREATE TABLE listening_item(set_id TEXT, ord INTEGER, mondai INTEGER, label TEXT, instruction TEXT, options TEXT, choices INTEGER, answer INTEGER, script TEXT, img TEXT, PRIMARY KEY(set_id, ord));
         """);
 
     var examCorpus = new StringBuilder();
@@ -50,13 +52,15 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var vocab = ImportVocab(db, examCorpus.ToString(), corpus, examTokens);
     var sets = ImportReading(db);
     var listening = ImportListening(db);
+    ImportRealText(db);
     var sources = ImportSources(db);
     var exams = ImportExams(db);
     var grammar = ImportGrammar(db, LoadSentences(db));
     var extra = ImportExtra(db);
+    var docs = ImportDocs(db);
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()) })
+    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()), ("docs", docs.ToString()) })
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
@@ -228,6 +232,8 @@ int ImportVocab(SqliteConnection db, string examText, string corpusText, Diction
         }
     }
 
+    ImportTaoDe(Get);
+
     // Core 6000: bù nghĩa Việt và Hán Việt cho từ chưa có.
     var core = Path.Combine(@"D:\Tài liệu Tiếng Nhật", "Japanese Core 6000 Vocab+.txt");
     if (File.Exists(core))
@@ -285,6 +291,81 @@ int ImportVocab(SqliteConnection db, string examText, string corpusText, Diction
     tx.Commit();
     Console.WriteLine($"Từ vựng: {id} (bỏ {skipped} dòng V2 không rõ nguồn, đếm tần suất {watch.Elapsed.TotalSeconds:F1}s)");
     return id;
+}
+
+// Thư mục "Tạo đề JLPT" (09/11/2026):
+// - TU_VUNG_CORE_JLPT_N{1,2}_CHUAN.md: 1.250 từ mỗi cấp. Chỉ lấy danh sách từ + cách đọc; cột nghĩa ~90% là câu mẫu điền chỗ trống
+//   ("Ý nghĩa và ngữ cảnh cốt lõi…", "Thuộc về X, liên quan đến…") nên bỏ, nghĩa lấy từ các nguồn khác. Cột Hán Việt cũng sai ("Hán") nên bỏ.
+//   Đánh dấu bằng nguồn "Bộ core N2"/"Bộ core N1" (bộ lọc Core trong màn Từ vựng). Từ không có nghĩa ở nguồn nào thì không vào app.
+// - CAM_NANG_PHO_TU_VA_TU_LAY_TOAN_DIEN_N5_N1.md: phó từ (phần I) và từ láy/オノマトペ (phần II) có cấp, nghĩa Việt, câu ví dụ có dịch;
+//   phần III (cặp dễ nhầm) ghép vào ghi chú của cả hai từ.
+void ImportTaoDe(Func<string, VocabDraft> get)
+{
+    var dir = P("Tạo đề JLPT");
+    if (!Directory.Exists(dir)) return;
+    static string[] Cells(string line) => line.Trim().Trim('|').Split('|').Select(c => c.Trim()).ToArray();
+    static string Bare(string s) => Regex.Replace(s, @"\*\*|`", "").Trim();
+    string[] junk = ["Ý nghĩa và ngữ cảnh cốt lõi", "liên quan đến công việc hoặc đời sống"];
+    var core = 0;
+    foreach (var level in new[] { "N2", "N1" })
+    {
+        var file = Path.Combine(dir, $"TU_VUNG_CORE_JLPT_{level}_CHUAN.md");
+        if (!File.Exists(file)) continue;
+        foreach (var line in File.ReadLines(file))
+        {
+            if (!Regex.IsMatch(line, @"^\|\s*\d+\s*\|")) continue;
+            var c = Cells(line);
+            if (c.Length < 6) continue;
+            var word = FirstForm(Bare(c[1]));
+            if (!HasJapanese(word)) continue;
+            var meaning = junk.Any(c[4].Contains) ? "" : c[4];
+            get(word).Merge(Bare(c[2]).Replace(" ", ""), level, "", meaning, "", "", "", "", $"Bộ core {level}", "", VocabKind.Normal);
+            core++;
+        }
+    }
+
+    var adverbs = 0;
+    var guide = Path.Combine(dir, "CAM_NANG_PHO_TU_VA_TU_LAY_TOAN_DIEN_N5_N1.md");
+    if (File.Exists(guide))
+    {
+        var part = 0;
+        foreach (var line in File.ReadLines(guide))
+        {
+            if (line.StartsWith("## PHẦN I:")) part = 1;
+            else if (line.StartsWith("## PHẦN II:")) part = 2;
+            else if (line.StartsWith("## PHẦN III:")) part = 3;
+            if (part == 0 || !line.StartsWith("| **")) continue;
+            var c = Cells(line);
+            if (part == 3)
+            {
+                // | **A** vs **B** | khác biệt | ví dụ |
+                var pair = Regex.Matches(c[0], @"\*\*(.+?)\*\*").Select(m => m.Groups[1].Value).ToList();
+                if (pair.Count < 2 || c.Length < 2) continue;
+                var note = $"Phân biệt {string.Join(" / ", pair)}: {Bare(c[1])}";
+                foreach (var w in pair)
+                {
+                    var d = get(FirstForm(w.Split('〜')[0]));
+                    d.Note = d.Note == "" ? note : $"{d.Note}\n{note}";
+                }
+                continue;
+            }
+            // Phần I: | từ | cách đọc | cấp | nghĩa | ví dụ |. Phần II: | từ láy | romaji | cấp | phân loại | nghĩa | ví dụ |.
+            if (c.Length < (part == 1 ? 5 : 6)) continue;
+            var raw = Bare(c[0]);
+            var word = FirstForm(raw.Split('〜')[0]);
+            if (!HasJapanese(word)) continue;
+            var reading = part == 1 ? FirstForm(Bare(c[1]).Split('〜')[0]) : HasKanji(word) ? "" : word;
+            var lv = Regex.Matches(c[2], @"N\d").Select(m => m.Value).LastOrDefault() ?? "";
+            var meaning = part == 1 ? c[3] : $"{c[4]} ({c[3]})";
+            var ex = Regex.Match(c[^1], @"`(.+?)`\s*[（(](.+?)[）)]");
+            var d2 = get(word);
+            d2.Merge(reading, lv, "", meaning, "", ex.Success ? ex.Groups[1].Value : "", ex.Success ? ex.Groups[2].Value : "", "",
+                "Phó từ, từ láy N5–N1", "", IsHiragana(word) ? VocabKind.Kana : VocabKind.Normal);
+            if (raw.Contains('〜') && !d2.Note.Contains(raw)) d2.Note = d2.Note == "" ? $"Cấu trúc: {raw}" : $"Cấu trúc: {raw}\n{d2.Note}";
+            adverbs++;
+        }
+    }
+    Console.WriteLine($"  Tạo đề JLPT: {core} dòng từ core, {adverbs} phó từ/từ láy");
 }
 
 string LoadFreqCorpus(string dir)
@@ -449,6 +530,95 @@ int ImportListeningJson(SqliteConnection db, int ord)
     return ord;
 }
 
+// ---------------------------------------------------------------- đề thật N2 dạng chữ (V30, 09/11/2026)
+// Mỗi file exams/real-n2-YYYY-MM.json có đủ 言語知識・読解 và 聴解 (có lời thoại từng câu nghe).
+// - 問題9–14 vào bảng question (source="exam", mã `chjlpt-YYYY-MM-s{mondai-1}-q{no}`, cùng tiêu đề kỳ với 問題1–8 sẵn có) để chữa bài được.
+//   Đáp án phải khớp bộ đọc hiểu cùng kỳ (V7, đã đối chiếu file chính thức); lệch thì bỏ cả kỳ.
+// - 聴解: lời thoại + phương án vào bảng listening_item (theo mã listen-YYYY-MM); đáp án đối chiếu với listening_set.
+// 問題1–8 không nạp lại (đã có từ japan_n2_quiz, đã khớp 1.491/1.491 file chính thức).
+int ImportRealText(SqliteConnection db)
+{
+    var dir = P("antigravity_out", "V30_de_that_n2_chu", "exams");
+    if (!Directory.Exists(dir)) return 0;
+    var answers = new Dictionary<string, Dictionary<int, int>>();
+    using (var cmd = db.CreateCommand())
+    {
+        cmd.CommandText = "SELECT id,answers FROM reading_set WHERE kind='real'";
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) answers[r.GetString(0)] = JsonSerializer.Deserialize<Dictionary<int, int>>(r.GetString(1)) ?? new();
+    }
+    // Đối chiếu theo thứ tự trong từng 問題 (nhãn 問題5 khác nhau giữa hai nguồn: "5.2/5.3" và "5.2-1/5.2-2").
+    var listeningItems = new Dictionary<string, List<(int Mondai, int Answer)>>();
+    using (var cmd = db.CreateCommand())
+    {
+        cmd.CommandText = "SELECT id,items FROM listening_set";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            listeningItems[r.GetString(0)] = (JsonSerializer.Deserialize<string[]>(r.GetString(1)) ?? []).Select(s => s.Split('='))
+                .Where(p => p.Length == 2 && p[0].Contains('.')).Select(p => (int.Parse(p[0][..p[0].IndexOf('.')]), int.Parse(p[1].Split('/')[0]))).ToList();
+    }
+    using var tx = db.BeginTransaction();
+    var ord = 900_000;
+    int exams = 0, qn = 0, ln = 0;
+    foreach (var file in Directory.GetFiles(dir, "real-n2-*.json").Order())
+    {
+        var e = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
+        var m = Regex.Match(e["id"]?.ToString() ?? "", @"real-n2-(\d{4})-(\d{2})");
+        if (!m.Success) continue;
+        var (yyyy, mm) = (m.Groups[1].Value, m.Groups[2].Value);
+        var key = $"{yyyy}-{mm}";
+        var items = (e["items"]?.AsArray() ?? []).Where(i => (i?["mondai"]?.GetValue<int>() ?? 0) >= 9).ToList();
+        var problems = ExamFile.Problems(e);
+        if (!answers.TryGetValue($"real-{key}", out var key9)) { Console.WriteLine($"  V30 {key}: bỏ, không có bộ đọc hiểu cùng kỳ để đối chiếu đáp án"); continue; }
+        var wrong = items.Where(i => !key9.TryGetValue(i!["no"]!.GetValue<int>(), out var a) || a != i["answer"]!.GetValue<int>() + 1).Select(i => i!["no"]!.ToString()).ToList();
+        if (problems.Count > 0 || wrong.Count > 0) { Console.WriteLine($"  V30 {key}: bỏ ({problems.Count} lỗi cấu trúc, lệch đáp án ở câu {string.Join(",", wrong)})"); continue; }
+
+        var passages = (e["passages"]?.AsArray() ?? []).Where(p => p?["id"] is not null).ToDictionary(p => p!["id"]!.ToString(), p => p!["text"]?.ToString() ?? "");
+        var title = $"JLPT N2 {mm}/{yyyy}";
+        var instruction = new Dictionary<int, string>();
+        foreach (var it in items.OrderBy(i => i!["mondai"]!.GetValue<int>()).ThenBy(i => i!["no"]!.GetValue<int>()))
+        {
+            var mondai = it!["mondai"]!.GetValue<int>();
+            var no = it["no"]!.GetValue<int>();
+            var options = it["options"]!.AsArray().Select(o => o?.ToString() ?? "").ToArray();
+            if (it["instruction"]?.ToString() is { Length: > 0 } ins) instruction[mondai] = ins;
+            var context = it["passage_id"]?.ToString() is { Length: > 0 } pid ? passages.GetValueOrDefault(pid, "") : "";
+            Exec(db, "INSERT OR REPLACE INTO question VALUES($id,$o,$src,$st,$m,$sn,$n,$t,$w,$c,$op,$ov,$a,$fs,$tp,$pt,$why)",
+                ("$id", $"chjlpt-{key}-s{mondai - 1}-q{no}"), ("$o", ord++), ("$src", "exam"), ("$st", title), ("$m", mondai), ("$sn", instruction.GetValueOrDefault(mondai, "")),
+                ("$n", no), ("$t", it["stem"]?.ToString() ?? ""), ("$w", ""), ("$c", context), ("$op", JsonSerializer.Serialize(options)),
+                ("$ov", JsonSerializer.Serialize(options.Select(_ => "").ToArray())), ("$a", it["answer"]!.GetValue<int>() + 1),
+                ("$fs", ""), ("$tp", ""), ("$pt", ""), ("$why", it["explain_vi"]?.ToString() ?? ""));
+            qn++;
+        }
+
+        // 聴解
+        var setId = $"listen-{key}";
+        var li = e["listening"]?["items"]?.AsArray();
+        if (li is not null && listeningItems.TryGetValue(setId, out var keys))
+        {
+            var mismatch = keys.Count == li.Count ? 0 : Math.Max(keys.Count, li.Count);
+            var lord = 0;
+            var v30 = li.Select(it => (Mondai: it!["mondai"]!.GetValue<int>(), Answer: it["answer"]!.GetValue<int>() + 1)).ToList();
+            if (mismatch == 0) mismatch = v30.Zip(keys).Count(p => p.First != p.Second);
+            foreach (var it in li)
+            {
+                var mondai = it!["mondai"]!.GetValue<int>();
+                var label = it["no"]!.ToString();
+                var answer = it["answer"]!.GetValue<int>() + 1;
+                Exec(db, "INSERT OR REPLACE INTO listening_item VALUES($s,$o,$m,$l,$i,$op,$c,$a,$sc,$img)", ("$s", setId), ("$o", lord++), ("$m", mondai), ("$l", label),
+                    ("$i", it["instruction"]?.ToString() ?? ""), ("$op", JsonSerializer.Serialize((it["options"]?.AsArray() ?? []).Select(o => o?.ToString() ?? "").ToArray())),
+                    ("$c", it["choices"]?.GetValue<int>() ?? 4), ("$a", answer), ("$sc", it["script"]?.ToString() ?? ""), ("$img", it["img"]?.ToString() ?? ""));
+                ln++;
+            }
+            if (mismatch > 0) Console.WriteLine($"  V30 {key}: {mismatch} câu nghe lệch đáp án so với listening_set");
+        }
+        exams++;
+    }
+    tx.Commit();
+    Console.WriteLine($"Đề thật dạng chữ (V30): {exams} kỳ, {qn} câu 問題9–14, {ln} câu nghe có lời thoại");
+    return exams;
+}
+
 // ---------------------------------------------------------------- nguồn báo và kênh video theo chủ đề
 // 08/11/2026: người dùng chê nguồn cũ (V8 báo, V9/V10 kênh) nhiều rác → chỉ dùng nguồn đã kiểm có giá trị học:
 // V14 báo học thuật (社説, 解説, viện nghiên cứu…; có nguồn chỉ có trang danh sách, đọc bằng list_selector) và V15 video có giá trị.
@@ -531,9 +701,19 @@ int ImportExams(SqliteConnection db)
 {
     using var tx = db.BeginTransaction();
     var ord = 1_000_000; // sau mọi câu hỏi khác
+    // Đề bị loại sau khi kiểm (Gemini bịa câu): antigravity_out/DE_LOAI_BO.json {"<id>": "lý do"}.
+    var rejectFile = P("antigravity_out", "DE_LOAI_BO.json");
+    var rejected = File.Exists(rejectFile)
+        ? JsonNode.Parse(File.ReadAllText(rejectFile))!.AsObject().Where(kv => !kv.Key.StartsWith('_')).ToDictionary(kv => kv.Key, kv => kv.Value?.ToString() ?? "")
+        : new Dictionary<string, string>();
     var count = 0;
     var skipped = 0;
-    foreach (var folder in new[] { P("antigravity_out", "V18_de_du_doan", "exams"), P("antigravity_out", "V16_de_hq_feifan", "exams"), P("antigravity_out", "V24_de_n1_that", "exams"), P("antigravity_out", "V25_jtest", "exams"), P("antigravity_out", "V27_de_n1_hq_feifan", "exams") })
+    // redo = bản làm lại (V34 非凡 N2, chép lại từ ảnh sách): đè lên bản cũ cùng mã của V16/V27, không qua V33 và DE_LOAI_BO
+    // (cả hai chỉ áp cho bản cũ), xóa câu cũ của đề đó trước khi nạp.
+    foreach (var (folder, redo) in new (string, bool)[] { (P("antigravity_out", "V18_de_du_doan", "exams"), false), (P("antigravity_out", "V16_de_hq_feifan", "exams"), false), (P("antigravity_out", "V24_de_n1_that", "exams"), false),
+        (P("antigravity_out", "V25_jtest", "exams"), false), (P("antigravity_out", "V27_de_n1_hq_feifan", "exams"), false), (P("antigravity_out", "V34_feifan_n2_lam_lai", "exams"), true),
+        // 40 đề mô phỏng 30 câu N1/N2 (AI soạn, có lời thoại nghe), chuyển từ Markdown bằng "Tạo đề JLPT/tools/to_app_json.py".
+        (P("Tạo đề JLPT", "app", "exams"), false) })
     {
         if (!Directory.Exists(folder)) continue;
         // Bản sửa tay (sua_cau.json cạnh thư mục exams): {"<id đề>": {"<số câu>": {stem?, options?, answer?, explain_vi?}}}.
@@ -545,11 +725,13 @@ int ImportExams(SqliteConnection db)
             // V33 (09/11/2026): bản sao đầy đủ của đề, đã thay trang PDF (bảng, tờ rơi) bằng bảng markdown. Có thì dùng bản này;
             // sua_cau.json vẫn lấy ở thư mục gốc. Claude đã kiểm: không đổi câu, phương án, đáp án nào.
             var v33File = P("antigravity_out", "V33_bang_thanh_chu", "exams", Path.GetFileName(original));
-            var file = File.Exists(v33File) ? v33File : original;
+            var file = !redo && File.Exists(v33File) ? v33File : original;
             JsonObject e;
             try { e = JsonNode.Parse(File.ReadAllText(file))!.AsObject(); }
             catch (Exception ex) { Console.WriteLine($"  bỏ {Path.GetFileName(file)}: JSON hỏng ({ex.Message})"); continue; }
             var examId = e["id"]?.ToString() ?? Path.GetFileNameWithoutExtension(file);
+            if (!redo && rejected.ContainsKey(examId)) { Console.WriteLine($"  bỏ đề {examId}: {rejected[examId]}"); continue; }
+            if (redo) Exec(db, "DELETE FROM question WHERE source='mock' AND source_title=$s", ("$s", examId));
             var passages = (e["passages"]?.AsArray() ?? []).Where(p => p?["id"] is not null).ToDictionary(p => p!["id"]!.ToString(), p => p!["text"]?.ToString() ?? "");
             var pages = new Dictionary<string, object>();
             var instruction = new Dictionary<int, string>();
@@ -686,6 +868,28 @@ int ImportExams(SqliteConnection db)
     Console.WriteLine($"Denken: {dk} câu · Kaiwa: {kw} câu hỏi · nguồn web: {so}");
     return (dk, kw);
 }
+// ---------------------------------------------------------------- tài liệu kiến thức (Markdown, thư mục "Tạo đề JLPT")
+int ImportDocs(SqliteConnection db)
+{
+    var docs = new (string File, string Title, string Note)[]
+    {
+        ("TONG_HOP_NGU_PHAP_TU_VUNG_JLPT_N1_N2.md", "Tổng hợp ngữ pháp, từ vựng N1 · N2", "Thống kê ngữ pháp đã ra, bẫy dễ nhầm, từ cốt lõi, collocation, tiền tố/hậu tố"),
+        ("CAM_NANG_PHO_TU_VA_TU_LAY_TOAN_DIEN_N5_N1.md", "Cẩm nang phó từ và từ láy N5–N1", "Phó từ theo nhóm, オノマトペ, cặp từ dễ nhầm"),
+        ("PHAN_TICH_DE_JLPT.md", "Phân tích đề JLPT N1 · N2", "Cấu trúc đề, từ và ngữ pháp lặp lại, chủ đề đọc/nghe ưu tiên"),
+    };
+    using var tx = db.BeginTransaction();
+    var n = 0;
+    foreach (var (file, title, note) in docs)
+    {
+        var path = P("Tạo đề JLPT", file);
+        if (!File.Exists(path)) continue;
+        Exec(db, "INSERT INTO doc VALUES($i,$o,$t,$n,$b)", ("$i", Path.GetFileNameWithoutExtension(file)), ("$o", n++), ("$t", title), ("$n", note), ("$b", File.ReadAllText(path)));
+    }
+    tx.Commit();
+    Console.WriteLine($"Tài liệu kiến thức: {n}");
+    return n;
+}
+
 // Câu tiếng Nhật trong đề thật (câu hỏi + bài đọc) để đo độ rộng của regex ngữ pháp.
 List<string> LoadSentences(SqliteConnection db)
 {

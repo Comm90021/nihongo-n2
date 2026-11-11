@@ -20,6 +20,7 @@ sealed class SettingsView : UserControl
             Header("Cài đặt", "Đổi là áp dụng ngay, tự lưu."),
             Card(Reading()),
             Card(Look()),
+            Card(Exam()),
             Card(Backup()),
             Card(Google()),
             Card(About())));
@@ -61,6 +62,22 @@ sealed class SettingsView : UserControl
             Labeled("Màu nền", theme),
             compact,
             Text("Phím tắt: Ctrl+B thu gọn/mở thanh bên · F11 toàn màn hình · Esc thoát toàn màn hình.", 13, muted: true));
+    }
+
+    /// <summary>Ngày thi và cấp: trang Hôm nay đếm ngược theo đây (sau 06/12/2026 đổi sang kỳ kế hoặc N1).</summary>
+    static Control Exam()
+    {
+        var info = Text("", 13, muted: true);
+        var date = new TextBox { Text = TodayView.ExamDay.ToString("dd/MM/yyyy"), Watermark = "dd/MM/yyyy" };
+        date.LostFocus += (_, _) =>
+        {
+            if (DateOnly.TryParseExact(date.Text?.Trim(), "d/M/yyyy", out var d)) { App.Progress.SetSetting("exam_day", d.ToString("yyyy-MM-dd")); info.Text = $"Đã lưu ngày thi {d:dd/MM/yyyy}."; }
+            else info.Text = "Ngày không hợp lệ, nhập dạng 06/12/2026.";
+        };
+        var level = new ComboBox { ItemsSource = new[] { "N2", "N1" }, SelectedItem = TodayView.ExamLevel };
+        level.SelectionChanged += (_, _) => { if (level.SelectedItem is string l) App.Progress.SetSetting("exam_level", l); };
+        return Col(12, Text("Kỳ thi", 17, bold: true), Labeled("Ngày thi", date), Labeled("Cấp", level), info,
+            Text("Mở lại trang Hôm nay để thấy số ngày mới.", 13, muted: true));
     }
 
     Control Backup()

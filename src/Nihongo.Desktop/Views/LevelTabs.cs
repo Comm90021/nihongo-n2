@@ -29,7 +29,9 @@ static class LevelTabs
     public static ExamDef? ReadingPart(ExamDef e)
     {
         var first = FirstReadingMondai(e.Level);
-        var items = e.Items.Where(i => Of(e.Level) == "J.TEST" ? i.Mondai == first : i.Mondai >= first).ToList();
+        var items = e.Items.Where(i => Of(e.Level) == "J.TEST" ? i.Mondai == first : i.Mondai >= first && i.Mondai <= Nihongo.Core.ExamScore.ListeningBase).ToList();
+        // Thời gian theo tỉ lệ số câu với đề đầy đủ; đề mô phỏng ngắn thì giới hạn theo cả đề.
+        if (items.Count > 0 && e.Kind == "mo_phong") return new ExamDef(e.Id + "-doc", e.Title + " · Đọc hiểu", e.Kind, e.Level, Math.Max(15, e.Minutes * items.Count / e.Items.Count + 10), items);
         if (items.Count == 0 || items.Count == e.Items.Count) return null;
         // N2: phần đọc chiếm khoảng 60 phút / 105; N1: 70 / 110; J.TEST đọc hiểu khoảng 30 phút.
         var minutes = Of(e.Level) switch { "N1" => 70, "J.TEST" => 30, _ => 60 };

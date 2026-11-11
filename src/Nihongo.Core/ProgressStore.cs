@@ -14,6 +14,10 @@ public sealed record NoteEntry(string Word, string Reading, string Meaning, stri
     public VocabItem ToCard() => new(0, Word, Reading, "", "", Meaning, "", Sentence, SentenceVi, "", "Sổ tay", VocabKind.Normal, $"Sổ tay · {Source}", 0, 0);
 }
 
+public sealed record WrongEntry(string ItemId, int Picked, string Session, DateTime At);
+
+public sealed record SavedExplain(string ItemId, string Text, string Source, DateTime At);
+
 public sealed record ExamResult(string SetId, string Title, string Kind, DateTime At, int Correct, int Total, int UsedSeconds);
 
 /// <summary>Tiến độ học trong tien_do.db. Không bao giờ bị công cụ nhập dữ liệu ghi đè.</summary>
@@ -60,6 +64,8 @@ public sealed class ProgressStore
             CREATE TABLE IF NOT EXISTS setting(key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE IF NOT EXISTS watch(video_id TEXT PRIMARY KEY, position REAL, duration REAL, done INTEGER, updated_at TEXT);
             CREATE TABLE IF NOT EXISTS follow(channel_id TEXT PRIMARY KEY, name TEXT, added_at TEXT);
+            CREATE TABLE IF NOT EXISTS wrong(item_id TEXT, picked INTEGER, session TEXT, at TEXT);
+            CREATE TABLE IF NOT EXISTS explain(item_id TEXT PRIMARY KEY, text TEXT, source TEXT, at TEXT);
             PRAGMA journal_mode=WAL;
             """);
         using var cmd = c.CreateCommand();
@@ -276,6 +282,43 @@ public sealed class ProgressStore
         var list = new List<(string, string)>();
         while (r.Read()) list.Add((r.GetString(0), r.GetString(1)));
         return list;
+    }
+
+    // ---------------------------------------------------------------- câu sai và lời giải đã lưu
+    /// <summary>Ghi một câu làm sai: phương án đã chọn (1-based, 0 = bỏ trống) và mã lần làm bài.</summary>
+    public void LogWrong(string itemId, int picked, string session)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO wrong VALUES($i,$p,$s,$a)", ("$i", itemId), ("$p", picked), ("$s", session), ("$a", DateTime.Now.ToString("s")));
+    }
+
+    /// <summary>Các lần sai, mới nhất trước. <paramref name="session"/> rỗng thì lấy tất cả.</summary>
+    public IReadOnlyList<WrongEntry> Wrongs(string session = "")
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT item_id,picked,session,at FROM wrong" + (session == "" ? "" : " WHERE session=$s") + " ORDER BY at DESC, rowid DESC";
+        if (session != "") cmd.Parameters.AddWithValue("$s", session);
+        using var r = cmd.ExecuteReader();
+        var list = new List<WrongEntry>();
+        while (r.Read()) list.Add(new WrongEntry(r.GetString(0), r.GetInt32(1), r.GetString(2), DateTime.Parse(r.GetString(3))));
+        return list;
+    }
+
+    public void SaveExplain(string itemId, string text, string source = "gemini")
+    {
+        using var c = Open();
+        Exec(c, "INSERT OR REPLACE INTO explain VALUES($i,$t,$s,$a)", ("$i", itemId), ("$t", text), ("$s", source), ("$a", DateTime.Now.ToString("s")));
+    }
+
+    public SavedExplain? Explain(string itemId)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT text,source,at FROM explain WHERE item_id=$i";
+        cmd.Parameters.AddWithValue("$i", itemId);
+        using var r = cmd.ExecuteReader();
+        return r.Read() ? new SavedExplain(itemId, r.GetString(0), r.GetString(1), DateTime.Parse(r.GetString(2))) : null;
     }
 
     // ---------------------------------------------------------------- sao lưu
