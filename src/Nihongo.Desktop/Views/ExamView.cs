@@ -260,7 +260,7 @@ sealed class ExamView : UserControl
         {
             var n = i;
             var text = item.Q is { } qq ? JpText.Plain(qq.Options.ElementAtOrDefault(i - 1) ?? "") : "";
-            var label = Row(14, Text($"{n}", 13, bold: true, wrap: false).Tint("Muted").Also(t => t.Width = 14),
+            var label = Ui.Numbered(Text($"{n}", 13, bold: true, wrap: false).Tint("Muted").Also(t => { t.Width = 14; t.Margin = new Thickness(0, 6, 0, 0); }),
                 Reading(new TextBlock { Text = text == "" ? $"Phương án {n}" : text, TextWrapping = TextWrapping.Wrap }));
             var col = Col(4, label);
             if (_submitted && item.Q?.OptionsVi.ElementAtOrDefault(i - 1) is { Length: > 0 } vi) col.Children.Add(Text(vi, 13, muted: true).Also(t => t.Margin = new Thickness(28, 0, 0, 0)));
@@ -399,7 +399,10 @@ sealed class ExamView : UserControl
     }
 
 
-    /// <summary>Ghi mọi câu sai và câu bỏ trống vào bảng wrong (cả câu chỉ có trang PDF) và gom lại cho màn Chữa bài.</summary>
+    /// <summary>
+    /// Ghi các câu đã chọn mà sai (cả câu chỉ có trang PDF) vào bảng wrong và gom cho màn Chữa bài.
+    /// Câu bỏ trống không tính (nộp sớm thì danh sách phình ra vài chục câu chưa làm); chúng vẫn vào lịch ôn như trước.
+    /// </summary>
     void CollectWrong()
     {
         var session = $"exam:{_exam.Id}:{DateTime.Now:yyyyMMddHHmmss}";
@@ -408,7 +411,7 @@ sealed class ExamView : UserControl
         {
             var it = _items[i];
             var picked = _picked.GetValueOrDefault(i);
-            if (picked == it.Answer) continue;
+            if (picked == 0 || picked == it.Answer) continue;
             var label = $"{_exam.Title} · {MondaiLabel(it)} · câu {it.No}";
             var id = it.Q?.Id ?? $"{_exam.Id}:m{it.Mondai}:q{it.No}";
             App.Progress.LogWrong(id, picked, session);

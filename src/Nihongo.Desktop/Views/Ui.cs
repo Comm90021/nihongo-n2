@@ -182,6 +182,21 @@ static class Ui
         return p;
     }
 
+    /// <summary>
+    /// Số thứ tự + chữ xuống dòng được (phương án trắc nghiệm). Không dùng Row: StackPanel ngang cho chữ bề rộng vô hạn
+    /// nên phương án dài bị cắt cụt thay vì xuống dòng (lỗi thấy ở đọc hiểu dạng chữ, 12/11/2026).
+    /// </summary>
+    public static Grid Numbered(Control number, Control text, double spacing = 14)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = spacing };
+        number.VerticalAlignment = VerticalAlignment.Top;
+        text.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(text, 1);
+        g.Children.Add(number);
+        g.Children.Add(text);
+        return g;
+    }
+
     /// <summary>Hàng có phần chữ co giãn bên trái và nút bên phải.</summary>
     public static Grid Line(Control left, Control right)
     {

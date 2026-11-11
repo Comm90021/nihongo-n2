@@ -181,10 +181,25 @@ static class SelfTest
         var view = new ReviewView("Tự kiểm", "N2", items, () => { });
         w.Show(view); await Task.Delay(1200); Shot(w, dir, "r1_chua_bai");
         view.OpenGemini(); await Task.Delay(7000); Shot(w, dir, "r2_mo_gemini");
-        log.Add($"Gemini: {w.TestGeminiStatus()}");
+        log.Add($"Gemini mở cột: {w.TestGeminiStatus()}");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await w.AskGemini(ReviewPrompt.Build("Tự kiểm", "N2", items)[0].Prompt);
+        log.Add($"Gemini điền lời nhắc ({sw.Elapsed.TotalSeconds:0.0}s): {w.TestGeminiStatus()}");
+        var answer = await w.GeminiLastAnswer();
+        log.Add($"Đọc câu trả lời mới nhất: {(answer == "" ? "(rỗng, trang chưa có câu trả lời)" : answer.Length + " ký tự")}");
         w.Show(new PracticeView()); await Task.Delay(1000); Shot(w, dir, "r3_luyen_de");
-        var result = ExamCatalog.All.FirstOrDefault(e => e.Kind == "real" && e.Items.Any(i => i.Mondai >= 9 && i.Q is not null));
-        log.Add($"Đề thật dạng chữ: {(result is null ? "KHÔNG có" : $"{result.Title}: {result.Items.Count} câu, PDF {result.Items.Count(i => i.HasPdf)}, {result.Minutes} phút")}");
+        foreach (var e in ExamCatalog.All.Where(e => e.Kind == "real").Take(3))
+            log.Add($"Đề thật: {e.Title}: {e.Items.Count} câu, câu PDF {e.Items.Count(i => i.HasPdf)}, {e.Minutes} phút");
+        var full = ExamCatalog.All.FirstOrDefault(e => e.Kind == "real" && e.Items.Any(i => i.Mondai <= 8) && e.Items.Any(i => i.Mondai >= 9 && i.Q is not null));
+        if (full is not null)
+        {
+            var ev = new ExamView(full);
+            w.Show(ev); await Task.Delay(800);
+            ev.TestGo(full.Items.ToList().FindIndex(i => i.Mondai == 11)); await Task.Delay(800); Shot(w, dir, "r4_doc_hieu_chu");
+            for (var i = 0; i < 6; i++) { ev.TestPick(full.Items[i].Answer % 4 + 1); ev.TestGo(i + 1); }
+            ev.TestSubmit(); await Task.Delay(1000); Shot(w, dir, "r5_ket_qua");
+            log.Add($"Nộp {full.Title}: câu sai ghi vào bảng wrong: {App.Progress.Wrongs().Count(x => x.Session.StartsWith($"exam:{full.Id}"))}");
+        }
     }
 
     // ---------------------------------------------------------------- dịch theo đoạn: so với bản dịch từng câu cũ

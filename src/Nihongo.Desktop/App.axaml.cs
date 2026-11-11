@@ -15,6 +15,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Chỉ ghi lại, không nuốt lỗi: lỗi giao diện vẫn làm app dừng như trước, nhưng để lại dấu vết trong data/loi.log.
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) => Services.Log.Error("UIThread", e.Exception);
         Content = new ContentStore(AppPaths.ContentDb);
         Progress = new ProgressStore(AppPaths.ProgressDb);
         Services.Prefs.Load();

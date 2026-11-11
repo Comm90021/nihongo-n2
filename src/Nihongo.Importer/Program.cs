@@ -574,7 +574,15 @@ int ImportRealText(SqliteConnection db)
         if (problems.Count > 0 || wrong.Count > 0) { Console.WriteLine($"  V30 {key}: bỏ ({problems.Count} lỗi cấu trúc, lệch đáp án ở câu {string.Join(",", wrong)})"); continue; }
 
         var passages = (e["passages"]?.AsArray() ?? []).Where(p => p?["id"] is not null).ToDictionary(p => p!["id"]!.ToString(), p => p!["text"]?.ToString() ?? "");
-        var title = $"JLPT N2 {mm}/{yyyy}";
+        // Dùng đúng tiêu đề kỳ của 問題1–8 đã nạp (app web ghi "JLPT N2 7/2025", tháng không có số 0): khác tiêu đề là
+        // ExamCatalog tách thành hai đề trùng mã (lỗi đã gặp 12/11/2026).
+        string title;
+        using (var tcmd = db.CreateCommand())
+        {
+            tcmd.CommandText = "SELECT source_title FROM question WHERE source='exam' AND id LIKE $p LIMIT 1";
+            tcmd.Parameters.AddWithValue("$p", $"chjlpt-{key}-%");
+            title = tcmd.ExecuteScalar() as string ?? $"JLPT N2 {int.Parse(mm)}/{yyyy}";
+        }
         var instruction = new Dictionary<int, string>();
         foreach (var it in items.OrderBy(i => i!["mondai"]!.GetValue<int>()).ThenBy(i => i!["no"]!.GetValue<int>()))
         {

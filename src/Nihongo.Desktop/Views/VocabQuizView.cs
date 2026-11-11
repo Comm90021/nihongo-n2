@@ -56,7 +56,7 @@ sealed class VocabQuizView : UserControl
         for (var i = 0; i < 4; i++)
         {
             var n = i;
-            var label = Row(14, Text($"{i + 1}", 13, bold: true, wrap: false).Tint("Muted"),
+            var label = Ui.Numbered(Text($"{i + 1}", 13, bold: true, wrap: false).Tint("Muted").Also(t => t.Margin = new Thickness(0, 6, 0, 0)),
                 new TextBlock { Text = q.Options[i], FontSize = q.Kind == QuizKind.Meaning ? 16 : 20, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Yu Gothic UI, Segoe UI, Meiryo") });
             var b = new Button { Content = label, Classes = { "option" }, MinHeight = 60 };
             if (answered)
