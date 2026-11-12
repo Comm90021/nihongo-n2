@@ -73,6 +73,30 @@ public class ExamDataTests
         }
     }
 
+    /// <summary>Script chữ của bài nghe N1 (V24) và J.TEST (V25) có đủ trong nguồn, và Importer đã nạp vào noi_dung.db để app hiện được.</summary>
+    [Fact]
+    public void ScriptNgheN1VaJtestCoDuTrongNguonVaDb()
+    {
+        var root = Root();
+        if (root is null) return;
+        var n1 = Path.Combine(root, "V24_de_n1_that", "listening");
+        var jt = Path.Combine(root, "V25_jtest", "listening");
+        if (!Directory.Exists(n1) || !Directory.Exists(jt)) return;
+        foreach (var f in Directory.GetFiles(n1, "*.json"))
+            Assert.True(Load(Path.GetRelativePath(root, f))["script"]!.AsArray().Count(s => s!["text"]!.ToString().Trim() != "") >= 30, $"{Path.GetFileName(f)}: thiếu script N1");
+        foreach (var f in Directory.GetFiles(jt, "*.json"))
+            Assert.True(Load(Path.GetRelativePath(root, f))["script"]!.AsArray().Count(s => s!["text"]!.ToString().Trim() != "") >= 45, $"{Path.GetFileName(f)}: thiếu script J.TEST");
+
+        var db = Path.Combine(Path.GetDirectoryName(root)!, "NihongoApp", "data", "noi_dung.db");
+        if (!File.Exists(db)) return;
+        var store = new ContentStore(db);
+        foreach (var set in store.LoadListeningSets().Where(s => s.Id.StartsWith("listen-real-n1-") || s.Id.StartsWith("listen-jtest-")))
+        {
+            var withText = store.LoadListeningLines(set.Id).Count(l => l.Script.Trim() != "");
+            Assert.True(withText >= (set.Id.Contains("jtest") ? 45 : 30), $"{set.Id}: DB chỉ có {withText} câu có script");
+        }
+    }
+
     static JsonObject Load(string relative) => JsonNode.Parse(File.ReadAllText(Path.Combine(Root()!, relative)))!.AsObject();
 
     [Theory]

@@ -485,9 +485,22 @@ int ImportListeningJson(SqliteConnection db, int ord)
             var sections = (n["mondai"] ?? n["sections"])?.AsArray();
             if (sections is null) continue;
             var items = new List<string>();
+            // Lời thoại chữ (script[] {mondai?,no,text}): N1 có mondai, J.TEST chỉ có số câu liên tục.
+            var scriptText = new Dictionary<string, string>();
+            foreach (var sc in n["script"]?.AsArray() ?? [])
+            {
+                var text = sc?["text"]?.ToString() ?? "";
+                if (text.Trim() == "") continue;
+                scriptText[sc!["mondai"] is { } sm ? $"{sm}.{sc["no"]}" : sc["no"]!.ToString()] = text;
+            }
+            var lineRows = new List<(int Mondai, string Label, int Choices, int Answer, string Script)>();
             foreach (var s in sections)
                 foreach (var it in s!["items"]!.AsArray())
+                {
                     items.Add($"{s["mondai"]}.{it!["no"]}={it["answer"]}/{it["choices"]?.GetValue<int>() ?? 4}");
+                    var text = scriptText.GetValueOrDefault($"{s["mondai"]}.{it["no"]}") ?? scriptText.GetValueOrDefault(it["no"]!.ToString()) ?? "";
+                    lineRows.Add((s["mondai"]!.GetValue<int>(), it["no"]!.ToString(), it["choices"]?.GetValue<int>() ?? 4, it["answer"]!.GetValue<int>(), text));
+                }
 
             string audio = n["audio"]?.ToString() ?? "", script = "", examPdf = "", title;
             if (id.StartsWith("real-n1-"))
@@ -505,7 +518,10 @@ int ImportListeningJson(SqliteConnection db, int ord)
             else
             {
                 var kdir = Path.GetDirectoryName(audio) ?? "";
-                script = Directory.Exists(kdir) ? Directory.GetFiles(kdir, "*ans*.pdf").FirstOrDefault() ?? "" : "";
+                // Kỳ 186 đặt tên "186答案.pdf" (không có "ans"); kỳ 189 chỉ có file đáp án, không có đề đọc.
+                script = Directory.Exists(kdir)
+                    ? Directory.GetFiles(kdir, "*.pdf").FirstOrDefault(f => Path.GetFileName(f).Contains("ans", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(f).Contains("答案")) ?? ""
+                    : "";
                 title = $"J.TEST A-C kỳ {id.Split('-').Last()}";
             }
             // Trang đầu phần Nghe: sau trang cuối mà đề đọc cùng kỳ trỏ tới.
@@ -525,6 +541,10 @@ int ImportListeningJson(SqliteConnection db, int ord)
             if (!File.Exists(audio) || !File.Exists(examPdf)) { Console.WriteLine($"  thiếu file nghe {id}"); continue; }
             Exec(db, "INSERT INTO listening_set VALUES($i,$o,$t,$m,$s,$e,$p,$it)",
                 ("$i", $"listen-{id}"), ("$o", ord++), ("$t", title), ("$m", audio), ("$s", script), ("$e", examPdf), ("$p", page), ("$it", JsonSerializer.Serialize(items)));
+            var lord = 0;
+            foreach (var (mondai, label, choices, answer, text) in lineRows)
+                Exec(db, "INSERT OR REPLACE INTO listening_item VALUES($s,$o,$m,$l,$i,$op,$c,$a,$sc,$img)", ("$s", $"listen-{id}"), ("$o", lord++), ("$m", mondai), ("$l", label),
+                    ("$i", ""), ("$op", "[]"), ("$c", choices), ("$a", answer), ("$sc", text), ("$img", ""));
         }
     }
     return ord;

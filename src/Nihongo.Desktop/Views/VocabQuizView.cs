@@ -13,11 +13,15 @@ namespace Nihongo.Desktop.Views;
 /// Trắc nghiệm từ vựng 4 đáp án (thay thẻ lật). Chọn xong hiện ngay đúng/sai, cách đọc, Hán Việt, nghĩa, ví dụ.
 /// Mỗi câu cập nhật lịch ôn (đúng lên hộp, sai về hộp 0). Phím 1–4 chọn, Enter câu sau.
 /// </summary>
-sealed class VocabQuizView : UserControl
+sealed class VocabQuizView : UserControl, IKeyTarget
 {
     readonly List<VocabQuestion> _qs;
     readonly string _title;
     readonly List<VocabItem> _wrong = [];
+    readonly ContentControl _header = new();
+    readonly TransitioningContentControl _card = QuizNav.Fade();
+    readonly ContentControl _bar = new();
+    readonly AutoAdvance _auto = new();
     int _index, _correct;
     int? _picked;
 
@@ -33,18 +37,23 @@ sealed class VocabQuizView : UserControl
     {
         _qs = questions;
         _title = title;
-        Focusable = true;
-        KeyDown += OnKey;
-        AttachedToVisualTree += (_, _) => Focus();
-        Render();
+        DetachedFromVisualTree += (_, _) => { _auto.Cancel(); Speech.Stop(); };
+        Content = QuizNav.Layout(_header, _card, _bar);
+        Render(animate: false);
     }
 
-    void Render()
+    void RefreshBar()
     {
-        var header = Col(0,
+        var answered = _picked is not null;
+        _bar.Content = QuizNav.Bar(QuizNav.Hint(answered, _auto), _index >= _qs.Count - 1 ? "Xem kết quả  (Enter)" : "Câu sau  (Enter)", Next, answered, RefreshBar);
+    }
+
+    void Render(bool animate = true)
+    {
+        _header.Content = Col(0,
             TopBar(_title, Text($"Câu {Math.Min(_index + 1, _qs.Count)}/{_qs.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
-            Bar(_index, _qs.Count, 4).Also(b => b.Margin = new Thickness(0, 0, 0, 12)));
-        if (_index >= _qs.Count) { Content = Col(16, header, Summary()); return; }
+            Bar(_index, _qs.Count, 4));
+        if (_index >= _qs.Count) { _bar.Content = null; QuizNav.Show(_card, Scroll(Summary()), animate); return; }
 
         var q = _qs[_index];
         var answered = _picked is not null;
@@ -71,20 +80,21 @@ sealed class VocabQuizView : UserControl
         }
 
         var body = Col(18, Row(8, Badge(KindName[q.Kind]), Text(q.Prompt, 14, muted: true)), stem, options);
-        if (answered) body.Children.Add(Detail(q.Item, _picked == q.Answer));
-        Content = Col(16, header, Scroll(Card(body, 0).Also(c => c.Padding = new Thickness(28, 24))));
+        if (answered) body.Children.Add(Detail(q.Item, _picked == q.Answer, _auto.Cancel, RefreshBar));
+        QuizNav.Show(_card, Scroll(Card(body, 0).Also(c => c.Padding = new Thickness(28, 24))), animate);
+        RefreshBar();
     }
 
-    static Control Detail(VocabItem v, bool ok)
+    static Control Detail(VocabItem v, bool ok, Action cancelAuto, Action refreshBar)
     {
         var info = Col(8,
             Row(10, Badge(ok ? "Đúng" : "Sai", ok ? "good" : "bad"), Text(v.Word, 22, bold: true).Also(t => t.FontFamily = new FontFamily("Yu Gothic UI, Meiryo")),
                 Text(string.Join("  ·  ", new[] { v.Reading != v.Word ? v.Reading : "", v.HanViet }.Where(s => s != "")), 15, muted: true),
-                Btn("Nghe", () => Speech.Say(v.Reading != "" ? v.Reading : v.Word)).Also(b => b.Classes.Add("ghost"))),
+                Btn("Nghe", () => { cancelAuto(); refreshBar(); Speech.Say(v.Reading != "" ? v.Reading : v.Word); }).Also(b => b.Classes.Add("ghost"))),
             Text(v.Meaning, 16, bold: true).Tint("AccentInk"));
         if (v.Note != "") info.Children.Add(Text(v.Note, 13, muted: true));
         if (v.ExampleJa != "") info.Children.Add(Col(3, Text(v.ExampleJa, 15).Also(t => t.FontFamily = new FontFamily("Yu Gothic UI, Meiryo")), v.ExampleVi != "" ? Text(v.ExampleVi, 13, muted: true) : null));
-        info.Children.Add(Text($"Cấp {v.Level}{(v.FreqExam > 0 ? $" · ra đề {v.FreqExam} lần" : "")} · Enter: câu sau", 12, muted: true));
+        info.Children.Add(Text($"Cấp {v.Level}{(v.FreqExam > 0 ? $" · ra đề {v.FreqExam} lần" : "")}", 12, muted: true));
         return new Border { Classes = { "chip", "plain" }, Padding = new Thickness(18, 14), CornerRadius = new CornerRadius(12), Child = info };
     }
 
@@ -117,23 +127,33 @@ sealed class VocabQuizView : UserControl
         var ok = n == q.Answer;
         if (ok) _correct++; else _wrong.Add(q.Item);
         App.Progress.Review(q.Item.CardId, SrsKind.Card, ok);
-        Render();
+        _auto.Schedule(ok, Next);
+        Render(animate: false);
+        // Tự đọc từ vừa hỏi (nếu bật "Tự phát âm thanh"): nghe cách đọc ngay lúc thấy đáp án.
+        if (Prefs.AutoPlay) Speech.Say(q.Item.Reading != "" ? q.Item.Reading : q.Item.Word);
     }
 
     void Next()
     {
+        _auto.Cancel();
+        if (_picked is null || _index >= _qs.Count) return;
         _index++;
         _picked = null;
         Render();
     }
 
-    void OnKey(object? sender, KeyEventArgs e)
+    // Dùng cho Services/SelfTest (NIHONGO_SELFTEST=keys).
+    internal int TestIndex => _index;
+    internal bool TestAnswered => _picked is not null;
+    internal int TestAnswer => _qs[_index].Answer;
+
+    public bool HandleKey(KeyEventArgs e)
     {
-        if (_index >= _qs.Count) return;
-        if (_picked is null && e.Key is >= Key.D1 and <= Key.D4) Pick(e.Key - Key.D1);
-        else if (_picked is null && e.Key is >= Key.NumPad1 and <= Key.NumPad4) Pick(e.Key - Key.NumPad1);
+        if (_index >= _qs.Count) return false;
+        var digit = QuizNav.Digit(e.Key);
+        if (_picked is null && digit is >= 1 and <= 4) Pick(digit - 1);
         else if (_picked is not null && e.Key is Key.Enter or Key.Space or Key.Right) Next();
-        else return;
-        e.Handled = true;
+        else return false;
+        return true;
     }
 }

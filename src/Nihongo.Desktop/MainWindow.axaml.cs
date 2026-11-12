@@ -60,6 +60,9 @@ public partial class MainWindow : Window
         }
         SetCompact(Prefs.NavCompact);
         KeyDown += OnKey;
+        // Phím cho màn làm bài: bắt ở bước Tunnel nên không phụ thuộc ô nào đang giữ focus (xem IKeyTarget).
+        AddHandler(KeyDownEvent, OnKeyTunnel, RoutingStrategies.Tunnel);
+        Host.Transitions = [new Avalonia.Animation.DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(130) }];
         // Mở phóng to (trừ khi lần trước đóng ở cỡ thường); cỡ thường được kẹp vào vùng làm việc của màn hình
         // để thanh tiêu đề với nút thu nhỏ/đóng không bao giờ nằm ngoài màn hình. Tự kiểm giữ cỡ cố định.
         if (!SelfTest.Enabled)
@@ -79,6 +82,15 @@ public partial class MainWindow : Window
             ShowActivated = false; // không giành focus của cửa sổ người dùng đang dùng
             Opened += (_, _) => SelfTest.Run(this);
         }
+    }
+
+    void OnKeyTunnel(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || !Host.IsVisible || Host.Content is not IKeyTarget target) return;
+        // Ô gõ chữ và danh sách thả xuống tự xử lý phím của chúng.
+        if (e.Source is TextBox or ComboBox or ComboBoxItem) return;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return;
+        if (target.HandleKey(e)) e.Handled = true;
     }
 
     void OnKey(object? sender, KeyEventArgs e)
@@ -174,12 +186,19 @@ public partial class MainWindow : Window
     public void SetRailVisible(bool visible) => NavPane.IsVisible = visible;
 
     /// <summary>Thay nội dung chính. Màn hình con (thẻ học, quiz) gọi lại hàm này khi xong.</summary>
-    public void Show(Control view)
+    public void Show(Control view, bool fade = false)
     {
         GeminiSlot.IsVisible = false;
         Host.IsVisible = true;
+        // Hiện dần khi chuyển tab. Chỉ làm cho màn không có khung web: cửa sổ con WebView2 không mờ được và
+        // phải được gỡ/gắn ngay trong một lượt (xem BorrowGemini).
+        if (fade) Host.Opacity = 0;
         Host.Content = view;
+        if (fade) Avalonia.Threading.Dispatcher.UIThread.Post(() => Host.Opacity = 1, Avalonia.Threading.DispatcherPriority.Background);
+        else Host.Opacity = 1;
     }
+
+    static readonly HashSet<string> FadeTags = ["today", "vocab", "practice", "exam", "reading", "listening", "knowledge", "settings"];
 
     public void ShowSection(string tag)
     {
@@ -198,7 +217,7 @@ public partial class MainWindow : Window
             "knowledge" => new KnowledgeView(),
             "denken" => new DenkenView(),
             _ => new TodayView(),
-        });
+        }, FadeTags.Contains(tag) || !Sections.Any(s => s.Tag == tag));
     }
 
     // ---------------------------------------------------------------- Gemini

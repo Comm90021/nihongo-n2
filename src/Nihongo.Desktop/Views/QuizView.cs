@@ -11,12 +11,16 @@ using static Nihongo.Desktop.Views.Ui;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>Làm từng câu, có đáp án và giải thích ngay. Câu sai vào lịch ôn và được chọn lý do sai.</summary>
-sealed class QuizView : UserControl
+sealed class QuizView : UserControl, IKeyTarget
 {
     readonly List<Question> _questions;
     readonly string _title;
     readonly List<(Question Q, int Picked)> _wrong = [];
     readonly string _session = $"quiz:{DateTime.Now:yyyyMMddHHmmssfff}";
+    readonly ContentControl _header = new();
+    readonly TransitioningContentControl _card = QuizNav.Fade();
+    readonly ContentControl _bar = new();
+    readonly AutoAdvance _auto = new();
     int _index, _correct;
     int? _picked;
 
@@ -24,27 +28,33 @@ sealed class QuizView : UserControl
     {
         _questions = questions.ToList();
         _title = title;
-        Focusable = true;
-        KeyDown += OnKey;
-        AttachedToVisualTree += (_, _) => Focus();
-        Render();
+        DetachedFromVisualTree += (_, _) => _auto.Cancel();
+        Content = QuizNav.Layout(_header, _card, _bar);
+        Render(animate: false);
     }
 
     Question Current => _questions[_index];
 
-    void Render()
+    void RefreshBar()
     {
-        var header = Col(0, TopBar(_title, Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
-            Bar(_index, Math.Max(1, _questions.Count), 4).Also(b => b.Margin = new Thickness(0, 0, 0, 12)));
+        var answered = _picked is not null;
+        _bar.Content = QuizNav.Bar(QuizNav.Hint(answered, _auto), _index >= _questions.Count - 1 ? "Xem kết quả  (Enter)" : "Câu sau  (Enter)", Next, answered, RefreshBar);
+    }
+
+    void Render(bool animate = true)
+    {
+        _header.Content = Col(0, TopBar(_title, Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
+            Bar(_index, Math.Max(1, _questions.Count), 4).Also(b => b.Margin = new Thickness(0, 0, 0, 0)));
         if (_index >= _questions.Count)
         {
-            Content = Col(12, header, Card(Col(10,
+            _bar.Content = null;
+            QuizNav.Show(_card, Card(Col(10,
                 Text($"Xong: đúng {_correct}/{_questions.Count}", 22, bold: true),
                 Text("Câu sai đã vào lịch ôn, sẽ quay lại ở trang Hôm nay.", muted: true),
                 Row(8,
                     _wrong.Count > 0 ? Btn($"Chữa bài ({_wrong.Count} câu sai)", OpenReview, primary: true) : null,
                     _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry) : null,
-                    Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))));
+                    Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))), animate);
             return;
         }
 
@@ -91,18 +101,20 @@ sealed class QuizView : UserControl
             {
                 var reasons = Row(8, Text("Vì sao sai?", 13, muted: true));
                 foreach (var r in new[] { WrongReason.Meaning, WrongReason.Connection, WrongReason.Nuance, WrongReason.Unknown })
-                    reasons.Children.Add(Btn(TodayView.Label(r), () => { App.Progress.SetReason(q.Id, r); }));
+                    reasons.Children.Add(Btn(TodayView.Label(r), () => { _auto.Cancel(); App.Progress.SetReason(q.Id, r); RefreshBar(); }));
                 body.Children.Add(reasons);
             }
-            body.Children.Add(Row(8, Btn("Nghe câu", () => Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText))),
-                Btn("Câu sau  (Enter)", Next, primary: true)));
+            body.Children.Add(Row(8, Btn("Nghe câu", () => { _auto.Cancel(); RefreshBar(); Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText)); })));
         }
-        Content = Col(12, header, Scroll(Card(body)));
+        QuizNav.Show(_card, Scroll(Card(body)), animate);
+        RefreshBar();
     }
 
     void Pick(int n)
     {
         if (_picked is not null) return;
+        var opt = Current.Options.ElementAtOrDefault(n - 1);
+        if (n < 1 || string.IsNullOrWhiteSpace(opt)) return;
         _picked = n;
         var ok = n == Current.Answer;
         if (ok) _correct++;
@@ -112,7 +124,8 @@ sealed class QuizView : UserControl
             App.Progress.LogWrong(Current.Id, n, _session);
         }
         App.Progress.Review(Current.Id, SrsKind.Question, ok);
-        Render();
+        _auto.Schedule(ok, Next); // trước Render để thanh dưới hiện "Tự chuyển sau…"
+        Render(animate: false);
     }
 
     void OpenReview() =>
@@ -122,17 +135,25 @@ sealed class QuizView : UserControl
 
     void Next()
     {
+        _auto.Cancel();
+        if (_picked is null || _index >= _questions.Count) return;
         _index++;
         _picked = null;
         Render();
     }
 
-    void OnKey(object? sender, KeyEventArgs e)
+    // Dùng cho Services/SelfTest (NIHONGO_SELFTEST=keys).
+    internal int TestIndex => _index;
+    internal bool TestAnswered => _picked is not null;
+    internal Question TestCurrent => Current;
+
+    public bool HandleKey(KeyEventArgs e)
     {
-        if (_index >= _questions.Count) return;
-        if (_picked is null && e.Key is >= Key.D1 and <= Key.D4) Pick(e.Key - Key.D0);
+        if (_index >= _questions.Count) return false;
+        var digit = QuizNav.Digit(e.Key);
+        if (_picked is null && digit is >= 1 and <= 4) Pick(digit);
         else if (_picked is not null && e.Key is Key.Enter or Key.Space or Key.Right) Next();
-        else return;
-        e.Handled = true;
+        else return false;
+        return true;
     }
 }

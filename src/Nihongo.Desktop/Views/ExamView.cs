@@ -18,7 +18,7 @@ namespace Nihongo.Desktop.Views;
 /// mở lại đề là làm tiếp. Nộp bài: chấm theo 言語知識 (問題1–9) và 読解 (問題10–14), câu sai vào lịch ôn.
 /// Phím: 1–4 chọn, ←/→ câu trước/sau, F đánh dấu xem lại.
 /// </summary>
-sealed class ExamView : UserControl
+sealed class ExamView : UserControl, IKeyTarget
 {
     readonly ExamDef _exam;
     readonly IReadOnlyList<ExamItem> _items;
@@ -48,9 +48,7 @@ sealed class ExamView : UserControl
         _items = exam.Items;
         _remain = exam.Minutes * 60;
         LoadDraft();
-        Focusable = true;
-        KeyDown += OnKey;
-        AttachedToVisualTree += (_, _) => { Focus(); App.Shell.SetRailVisible(false); };
+        AttachedToVisualTree += (_, _) => App.Shell.SetRailVisible(false);
         DetachedFromVisualTree += (_, _) => { _timer.Stop(); Speech.Stop(); if (!_submitted) SaveDraft(); App.Shell.SetRailVisible(true); };
 
         _clockPill = new Border { Classes = { "chip" }, Padding = new Thickness(14, 9), CornerRadius = new CornerRadius(10), Child = Row(8, Icon(Glyph.Timer, 16).Tint("AccentInk"), _clock.Tint("AccentInk")) };
@@ -178,9 +176,7 @@ sealed class ExamView : UserControl
     /// </summary>
     Control ListeningCard(ExamItem item)
     {
-        var lines = item.Passage.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();
-        var spoken = item.Mondai == ExamScore.ListeningBase + 4 ? lines.Take(1) : lines;
-        var say = string.Join("。", spoken.Select(SpeechLine));
+        var say = SayText(item);
         var script = new ContentControl { IsVisible = _submitted, Content = Passage.Build(item.Passage) };
         var toggle = Btn(_submitted ? "Ẩn lời thoại" : "Hiện lời thoại", () => { });
         toggle.Click += (_, _) => { script.IsVisible = !script.IsVisible; toggle.Content = script.IsVisible ? "Ẩn lời thoại" : "Hiện lời thoại"; };
@@ -197,6 +193,19 @@ sealed class ExamView : UserControl
                 new ScrollViewer { Content = script, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
             },
         }, 0).Also(b => b.Padding = new Thickness(24, 20));
+    }
+
+    static string SayText(ExamItem item)
+    {
+        var lines = item.Passage.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).ToList();
+        var spoken = item.Mondai == ExamScore.ListeningBase + 4 ? lines.Take(1) : lines;
+        return string.Join("。", spoken.Select(SpeechLine));
+    }
+
+    /// <summary>Tự đọc lời thoại khi sang câu nghe (đề mô phỏng không có file âm thanh). Chỉ khi vào câu, không đọc lại khi chọn đáp án.</summary>
+    void AutoSpeak()
+    {
+        if (Prefs.AutoPlay && !_submitted && IsListening(Cur) && !Cur.HasPdf && Cur.Passage != "") Speech.Say(SayText(Cur));
     }
 
     /// <summary>Bỏ tên người nói ("男：", "店長「…」", "駅員：") để giọng máy chỉ đọc lời thoại.</summary>
@@ -351,7 +360,16 @@ sealed class ExamView : UserControl
         _picked[_current] = n;
         SaveDraft();
         Render();
+        // Thi thử chưa chấm nên không biết đúng sai: bật "Tự chuyển" (khi đúng hoặc luôn) thì chọn xong sang câu sau sau 0,5 giây.
+        // Chọn nhầm thì bấm ← để quay lại. Không tự chuyển ở câu cuối.
+        if (Prefs.AutoNext != 0 && _current < _items.Count - 1)
+        {
+            var at = ++_autoToken;
+            DispatcherTimer.RunOnce(() => { if (at == _autoToken && !_submitted) Go(_current + 1); }, TimeSpan.FromMilliseconds(500));
+        }
     }
+
+    int _autoToken;
 
     void ToggleFlag()
     {
@@ -363,10 +381,11 @@ sealed class ExamView : UserControl
     void Go(int index)
     {
         if (index < 0 || index >= _items.Count || index == _current) return;
+        _autoToken++;
         Speech.Stop();
         _current = index;
         Render();
-        Focus();
+        AutoSpeak();
     }
 
     void Submit() => Submit(force: false);
@@ -481,18 +500,17 @@ sealed class ExamView : UserControl
     internal int TestFirstPdf() => _items.ToList().FindIndex(i => i.HasPdf);
     internal int TestFirstPassage() => _items.ToList().FindIndex(i => i.Passage != "");
 
-    void OnKey(object? sender, KeyEventArgs e)
+    public bool HandleKey(KeyEventArgs e)
     {
-        if (e.Source is TextBox) return;
+        var digit = QuizNav.Digit(e.Key);
         switch (e.Key)
         {
-            case >= Key.D1 and <= Key.D4: Pick(e.Key - Key.D0); break;
-            case >= Key.NumPad1 and <= Key.NumPad4: Pick(e.Key - Key.NumPad0); break;
-            case Key.Right: Go(_current + 1); break;
+            case >= Key.D1 and <= Key.D9 or >= Key.NumPad1 and <= Key.NumPad9: Pick(digit); break;
+            case Key.Right or Key.Enter: Go(_current + 1); break;
             case Key.Left: Go(_current - 1); break;
             case Key.F when !_submitted: ToggleFlag(); break;
-            default: return;
+            default: return false;
         }
-        e.Handled = true;
+        return true;
     }
 }

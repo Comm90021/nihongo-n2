@@ -8,7 +8,7 @@ using static Nihongo.Desktop.Views.Ui;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>Thẻ học: xem mặt trước, lật xem nghĩa, chọn Nhớ hoặc Quên. Quên thì thẻ quay lại cuối hàng.</summary>
-sealed class FlashView : UserControl
+sealed class FlashView : UserControl, IKeyTarget
 {
     readonly Queue<VocabItem> _queue;
     readonly int _total;
@@ -21,9 +21,6 @@ sealed class FlashView : UserControl
         _queue = new Queue<VocabItem>(cards);
         _total = _queue.Count;
         _title = title;
-        Focusable = true;
-        KeyDown += OnKey;
-        AttachedToVisualTree += (_, _) => Focus();
         Render();
     }
 
@@ -80,13 +77,13 @@ sealed class FlashView : UserControl
         Render();
     }
 
-    void OnKey(object? sender, KeyEventArgs e)
+    public bool HandleKey(KeyEventArgs e)
     {
-        if (_queue.Count == 0) return;
+        if (_queue.Count == 0) return false;
         if (!_revealed && e.Key is Key.Space or Key.Enter) Reveal();
         else if (_revealed && e.Key is Key.D1 or Key.NumPad1) Answer(false);
         else if (_revealed && e.Key is Key.D2 or Key.NumPad2) Answer(true);
-        else return;
-        e.Handled = true;
+        else return false;
+        return true;
     }
 }

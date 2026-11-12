@@ -172,7 +172,7 @@ sealed class DenkenView : UserControl
 }
 
 /// <summary>Làm từng câu 電験: trang đề bên trái (lời giải bị che), phiếu trả lời bên phải. Có chế độ thi thử bấm giờ.</summary>
-sealed class DenkenSessionView : UserControl
+sealed class DenkenSessionView : UserControl, IKeyTarget
 {
     // Che phần 【ワンポイント解説】/【解答】 và mọi thứ sau đó trên trang denken-ou, rồi cuộn tới đề bài.
     const string HideScript = """
@@ -233,7 +233,7 @@ sealed class DenkenSessionView : UserControl
             _clock.Text = Clock(_left);
             _timer.Start();
         }
-        DetachedFromVisualTree += (_, _) => _timer?.Stop();
+        DetachedFromVisualTree += (_, _) => { _timer?.Stop(); _auto.Cancel(); };
         Go(0);
     }
 
@@ -243,6 +243,7 @@ sealed class DenkenSessionView : UserControl
 
     async void Go(int i)
     {
+        _auto.Cancel();
         if (_qs.Count == 0) { _panel.Content = Text("Không có câu nào.", muted: true); return; }
         _index = Math.Clamp(i, 0, _qs.Count - 1);
         _counter.Text = $"Câu {_index + 1}/{_qs.Count}";
@@ -253,6 +254,35 @@ sealed class DenkenSessionView : UserControl
     async void SetSolution(bool show)
     {
         try { await (await _web.Ready).ExecuteScriptAsync($"{HideScript}({(show ? "false" : "true")})"); } catch { }
+    }
+
+    readonly AutoAdvance _auto = new();
+
+    void Choose(int n)
+    {
+        var s = S;
+        var q = Q;
+        if (q.Choice == 0 || n < 1 || (_submitted && s.Picked > 0)) return;
+        s.Picked = n;
+        if (_submitted)
+        {
+            Record(n == q.Choice);
+            SetSolution(true);
+            // Luyện thường (không bấm giờ): chọn xong tự sang câu sau theo cài đặt "Tự chuyển".
+            if (_minutes == 0 && _index < _qs.Count - 1) _auto.Schedule(n == q.Choice, () => Go(_index + 1));
+        }
+        Render();
+    }
+
+    /// <summary>Phím: 1–5 chọn, Enter/→ câu sau, ← câu trước. Khung web đang giữ focus thì phím đi vào trang, không tới đây.</summary>
+    public bool HandleKey(Avalonia.Input.KeyEventArgs e)
+    {
+        var digit = QuizNav.Digit(e.Key);
+        if (digit is >= 1 and <= 5 && Q.Choice > 0) Choose(digit);
+        else if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Right && _index < _qs.Count - 1) Go(_index + 1);
+        else if (e.Key == Avalonia.Input.Key.Left && _index > 0) Go(_index - 1);
+        else return false;
+        return true;
     }
 
     void Record(bool correct)
@@ -285,13 +315,7 @@ sealed class DenkenSessionView : UserControl
                     if (n == q.Choice) b.Classes.Add("correct");
                     else if (n == s.Picked) b.Classes.Add("wrong");
                 }
-                b.Click += (_, _) =>
-                {
-                    if (_submitted && s.Picked > 0) return;
-                    s.Picked = n;
-                    if (_submitted) { Record(n == q.Choice); SetSolution(true); }
-                    Render();
-                };
+                b.Click += (_, _) => Choose(n);
                 opts.Children.Add(b);
             }
             col.Children.Add(Text("Chọn đáp án", 14, bold: true));

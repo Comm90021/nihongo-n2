@@ -20,6 +20,7 @@ sealed class SettingsView : UserControl
             Header("Cài đặt", "Đổi là áp dụng ngay, tự lưu."),
             Card(Reading()),
             Card(Look()),
+            Card(Practice()),
             Card(Exam()),
             Card(Backup()),
             Card(Google()),
@@ -65,6 +66,24 @@ sealed class SettingsView : UserControl
             compact,
             autoLookup,
             Text("Phím tắt: Ctrl+B thu gọn/mở thanh bên · F11 toàn màn hình · Esc thoát toàn màn hình.", 13, muted: true));
+    }
+
+    /// <summary>Tự chuyển câu, độ trễ, tự phát âm thanh (Luyện đề, Từ vựng, Thi thử, Nghe).</summary>
+    static Control Practice()
+    {
+        var mode = new ComboBox { ItemsSource = new[] { "Tắt (tự bấm Enter)", "Chỉ khi trả lời đúng", "Luôn tự chuyển" }, SelectedIndex = Prefs.AutoNext };
+        mode.SelectionChanged += (_, _) => Prefs.SetAutoNext(mode.SelectedIndex);
+        int[] delays = [600, 1000, 1500, 2000, 3000];
+        var delay = new ComboBox { ItemsSource = delays.Select(d => $"{d / 1000.0:0.#} giây").ToList(), SelectedIndex = Math.Max(0, Array.IndexOf(delays, Prefs.AutoNextMs)) };
+        delay.SelectionChanged += (_, _) => { if (delay.SelectedIndex >= 0) Prefs.SetAutoNextMs(delays[delay.SelectedIndex]); };
+        var play = new CheckBox { Content = "Tự phát âm thanh (bài nghe khi mở đề, câu nghe trong thi thử, đọc từ sau khi trả lời)", IsChecked = Prefs.AutoPlay };
+        play.IsCheckedChanged += (_, _) => Prefs.SetAutoPlay(play.IsChecked == true);
+        return Col(12,
+            Text("Làm bài", 17, bold: true),
+            Labeled("Tự chuyển câu", mode),
+            Labeled("Chờ trước khi chuyển", delay),
+            play,
+            Text("Câu sai luôn đứng lại để đọc giải thích (chế độ \"chỉ khi đúng\"). Phím: 1–4 chọn, Enter/Space/→ câu sau. Thi thử: ←/→ đổi câu, F đánh dấu.", 13, muted: true));
     }
 
     /// <summary>Ngày thi và cấp: trang Hôm nay đếm ngược theo đây (sau 06/12/2026 đổi sang kỳ kế hoặc N1).</summary>
