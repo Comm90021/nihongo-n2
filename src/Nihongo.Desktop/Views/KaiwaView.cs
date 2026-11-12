@@ -40,7 +40,7 @@ sealed class KaiwaView : UserControl
         if (topics.Count == 0) list.Children.Add(Text("Chưa có dữ liệu Kaiwa: chạy build.ps1 để dựng lại noi_dung.db.", muted: true));
         foreach (var t in topics)
         {
-            var items = t.Questions.Select(q => new KaiwaPrompt(q.Ja, q.Vi, "", "", "")).ToList();
+            var items = t.Questions.Select(q => new KaiwaPrompt(q.Ja, q.Vi, q.Answer, q.AnswerVi, "")).ToList();
             list.Children.Add(Card(Line(
                 Col(2, Text($"{t.Jp} · {t.Vi}", 15, bold: true), Text($"{t.Questions.Count} câu hỏi{(t.Register != "" ? $" · {t.Register}" : "")}", 12, muted: true)),
                 Row(6,
@@ -135,27 +135,26 @@ sealed class KaiwaPracticeView : UserControl
         var vi = Text(item.Vi, 15, muted: true).Also(t => t.IsVisible = Prefs.ShowVi);
         var input = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 90, Watermark = "Gõ câu trả lời bằng tiếng Nhật (bộ gõ IME)…", Text = _answers.GetValueOrDefault(_index, "") };
         input.TextChanged += (_, _) => _answers[_index] = input.Text ?? "";
-        var model = Col(8);
+        // Đáp án mẫu hiện sẵn ngay dưới câu hỏi (có nút nghe; bấm "Ẩn" nếu muốn tự trả lời trước rồi mới xem).
+        Control? sample = null;
         if (item.Answer != "")
         {
-            var shown = false;
-            Control? panel = null;
-            model.Children.Add(Btn("Xem câu trả lời mẫu", () =>
-            {
-                shown = !shown;
-                panel ??= Card(Col(8,
-                    Line(Text("Câu trả lời mẫu", 13, muted: true), IconBtn(Glyph.Play, "Nghe câu mẫu", () => Speech.Say(item.Answer))),
-                    Reading(Text(item.Answer, 17)),
-                    item.AnswerVi != "" ? Text(item.AnswerVi, 14, muted: true) : null,
-                    item.Tip != "" ? Text("Mẹo: " + item.Tip, 14).Tint("AccentInk") : null), 0);
-                if (shown) model.Children.Add(panel); else model.Children.Remove(panel);
-            }));
+            var body = Col(6,
+                Reading(Text(item.Answer, 18)),
+                item.AnswerVi != "" ? Text(item.AnswerVi, 14, muted: true) : null,
+                item.Tip != "" ? Text("Mẹo: " + item.Tip, 14).Tint("AccentInk") : null);
+            var hide = Btn("Ẩn", () => { }).Also(b => b.Classes.Add("ghost"));
+            hide.Click += (_, _) => { body.IsVisible = !body.IsVisible; hide.Content = body.IsVisible ? "Ẩn" : "Hiện"; };
+            sample = Card(Col(8,
+                Line(Text("Câu trả lời mẫu", 13, bold: true).Tint("AccentInk"), Row(6, IconBtn(Glyph.Play, "Nghe câu mẫu", () => Speech.Say(item.Answer)), hide)),
+                body), 0);
         }
         _body.Content = Col(14,
             Text($"Câu {_index + 1}/{_items.Count}", 13, muted: true),
             Card(Col(10,
                 Line(Reading(Text(item.Ja, 22, bold: true)), IconBtn(Glyph.Play, "Nghe câu hỏi", () => Speech.Say(item.Ja))),
                 Line(vi, Btn("Hiện/ẩn nghĩa", () => { vi.IsVisible = !vi.IsVisible; })),
+                sample,
                 Divider(),
                 input,
                 Row(8,
@@ -167,8 +166,7 @@ sealed class KaiwaPracticeView : UserControl
                     }, "🎤 Nói câu trả lời"),
                     Btn("Nhờ Gemini sửa", () => _ = App.Shell.AskGemini(Correct(item, input.Text ?? "", _spoken.Contains(_index))), primary: true),
                     Btn("Nghe câu của mày", () => Speech.Say(input.Text ?? "")),
-                    Btn("Gợi ý cách trả lời", () => _ = App.Shell.AskGemini(Hint(item)))),
-                model), 0),
+                    Btn("Gợi ý cách trả lời", () => _ = App.Shell.AskGemini(Hint(item))))), 0),
             Line(Btn("‹ Câu trước", () => { _index--; Render(); }, enabled: _index > 0),
                 Btn("Câu tiếp ›", () => { _index++; Render(); }, primary: true, enabled: _index < _items.Count - 1)));
     }

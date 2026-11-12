@@ -39,7 +39,8 @@ public sealed record ListeningLine(string SetId, int Mondai, string Label, strin
 }
 
 public sealed record KaiwaTopic(string Key, string Jp, string Vi, string Register, IReadOnlyList<KaiwaQuestion> Questions);
-public sealed record KaiwaQuestion(string Id, string Ja, string Vi);
+/// <summary>Câu hỏi hội thoại kèm đáp án mẫu (tiếng Nhật + dịch Việt) nếu có.</summary>
+public sealed record KaiwaQuestion(string Id, string Ja, string Vi, string Answer = "", string AnswerVi = "");
 /// <summary>Thẻ mẫu câu: tiếng Việt → nói bằng tiếng Nhật, kèm điểm chính và giải thích.</summary>
 public sealed record KaiwaCard(string Id, string Deck, string DeckLabel, string Vi, string Ja, string Point, string Explain)
 {
@@ -97,7 +98,8 @@ public sealed partial class ContentStore
 
     public IReadOnlyList<KaiwaTopic> LoadKaiwa()
     {
-        var qs = Query("SELECT id,topic,ja,vi FROM kaiwa_q ORDER BY topic, ord", r => (Topic: r.GetString(1), Q: new KaiwaQuestion(r.GetString(0), r.GetString(2), r.GetString(3))))
+        var qs = Query("SELECT id,topic,ja,vi,COALESCE(answer,''),COALESCE(answer_vi,'') FROM kaiwa_q ORDER BY topic, ord",
+                r => (Topic: r.GetString(1), Q: new KaiwaQuestion(r.GetString(0), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5))))
             .GroupBy(x => x.Topic).ToDictionary(g => g.Key, g => (IReadOnlyList<KaiwaQuestion>)g.Select(x => x.Q).ToList());
         return Query("SELECT key,jp,vi,register FROM kaiwa_topic ORDER BY ord",
             r => new KaiwaTopic(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), qs.GetValueOrDefault(r.GetString(0)) ?? []));

@@ -266,6 +266,13 @@ static class SelfTest
     {
         log.Add($"Bộ nhận giọng tiếng Nhật: {(SpeechInput.Available ? "có" : "KHÔNG")}");
         log.Add($"Bộ mới (trực tuyến): {await SpeechInput.ProbeNewAsync()}");
+        var rec = await SpeechInput.ProbeRecordingAsync(2);
+        log.Add($"Ghi âm thử 2 giây (phòng im, không có người nói): {rec}");
+        if (rec.StartsWith('C') || rec.StartsWith('/'))
+        {
+            var path = rec[..rec.LastIndexOf(" (", StringComparison.Ordinal)];
+            log.Add($"Nhận dạng file vừa ghi (mong đợi rỗng): \"{await SpeechInput.RecognizeFileAsync(path)}\"");
+        }
         var cards = App.Content.LoadKaiwaCards().Where(c => c.Ja.Length is > 8 and < 40).Take(6).ToList();
         foreach (var c in cards)
         {
@@ -287,6 +294,12 @@ static class SelfTest
         w.Show(view); await Task.Delay(800);
         Press(w, Avalonia.Input.Key.Space); await Task.Delay(800);
         Shot(w, dir, "m1_the_mau_cau");
+        // Luyện trả lời: đáp án mẫu hiện sẵn dưới câu hỏi.
+        var topics = App.Content.LoadKaiwa();
+        log.Add($"Câu hỏi hội thoại có đáp án mẫu: {topics.Sum(t => t.Questions.Count(q => q.Answer != ""))}/{topics.Sum(t => t.Questions.Count)}");
+        var tp = topics.First(t => t.Key == "shigoto");
+        w.Show(new KaiwaPracticeView(tp.Questions.Select(q => new KaiwaPrompt(q.Ja, q.Vi, q.Answer, q.AnswerVi, "")).ToList(), tp.Jp, tp.Register)); await Task.Delay(800);
+        Shot(w, dir, "m0_luyen_tra_loi");
         // Màn kết quả đọc theo với một câu nghe thiếu đoạn sau (không cần micro).
         var partial = card.Ja[..(card.Ja.Length * 2 / 3)];
         w.Show(new Avalonia.Controls.ScrollViewer { Content = SpeakFeedback.Build(card.Ja, partial) }); await Task.Delay(800);

@@ -31,7 +31,7 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
         CREATE TABLE denken(id TEXT PRIMARY KEY, ord INTEGER, level TEXT, subject_code TEXT, subject_name TEXT, stage TEXT, year_label TEXT, year INTEGER, qno INTEGER,
           topic_code TEXT, topic_name TEXT, method TEXT, formula TEXT, difficulty INTEGER, answer TEXT, kind TEXT, url TEXT, week INTEGER);
         CREATE TABLE kaiwa_topic(key TEXT PRIMARY KEY, ord INTEGER, jp TEXT, vi TEXT, register TEXT);
-        CREATE TABLE kaiwa_q(id TEXT PRIMARY KEY, topic TEXT, ord INTEGER, ja TEXT, vi TEXT);
+        CREATE TABLE kaiwa_q(id TEXT PRIMARY KEY, topic TEXT, ord INTEGER, ja TEXT, vi TEXT, answer TEXT DEFAULT '', answer_vi TEXT DEFAULT '');
         CREATE TABLE kaiwa_card(id TEXT PRIMARY KEY, deck TEXT, deck_label TEXT, ord INTEGER, vi TEXT, ja TEXT, point TEXT, explain TEXT);
         CREATE TABLE mensetsu(id TEXT PRIMARY KEY, ord INTEGER, cat TEXT, q TEXT, vi TEXT, a TEXT, av TEXT, tip TEXT);
         CREATE TABLE site(id TEXT PRIMARY KEY, ord INTEGER, area TEXT, name TEXT, url TEXT, integration TEXT, embeddable INTEGER, note TEXT);
@@ -838,14 +838,32 @@ int ImportExams(SqliteConnection db)
     {
         var k = JsonNode.Parse(File.ReadAllText(kwFile))!;
         var to = 0;
+        // Đáp án mẫu (C04, Claude soạn 12/11/2026): { "<mã chủ đề>": [["câu trả lời Nhật", "dịch Việt"], ...] } theo đúng thứ tự câu hỏi.
+        var answers = new Dictionary<string, JsonArray>();
+        var ansDir = P("antigravity_out", "C04_kaiwa_dap_an");
+        if (Directory.Exists(ansDir))
+            foreach (var f in Directory.GetFiles(ansDir, "*.json").OrderBy(f => f))
+                foreach (var (topic, arr) in JsonNode.Parse(File.ReadAllText(f))!.AsObject())
+                    if (arr is JsonArray a) answers[topic] = a;
+        var withAnswer = 0;
         foreach (var t in k["topics"]!.AsArray())
         {
             var key = t!["key"]!.ToString();
             Exec(db, "INSERT INTO kaiwa_topic VALUES($k,$o,$j,$v,$r)", ("$k", key), ("$o", to++), ("$j", t["jp"]!.ToString()), ("$v", t["vi"]!.ToString()), ("$r", t["register"]?.ToString() ?? ""));
             var i = 0;
-            foreach (var q in t["questions"]!.AsArray())
-            { Exec(db, "INSERT INTO kaiwa_q VALUES($i,$t,$o,$j,$v)", ("$i", $"kw-{key}-{++i:000}"), ("$t", key), ("$o", i), ("$j", q!["ja"]!.ToString()), ("$v", q["vi"]?.ToString() ?? "")); kw++; }
+            var qs = t["questions"]!.AsArray();
+            if (answers.TryGetValue(key, out var ta) && ta.Count != qs.Count) { Console.WriteLine($"  đáp án mẫu {key}: {ta.Count} ≠ {qs.Count} câu hỏi, bỏ chủ đề này"); answers.Remove(key); }
+            foreach (var q in qs)
+            {
+                var pair = answers.TryGetValue(key, out var aa) ? aa[i]?.AsArray() : null;
+                var ja = pair?[0]?.ToString() ?? "";
+                if (ja != "") withAnswer++;
+                Exec(db, "INSERT INTO kaiwa_q VALUES($i,$t,$o,$j,$v,$a,$av)", ("$i", $"kw-{key}-{++i:000}"), ("$t", key), ("$o", i), ("$j", q!["ja"]!.ToString()), ("$v", q["vi"]?.ToString() ?? ""),
+                    ("$a", ja), ("$av", pair?[1]?.ToString() ?? ""));
+                kw++;
+            }
         }
+        Console.WriteLine($"Hội thoại: {kw} câu hỏi, {withAnswer} có đáp án mẫu");
         foreach (var d in k["decks"]!.AsArray())
         {
             var key = d!["key"]!.ToString();

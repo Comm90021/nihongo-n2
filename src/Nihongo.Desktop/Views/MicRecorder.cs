@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Layout;
@@ -10,17 +10,23 @@ using static Nihongo.Desktop.Views.Ui;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>
-/// Nút micro: bấm để bắt đầu nói, bấm lại để dừng. Hiện chữ nghe được ngay khi đang nói, xong thì gọi <c>onFinal</c>.
+/// Nút micro: bấm để bắt đầu ghi âm, bấm lại để dừng. Không hiện chữ chạy trong lúc nói: ghi xong mới nhận dạng một lần
+/// rồi gọi <c>onFinal</c> với toàn bộ chữ. Với bộ cũ có thêm nút nghe lại giọng vừa ghi.
 /// Dùng chung cho thẻ mẫu câu (đọc theo, chấm điểm) và luyện trả lời (nói thay gõ).
 /// </summary>
 sealed class MicRecorder : StackPanel
 {
     readonly SpeechInput _input = new();
     readonly Button _button;
+    readonly Button _replay = new() { Content = "▶ Nghe lại", IsVisible = false, Focusable = false };
     readonly TextBlock _status = Text("", 13, muted: true);
     readonly Button _fix = new() { Content = "Bật nhận giọng chính xác hơn", IsVisible = false, Focusable = false };
+    readonly Avalonia.Threading.DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly Action<string> _onFinal;
     readonly string _idleText;
+    Audio? _player;
+    DateTime _startedAt;
+    string _note = "";
 
     public MicRecorder(Action<string> onFinal, string idleText = "🎤 Nói (R)")
     {
@@ -31,48 +37,69 @@ sealed class MicRecorder : StackPanel
         _button = new Button { Content = idleText, Focusable = false };
         _button.Click += (_, _) => Toggle();
         Children.Add(_button);
+        _replay.Classes.Add("ghost");
+        _replay.Click += (_, _) => Replay();
+        Children.Add(_replay);
         Children.Add(_status.Also(s => { s.VerticalAlignment = VerticalAlignment.Center; s.MaxWidth = 520; }));
         _fix.Classes.Add("ghost");
         _fix.Click += (_, _) => SpeechInput.OpenSpeechPrivacy();
         Children.Add(_fix);
+        _clock.Tick += (_, _) => ShowRecording();
         if (!SpeechInput.Available)
         {
             _button.IsEnabled = false;
             _status.Text = "Máy chưa có bộ nhận giọng tiếng Nhật (Cài đặt Windows → Ngôn ngữ → Tiếng Nhật → Giọng nói).";
         }
-        DetachedFromVisualTree += (_, _) => _input.Dispose();
+        DetachedFromVisualTree += (_, _) => { _clock.Stop(); _input.Dispose(); _player?.Dispose(); };
     }
 
-    string _engineNote = "";
+    void ShowRecording()
+    {
+        var s = (int)(DateTime.Now - _startedAt).TotalSeconds;
+        _status.Text = $"● Đang ghi âm {s / 60}:{s % 60:00} · nói xong thì bấm Dừng. {_note}".Trim();
+    }
+
+    void Replay()
+    {
+        if (SpeechInput.LastRecording is not { } wav || !File.Exists(wav)) return;
+        _player?.Dispose();
+        try { _player = new Audio(wav); _player.Toggle(); } catch (Exception ex) { Log.Error("MicRecorder.Replay", ex); }
+    }
 
     public void Toggle()
     {
         if (!_button.IsEnabled) return;
-        if (_input.Running) { _input.Stop(); _status.Text = "Đang xử lý…"; return; }
+        if (_input.Running) { _clock.Stop(); _input.Stop(); return; }
         Speech.Stop(); // tiếng đọc của máy không được lọt vào micro
+        _player?.Dispose();
+        _player = null;
         _button.Content = "■ Dừng (R)";
         _status.Text = "Đang mở micro…";
-        _engineNote = "";
-        _fix.IsVisible = false;
+        _note = "";
+        _fix.IsVisible = _replay.IsVisible = false;
         _input.Start(
-            live => _status.Text = live == "" ? $"Đang nghe{_engineNote}…" : $"Nghe thấy: {live}",
             (text, error) =>
             {
+                _clock.Stop();
                 _button.Content = _idleText;
+                _button.IsEnabled = true;
                 if (error is not null) { _status.Text = error; return; }
-                if (text.Trim() == "") { _status.Text = "Không nghe được gì. Nói to và gần micro hơn rồi thử lại."; return; }
-                _status.Text = _engineNote.Trim() is { Length: > 0 } n ? $"Nhận giọng {n.Trim('(', ')')}" : "";
+                if (text.Trim() == "") { _status.Text = "Không nghe rõ (hoặc không có tiếng nói). Nói to, gần micro hơn rồi thử lại; bấm \"Nghe lại\" để kiểm tra micro có thu được tiếng không."; _replay.IsVisible = SpeechInput.LastRecording is not null; return; }
+                _status.Text = "";
+                _replay.IsVisible = SpeechInput.LastRecording is not null;
                 _onFinal(text.Trim());
             },
             (engine, reason) =>
             {
-                _engineNote = $" (bộ {engine})";
-                _status.Text = reason is null ? $"Đang nghe (bộ {engine}, chính xác hơn)… nói xong thì bấm dừng." : $"{reason} Đang dùng bộ cũ (kém chính xác hơn).";
+                _startedAt = DateTime.Now;
+                _note = reason is null ? (engine == SpeechInput.EngineNew ? "(bộ mới, chính xác hơn)" : "") : $"{reason} Đang dùng bộ cũ (kém chính xác hơn).";
                 _fix.IsVisible = reason is not null && reason.Contains("trực tuyến");
-            });
+                ShowRecording();
+                _clock.Start();
+            },
+            () => { _clock.Stop(); _button.IsEnabled = false; _status.Text = "Đã dừng ghi. Đang nhận dạng… (vài giây)"; });
     }
 }
-
 /// <summary>Hiện kết quả đọc theo: điểm, câu mẫu tô đỏ chỗ không nghe thấy, chữ máy nghe được.</summary>
 static class SpeakFeedback
 {
