@@ -10,8 +10,9 @@ using static Nihongo.Desktop.Views.Ui;
 namespace Nihongo.Desktop.Views;
 
 /// <summary>Trang đề PDF bên trái, phiếu trả lời và đồng hồ bên phải.</summary>
-sealed class ReadingSessionView : UserControl
+sealed class ReadingSessionView : UserControl, IKeyTarget
 {
+    int _cursor;
     readonly ReadingSet _set;
     readonly bool _m9;
     readonly int _from, _to, _first, _last, _limit;
@@ -33,6 +34,7 @@ sealed class ReadingSessionView : UserControl
         (_first, _last) = m9 ? (set.M9Page, Math.Max(set.M9Page, set.ReadingPage)) : (set.ReadingPage, set.LastPage);
         _limit = _left = (m9 ? 10 : 60) * 60;
         _current = _first;
+        _cursor = _from;
 
         _timer.Tick += (_, _) => { if (--_left <= 0) Submit(); UpdateClock(); };
         _timer.Start();
@@ -71,12 +73,13 @@ sealed class ReadingSessionView : UserControl
         for (var q = _from; q <= _to; q++)
         {
             var n = q;
-            var row = Row(4, Text($"{n}", 14, bold: true, wrap: false).Also(t => t.Width = 32));
+            var isCursor = !_submitted && n == _cursor;
+            var row = Row(4, Text((isCursor ? "▶" : "") + $"{n}", 14, bold: true, wrap: false).Also(t => t.Width = 38));
             var key = _set.Answers.GetValueOrDefault(n);
             for (var opt = 1; opt <= 4; opt++)
             {
                 var o = opt;
-                var b = new Button { Content = $"{o}", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center };
+                var b = new Button { Content = $"{o}", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center, Focusable = false };
                 if (_submitted)
                 {
                     if (o == key) { b.Background = Good; b.Foreground = Brushes.White; }
@@ -85,12 +88,42 @@ sealed class ReadingSessionView : UserControl
                 else
                 {
                     if (_picked.GetValueOrDefault(n) == o) { b.Background = Accent; b.Foreground = Brushes.White; }
-                    b.Click += (_, _) => { _picked[n] = o; BuildSheet(); };
+                    b.Click += (_, _) => { _picked[n] = o; _cursor = n; BuildSheet(); };
                 }
                 row.Children.Add(b);
             }
-            _sheet.Children.Add(row);
+            if (isCursor) _sheet.Children.Add(new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 2), Child = row }.Themed(Border.BackgroundProperty, "AccentSoft"));
+            else _sheet.Children.Add(row);
         }
+    }
+
+    /// <summary>Phím: 1–4 chọn cho câu đang trỏ rồi trỏ sang câu kế, ↑/↓ đổi câu, ←/→ (hoặc PgUp/PgDn) đổi trang, +/− phóng to/thu nhỏ.</summary>
+    public bool HandleKey(Avalonia.Input.KeyEventArgs e)
+    {
+        var digit = QuizNav.Digit(e.Key);
+        switch (e.Key)
+        {
+            case >= Avalonia.Input.Key.D1 and <= Avalonia.Input.Key.D4 or >= Avalonia.Input.Key.NumPad1 and <= Avalonia.Input.Key.NumPad4:
+                if (_submitted) return false;
+                _picked[_cursor] = digit;
+                _cursor = Math.Min(_cursor + 1, _to);
+                BuildSheet();
+                break;
+            case Avalonia.Input.Key.Down or Avalonia.Input.Key.Enter: MoveCursor(1); break;
+            case Avalonia.Input.Key.Up: MoveCursor(-1); break;
+            case Avalonia.Input.Key.Right or Avalonia.Input.Key.PageDown: Go(1); break;
+            case Avalonia.Input.Key.Left or Avalonia.Input.Key.PageUp: Go(-1); break;
+            case Avalonia.Input.Key.OemPlus or Avalonia.Input.Key.Add: Zoom(15); break;
+            case Avalonia.Input.Key.OemMinus or Avalonia.Input.Key.Subtract: Zoom(-15); break;
+            default: return false;
+        }
+        return true;
+    }
+
+    void MoveCursor(int delta)
+    {
+        _cursor = Math.Clamp(_cursor + delta, _from, _to);
+        BuildSheet();
     }
 
     void UpdateClock()
@@ -107,7 +140,11 @@ sealed class ReadingSessionView : UserControl
         _timer.Stop();
         var total = _to - _from + 1;
         var correct = Enumerable.Range(_from, total).Count(n => _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
-        App.Progress.SaveResult(new ExamResult($"{_set.Id}:{(_m9 ? "m9" : "reading")}", _set.Title, "reading", DateTime.Now, correct, total, (int)(DateTime.Now - _started).TotalSeconds));
+        // Mỗi câu ghi một lần trả lời (bỏ trống tính sai) cho thống kê; đọc hiểu N2 nên cấp N2.
+        for (var n = _from; n <= _to; n++)
+            App.Progress.LogAttempt($"rd:{_set.Id}:{n}", _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
+        var detail = $"lvl=N2;read={correct}/{total}";
+        App.Progress.SaveResult(new ExamResult($"{_set.Id}:{(_m9 ? "m9" : "reading")}", _set.Title, "reading", DateTime.Now, correct, total, (int)(DateTime.Now - _started).TotalSeconds, detail));
         BuildSheet();
         _clock.Text = $"Đúng {correct}/{total}";
         _clock.ClearValue(TextBlock.ForegroundProperty);

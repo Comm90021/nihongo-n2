@@ -223,7 +223,10 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         if (_submitted) return;
         _submitted = true;
         var correct = _set.Items.Count(i => _picked.GetValueOrDefault(i.Key) == i.Answer);
-        App.Progress.SaveResult(new ExamResult(_set.Id, _set.Title, "listening", DateTime.Now, correct, _set.Items.Count, (int)_audio.Position.TotalSeconds));
+        foreach (var item in _set.Items) App.Progress.LogAttempt($"ls:{_set.Id}:{item.Key}", _picked.GetValueOrDefault(item.Key) == item.Answer);
+        var level = _set.Id.Contains("jtest") ? "JTEST" : _set.Id.Contains("-n1-") ? "N1" : "N2";
+        App.Progress.SaveResult(new ExamResult(_set.Id, _set.Title, "listening", DateTime.Now, correct, _set.Items.Count, (int)_audio.Position.TotalSeconds,
+            $"lvl={level};listen={correct}/{_set.Items.Count}"));
         _score.Text = $"Đúng {correct}/{_set.Items.Count}";
         var byMondai = _set.Items.GroupBy(i => i.Mondai).Select(g => $"M{g.Key}: {g.Count(i => _picked.GetValueOrDefault(i.Key) == i.Answer)}/{g.Count()}");
         _sheet.Children.Clear();

@@ -178,8 +178,20 @@ sealed class KaiwaPracticeView : UserControl
 }
 
 /// <summary>Thẻ mẫu câu: mặt trước tiếng Việt, lật ra câu Nhật + điểm chính + giải thích. Chấm nhớ/chưa nhớ vào SRS.</summary>
-sealed class KaiwaCardView : UserControl
+sealed class KaiwaCardView : UserControl, IKeyTarget
 {
+    /// <summary>Space/Enter lật thẻ; sau khi lật: 1 chưa nhớ, 2 nhớ.</summary>
+    public bool HandleKey(Avalonia.Input.KeyEventArgs e)
+    {
+        if (_browse || _index >= _cards.Count) return false;
+        var card = _cards[_index];
+        if (!_flipped && e.Key is Avalonia.Input.Key.Space or Avalonia.Input.Key.Enter) { _flipped = true; Render(); }
+        else if (_flipped && QuizNav.Digit(e.Key) == 1) Answer(card, false);
+        else if (_flipped && QuizNav.Digit(e.Key) == 2) Answer(card, true);
+        else return false;
+        return true;
+    }
+
     readonly List<KaiwaCard> _cards;
     readonly string _title;
     readonly bool _browse;

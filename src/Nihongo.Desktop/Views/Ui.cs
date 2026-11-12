@@ -23,7 +23,7 @@ static partial class Glyph
 
 static partial class Glyph
 {
-    public const string Lightning = "\uE945", Book = "\uE82D", Globe = "\uE774";
+    public const string Lightning = "\uE945", Book = "\uE82D", Globe = "\uE774", Chart = "\uE9D2";
 }
 
 /// <summary>Hàm dựng control dùng chung để các màn hình viết ngắn gọn bằng C#.</summary>

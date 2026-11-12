@@ -18,7 +18,13 @@ public sealed record WrongEntry(string ItemId, int Picked, string Session, DateT
 
 public sealed record SavedExplain(string ItemId, string Text, string Source, DateTime At);
 
-public sealed record ExamResult(string SetId, string Title, string Kind, DateTime At, int Correct, int Total, int UsedSeconds);
+/// <summary>
+/// Kết quả một lần làm. <paramref name="Detail"/> ghi đúng/tổng từng phần để thống kê (xem <see cref="Stats.ExamDetail"/>); bản cũ không có thì rỗng.
+/// </summary>
+public sealed record ExamResult(string SetId, string Title, string Kind, DateTime At, int Correct, int Total, int UsedSeconds, string Detail = "");
+
+/// <summary>Một lần trả lời (bảng attempt): mã câu/thẻ, đúng hay sai, giờ.</summary>
+public sealed record AttemptRow(string ItemId, bool Correct, DateTime At);
 
 /// <summary>Tiến độ học trong tien_do.db. Không bao giờ bị công cụ nhập dữ liệu ghi đè.</summary>
 public sealed class ProgressStore
@@ -66,8 +72,15 @@ public sealed class ProgressStore
             CREATE TABLE IF NOT EXISTS follow(channel_id TEXT PRIMARY KEY, name TEXT, added_at TEXT);
             CREATE TABLE IF NOT EXISTS wrong(item_id TEXT, picked INTEGER, session TEXT, at TEXT);
             CREATE TABLE IF NOT EXISTS explain(item_id TEXT PRIMARY KEY, text TEXT, source TEXT, at TEXT);
+            CREATE INDEX IF NOT EXISTS attempt_at ON attempt(at);
             PRAGMA journal_mode=WAL;
             """);
+        // Cột detail của result thêm sau (12/11/2026): bản cũ chưa có thì thêm, dữ liệu cũ giữ nguyên.
+        using (var chk = c.CreateCommand())
+        {
+            chk.CommandText = "SELECT COUNT(*) FROM pragma_table_info('result') WHERE name='detail'";
+            if (Convert.ToInt32(chk.ExecuteScalar()) == 0) Exec(c, "ALTER TABLE result ADD COLUMN detail TEXT DEFAULT ''");
+        }
         using var cmd = c.CreateCommand();
         cmd.CommandText = "SELECT item_id,kind,box,due,lapses,reason FROM srs";
         using var r = cmd.ExecuteReader();
@@ -165,8 +178,29 @@ public sealed class ProgressStore
     public void SaveResult(ExamResult x)
     {
         using var c = Open();
-        Exec(c, "INSERT INTO result VALUES($s,$t,$k,$a,$c,$n,$u)", ("$s", x.SetId), ("$t", x.Title), ("$k", x.Kind),
-            ("$a", x.At.ToString("s")), ("$c", x.Correct), ("$n", x.Total), ("$u", x.UsedSeconds));
+        Exec(c, "INSERT INTO result(set_id,title,kind,at,correct,total,used_seconds,detail) VALUES($s,$t,$k,$a,$c,$n,$u,$d)", ("$s", x.SetId), ("$t", x.Title), ("$k", x.Kind),
+            ("$a", x.At.ToString("s")), ("$c", x.Correct), ("$n", x.Total), ("$u", x.UsedSeconds), ("$d", x.Detail));
+    }
+
+    /// <summary>Ghi một lần trả lời cho thống kê mà không đụng lịch ôn (đọc hiểu, nghe, câu chỉ có trang PDF).</summary>
+    public void LogAttempt(string id, bool correct, DateTime? at = null)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO attempt VALUES($i,$c,$a)", ("$i", id), ("$c", correct ? 1 : 0), ("$a", (at ?? DateTime.Now).ToString("s")));
+    }
+
+    /// <summary>Mọi lần trả lời từ <paramref name="from"/> trở đi (theo giờ máy), cũ trước.</summary>
+    public IReadOnlyList<AttemptRow> Attempts(DateTime from)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT item_id,correct,at FROM attempt WHERE at >= $f ORDER BY at";
+        cmd.Parameters.AddWithValue("$f", from.ToString("s"));
+        using var r = cmd.ExecuteReader();
+        var list = new List<AttemptRow>();
+        while (r.Read())
+            if (DateTime.TryParse(r.GetString(2), out var at)) list.Add(new AttemptRow(r.GetString(0), r.GetInt32(1) == 1, at));
+        return list;
     }
 
     // ---------------------------------------------------------------- sổ tay, bản dịch, bài đã mở
@@ -342,11 +376,11 @@ public sealed class ProgressStore
     {
         using var c = Open();
         using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT set_id,title,kind,at,correct,total,used_seconds FROM result ORDER BY at DESC";
+        cmd.CommandText = "SELECT set_id,title,kind,at,correct,total,used_seconds,COALESCE(detail,'') FROM result ORDER BY at DESC";
         using var r = cmd.ExecuteReader();
         var list = new List<ExamResult>();
         while (r.Read())
-            list.Add(new ExamResult(r.GetString(0), r.GetString(1), r.GetString(2), DateTime.Parse(r.GetString(3)), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6)));
+            list.Add(new ExamResult(r.GetString(0), r.GetString(1), r.GetString(2), DateTime.Parse(r.GetString(3)), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6), r.GetString(7)));
         return list;
     }
 }

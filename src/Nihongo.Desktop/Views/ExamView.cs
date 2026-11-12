@@ -7,6 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Nihongo.Core;
+using Nihongo.Core.Stats;
 using Nihongo.Desktop.Services;
 using static Nihongo.Desktop.Views.Ui;
 
@@ -408,11 +409,15 @@ sealed class ExamView : UserControl, IKeyTarget
 
         var results = _items.Select((it, i) => (it.Mondai, Correct: _picked.GetValueOrDefault(i) == it.Answer)).ToList();
         for (var i = 0; i < _items.Count; i++)
+        {
             if (_items[i].Q is { } q) App.Progress.Review(q.Id, SrsKind.Question, results[i].Correct);
+            // Câu chỉ có trang PDF (đọc hiểu, nghe) chưa từng vào thống kê: ghi lần trả lời riêng, không vào lịch ôn.
+            else if (J2Stats.PdfItemId(_exam.Id, _items[i]) is { } sid) App.Progress.LogAttempt(sid, results[i].Correct);
+        }
         CollectWrong();
         var score = ExamScore.From(results, _exam.Level);
         var used = _usedBefore + (int)(DateTime.Now - _started).TotalSeconds;
-        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, score.Correct, _items.Count, used));
+        App.Progress.SaveResult(new ExamResult($"exam:{_exam.Id}", _exam.Title, "exam", DateTime.Now, score.Correct, _items.Count, used, ExamDetail.Encode(score, _exam.Level)));
 
         _submit.Content = "Về danh sách đề";
         _clock.Text = $"Đúng {score.Correct}/{_items.Count}";

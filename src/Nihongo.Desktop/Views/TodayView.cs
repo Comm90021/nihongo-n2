@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Nihongo.Core;
+using Nihongo.Core.Stats;
 using Nihongo.Desktop.Services;
 using static Nihongo.Desktop.Views.Ui;
 
@@ -57,7 +58,13 @@ sealed class TodayView : UserControl
             new Border { BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(24, 0, 0, 0), Child = countdown }.Themed(Border.BorderBrushProperty, "CardBorder"));
 
         // ---- dải số liệu (một thẻ, ba ô chia bằng đường kẻ mảnh)
+        var last60 = p.Attempts(now.AddDays(-60));
+        var pred = PassPredictor.Jlpt(ExamLevel, now, results, J2Stats.ForLevel(last60, ExamLevel), J2Stats.MondaiOf);
+        var streak = StudyStats.Streak(last60, today);
         var stats = Strip(
+            StatCell("Khả năng đỗ", pred.Probability is { } pr ? $"{Math.Round(pr * 100):0}%" : "—",
+                pred.Probability is null ? "chưa đủ dữ liệu" : $"chuỗi {streak} ngày",
+                Btn("Xem thống kê", () => App.Shell.GoTo("stats")).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left)),
             StatCell("Việc ôn đến hạn", $"{dueTotal}", dueTotal == 0 ? "đã xong hết" : $"khoảng {Math.Max(1, dueTotal / 3)} phút",
                 Btn("Ôn ngay", () => StartReview(dueCards, dueQuestions), primary: true, enabled: dueTotal > 0).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left)),
             StatCell("Từ N2 đã chắc", $"{mastered:N0}", $"/ {n2.Count:N0} từ", Bar(mastered, n2.Count, 4)),

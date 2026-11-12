@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     static readonly (string Tag, string Label, string Glyph)[] Sections =
     [
         ("today", "Hôm nay", Views.Glyph.Home),
+        ("stats", "Thống kê", Views.Glyph.Chart),
         ("vocab", "Từ vựng", Views.Glyph.Library),
         ("practice", "Luyện đề", Views.Glyph.Education),
         ("exam", "Thi thử", Views.Glyph.Timer),
@@ -198,7 +199,7 @@ public partial class MainWindow : Window
         else Host.Opacity = 1;
     }
 
-    static readonly HashSet<string> FadeTags = ["today", "vocab", "practice", "exam", "reading", "listening", "knowledge", "settings"];
+    static readonly HashSet<string> FadeTags = ["today", "stats", "vocab", "practice", "exam", "reading", "listening", "knowledge", "settings"];
 
     public void ShowSection(string tag)
     {
@@ -216,6 +217,7 @@ public partial class MainWindow : Window
             "kaiwa" => new KaiwaView(),
             "knowledge" => new KnowledgeView(),
             "denken" => new DenkenView(),
+            "stats" => new StatsView(),
             _ => new TodayView(),
         }, FadeTags.Contains(tag) || !Sections.Any(s => s.Tag == tag));
     }
@@ -284,6 +286,8 @@ public partial class MainWindow : Window
     // Dùng cho Services/SelfTest.
     internal Control? CurrentView => Host.Content as Control;
     internal string TestGeminiStatus() => Gemini.StatusText;
+    /// <summary>Chuyển sang một mục của thanh bên (nhấn sáng mục đó).</summary>
+    public void GoTo(string tag) => TestSelectNav(tag);
     internal void TestSelectNav(string tag) => Nav.SelectedItem = Nav.Items.OfType<ListBoxItem>().First(i => (string?)i.Tag == tag);
 
     /// <summary>
