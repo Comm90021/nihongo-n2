@@ -18,6 +18,7 @@ sealed class MicRecorder : StackPanel
     readonly SpeechInput _input = new();
     readonly Button _button;
     readonly TextBlock _status = Text("", 13, muted: true);
+    readonly Button _fix = new() { Content = "Bật nhận giọng chính xác hơn", IsVisible = false, Focusable = false };
     readonly Action<string> _onFinal;
     readonly string _idleText;
 
@@ -30,7 +31,10 @@ sealed class MicRecorder : StackPanel
         _button = new Button { Content = idleText, Focusable = false };
         _button.Click += (_, _) => Toggle();
         Children.Add(_button);
-        Children.Add(_status.Also(s => s.VerticalAlignment = VerticalAlignment.Center));
+        Children.Add(_status.Also(s => { s.VerticalAlignment = VerticalAlignment.Center; s.MaxWidth = 520; }));
+        _fix.Classes.Add("ghost");
+        _fix.Click += (_, _) => SpeechInput.OpenSpeechPrivacy();
+        Children.Add(_fix);
         if (!SpeechInput.Available)
         {
             _button.IsEnabled = false;
@@ -39,22 +43,32 @@ sealed class MicRecorder : StackPanel
         DetachedFromVisualTree += (_, _) => _input.Dispose();
     }
 
+    string _engineNote = "";
+
     public void Toggle()
     {
         if (!_button.IsEnabled) return;
         if (_input.Running) { _input.Stop(); _status.Text = "Đang xử lý…"; return; }
         Speech.Stop(); // tiếng đọc của máy không được lọt vào micro
         _button.Content = "■ Dừng (R)";
-        _status.Text = "Đang nghe… nói xong thì bấm dừng.";
+        _status.Text = "Đang mở micro…";
+        _engineNote = "";
+        _fix.IsVisible = false;
         _input.Start(
-            live => _status.Text = live == "" ? "Đang nghe…" : $"Nghe thấy: {live}",
+            live => _status.Text = live == "" ? $"Đang nghe{_engineNote}…" : $"Nghe thấy: {live}",
             (text, error) =>
             {
                 _button.Content = _idleText;
                 if (error is not null) { _status.Text = error; return; }
                 if (text.Trim() == "") { _status.Text = "Không nghe được gì. Nói to và gần micro hơn rồi thử lại."; return; }
-                _status.Text = "";
+                _status.Text = _engineNote.Trim() is { Length: > 0 } n ? $"Nhận giọng {n.Trim('(', ')')}" : "";
                 _onFinal(text.Trim());
+            },
+            (engine, reason) =>
+            {
+                _engineNote = $" (bộ {engine})";
+                _status.Text = reason is null ? $"Đang nghe (bộ {engine}, chính xác hơn)… nói xong thì bấm dừng." : $"{reason} Đang dùng bộ cũ (kém chính xác hơn).";
+                _fix.IsVisible = reason is not null && reason.Contains("trực tuyến");
             });
     }
 }

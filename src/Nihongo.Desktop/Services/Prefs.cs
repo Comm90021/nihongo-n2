@@ -28,6 +28,8 @@ static class Prefs
     public static int AutoNextMs { get; private set; } = 1000;
     /// <summary>Tự phát âm thanh: bài nghe khi mở, câu nghe trong thi thử khi sang câu, đọc từ sau khi trả lời từ vựng.</summary>
     public static bool AutoPlay { get; private set; } = true;
+    /// <summary>"auto": thử bộ nhận giọng mới (trực tuyến, chính xác hơn), chưa bật được thì dùng bộ cũ; "old": chỉ bộ cũ (offline).</summary>
+    public static string SpeechEngine { get; private set; } = "auto";
 
     public const string DefaultFont = "Yu Gothic UI";
     public static string DefaultBackupDir => Path.Combine(AppPaths.DataDir, "sao_luu");
@@ -48,6 +50,7 @@ static class Prefs
         AutoNext = (int)Math.Clamp(Num("auto_next", 1), 0, 2);
         AutoNextMs = (int)Math.Clamp(Num("auto_next_ms", 1000), 300, 5000);
         AutoPlay = App.Progress.Setting("auto_play", "1") == "1";
+        SpeechEngine = App.Progress.Setting("speech_engine", "auto") == "old" ? "old" : "auto";
         Apply();
     }
 
@@ -71,6 +74,7 @@ static class Prefs
     public static void SetBackupDir(string d) { BackupDir = d; App.Progress.SetSetting("backup_dir", d); }
     public static void SetAutoNext(int v) { AutoNext = Math.Clamp(v, 0, 2); App.Progress.SetSetting("auto_next", AutoNext.ToString()); }
     public static void SetAutoNextMs(int v) { AutoNextMs = Math.Clamp(v, 300, 5000); App.Progress.SetSetting("auto_next_ms", AutoNextMs.ToString()); }
+    public static void SetSpeechEngine(string v) { SpeechEngine = v == "old" ? "old" : "auto"; App.Progress.SetSetting("speech_engine", SpeechEngine); }
     public static void SetAutoPlay(bool v) { AutoPlay = v; App.Progress.SetSetting("auto_play", v ? "1" : "0"); }
 
     static void Save(string key, double v)

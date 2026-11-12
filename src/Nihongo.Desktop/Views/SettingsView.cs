@@ -78,11 +78,16 @@ sealed class SettingsView : UserControl
         delay.SelectionChanged += (_, _) => { if (delay.SelectedIndex >= 0) Prefs.SetAutoNextMs(delays[delay.SelectedIndex]); };
         var play = new CheckBox { Content = "Tự phát âm thanh (bài nghe khi mở đề, câu nghe trong thi thử, đọc từ sau khi trả lời)", IsChecked = Prefs.AutoPlay };
         play.IsCheckedChanged += (_, _) => Prefs.SetAutoPlay(play.IsChecked == true);
+        var engine = new ComboBox { ItemsSource = new[] { "Tự chọn (mới nếu đã bật, nếu không thì cũ)", "Chỉ bộ cũ (trên máy, không cần mạng)" }, SelectedIndex = Prefs.SpeechEngine == "old" ? 1 : 0 };
+        engine.SelectionChanged += (_, _) => Prefs.SetSpeechEngine(engine.SelectedIndex == 1 ? "old" : "auto");
+        var openSpeech = Btn("Mở cài đặt giọng nói của Windows", SpeechInput.OpenSpeechPrivacy);
         return Col(12,
             Text("Làm bài", 17, bold: true),
             Labeled("Tự chuyển câu", mode),
             Labeled("Chờ trước khi chuyển", delay),
             play,
+            Labeled("Bộ nhận giọng khi nói", engine),
+            Row(10, openSpeech, Text("Bộ mới chính xác hơn nhiều nhưng cần bật \"Nhận dạng giọng nói trực tuyến\" (âm thanh gửi cho Microsoft xử lý).", 12, muted: true).Also(t => t.MaxWidth = 460)),
             Text("Câu sai luôn đứng lại để đọc giải thích (chế độ \"chỉ khi đúng\"). Phím: 1–4 chọn, Enter/Space/→ câu sau. Thi thử: ←/→ đổi câu, F đánh dấu.", 13, muted: true));
     }
 

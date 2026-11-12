@@ -265,6 +265,7 @@ static class SelfTest
     static async Task Speak(MainWindow w, string dir, List<string> log)
     {
         log.Add($"Bộ nhận giọng tiếng Nhật: {(SpeechInput.Available ? "có" : "KHÔNG")}");
+        log.Add($"Bộ mới (trực tuyến): {await SpeechInput.ProbeNewAsync()}");
         var cards = App.Content.LoadKaiwaCards().Where(c => c.Ja.Length is > 8 and < 40).Take(6).ToList();
         foreach (var c in cards)
         {
