@@ -41,10 +41,9 @@ sealed class VocabQuizView : UserControl
 
     void Render()
     {
-        var header = Col(10,
-            Line(Col(2, Title(_title), Text($"Câu {Math.Min(_index + 1, _qs.Count)}/{_qs.Count} · đúng {_correct}", 13, muted: true)),
-                Btn("Quay lại", App.Shell.BackToSection)),
-            Bar(_index, _qs.Count, 6));
+        var header = Col(0,
+            TopBar(_title, Text($"Câu {Math.Min(_index + 1, _qs.Count)}/{_qs.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
+            Bar(_index, _qs.Count, 4).Also(b => b.Margin = new Thickness(0, 0, 0, 12)));
         if (_index >= _qs.Count) { Content = Col(16, header, Summary()); return; }
 
         var q = _qs[_index];

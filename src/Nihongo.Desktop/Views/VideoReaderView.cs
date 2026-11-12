@@ -66,7 +66,7 @@ sealed class VideoReaderView : UserControl, IGeminiDock
 
         _web.Message += json => Dispatcher.UIThread.Post(() => OnPlayer(json));
 
-        var side = new SidePane("pane_video", _lookup) { Margin = new Thickness(0, 4, 0, 0) };
+        var side = new SidePane("pane_video", _lookup) { Margin = new Thickness(18, 0, 0, 0) };
         var header = Line(Col(2, Text(title, 20, bold: true), _status),
             Row(8, _done, Btn("Dịch lại theo đoạn", Retranslate), IconBtn(Glyph.Copy, "Chép link video (kèm thời điểm đang xem)", CopyLink),
                 IconBtn(Glyph.FullScreen, "Toàn màn hình (F11)", App.Shell.ToggleFullScreen), Btn("Quay lại", App.Shell.BackToSection)));
@@ -85,7 +85,6 @@ sealed class VideoReaderView : UserControl, IGeminiDock
             {
                 videoBox.Also(v => DockPanel.SetDock(v, Dock.Top)),
                 controls.Also(w => DockPanel.SetDock(w, Dock.Top)),
-                side,
             },
         };
         // Giữ khung video đúng tỉ lệ 16:9 theo bề ngang cột trái.
@@ -99,15 +98,24 @@ sealed class VideoReaderView : UserControl, IGeminiDock
         _rightCol = right;
         Grid.SetColumn(right, 1);
         Grid.SetColumn(_gemini, 2);
+        Grid.SetColumn(side, 2);
         _gemini.Margin = new Thickness(18, 0, 0, 0);
         body.Children.Add(left);
         body.Children.Add(right);
+        body.Children.Add(side);
         body.Children.Add(_gemini);
+        // Cột phải dùng chung cho bảng Tra từ và Gemini: Gemini mở thì bảng tạm nhường chỗ (đóng Gemini thì trả lại như cũ).
+        void Columns() => body.ColumnDefinitions = new ColumnDefinitions(_gemini.IsOpen ? "*,*,1.1*" : side.IsVisible ? "1.25*,*,0.85*" : "1.25*,*,0");
+        var lookupWasOpen = false;
         _gemini.Changed += open =>
         {
-            body.ColumnDefinitions = new ColumnDefinitions(open ? "*,*,1.1*" : "1.25*,*,0");
             geminiToggle.Content = open ? "Đóng Gemini" : "Mở Gemini bên cạnh";
+            if (open) { lookupWasOpen = side.IsVisible; side.SetOpen(false, save: false); }
+            else side.SetOpen(lookupWasOpen, save: false);
+            Columns();
         };
+        side.OpenChanged += _ => Columns();
+        Columns();
         // Khung script đổi bề rộng (mở/đóng Gemini, đổi cỡ cửa sổ) thì câu xuống dòng khác: neo lại câu đang phát lên đầu.
         _script.SizeChanged += (_, e) => { if (e.WidthChanged && _current >= 0 && _follow.IsChecked == true) AnchorTop(_current); };
         Content = new DockPanel { Children = { header, body } };
@@ -126,16 +134,23 @@ sealed class VideoReaderView : UserControl, IGeminiDock
         time.Click += (_, _) => { if (time.DataContext is MediaLine l) Seek(l.StartSeconds); };
         var ja = Reading(new SelectableTextBlock { TextWrapping = TextWrapping.Wrap });
         _lookup.Hook(ja);
-        // Tô sáng mẫu ngữ pháp; bấm chữ được tô (thả chuột không bôi đen) thì mở giải thích mẫu đầu tiên trong câu.
-        IReadOnlyList<GrammarHit> hits = [];
-        ja.DataContextChanged += (_, _) => { if (ja.DataContext is MediaLine l) hits = Grammar.Apply(ja, l.Ja); };
-        ja.AddHandler(PointerReleasedEvent, (_, e) =>
+        // Tô sáng mẫu ngữ pháp; giải thích chỉ mở khi bấm nút tên mẫu dưới câu (bấm vào câu không tự bật bảng nữa).
+        var chips = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+        ja.DataContextChanged += (_, _) =>
         {
-            if (hits.Count > 0 && string.IsNullOrEmpty(ja.SelectedText) && ja.DataContext is MediaLine l) _lookup.ShowGrammar(hits[0].Point, l);
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+            chips.Children.Clear();
+            if (ja.DataContext is not MediaLine line) return;
+            foreach (var h in Grammar.Apply(ja, line.Ja))
+            {
+                var g = h.Point;
+                var chip = Btn(g.Pattern, () => _lookup.ShowGrammar(g, line)).Also(b => { b.Classes.Add("seg"); b.FontSize = 12; b.Padding = new Thickness(8, 2); b.Margin = new Thickness(0, 0, 6, 4); });
+                ToolTip.SetTip(chip, g.MeaningVi);
+                chips.Children.Add(chip);
+            }
+        };
         var vi = Reading(new TextBlock { Opacity = 0.62, TextWrapping = TextWrapping.Wrap, [!TextBlock.TextProperty] = new Binding(nameof(MediaLine.ViShown)), [!IsVisibleProperty] = new Binding(nameof(ShowVi)) { Source = this } }, vi: true);
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12, Margin = new Thickness(0, 4) };
-        var text = Col(2, ja, vi);
+        var text = Col(2, ja, chips, vi);
         Grid.SetColumn(text, 1);
         g.Children.Add(time);
         g.Children.Add(text);

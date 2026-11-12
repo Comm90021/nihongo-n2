@@ -28,7 +28,7 @@ static class Artwork
     static Bitmap Load(string file) => new(AssetLoader.Open(new Uri($"avares://NihongoN2/Assets/anh/{file}")));
 
     /// <summary>Băng ảnh bo góc, chữ đè ở góc dưới. <paramref name="overlay"/> đặt ở góc trên phải (vd đếm ngược ngày thi).</summary>
-    public static Control Banner(Control? overlay = null, double height = 190)
+    public static Control Banner(Control? overlay = null, double height = 132)
     {
         var p = Pieces[DateTime.Now.DayOfYear % Pieces.Length];
         Bitmap bmp;
@@ -36,21 +36,14 @@ static class Artwork
         catch { return new Border(); } // thiếu ảnh thì thôi, không làm hỏng trang
         // Vẽ ảnh làm nền (ImageBrush) chứ không dùng Image: Image đòi bề rộng theo ảnh gốc (1400px) làm cả trang tràn sang phải.
         var image = new Border { Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center } };
-        var shade = new Border
+        // Chú thích là thẻ giấy ngà nhỏ ở góc dưới trái (không phủ lớp tối lên tranh).
+        var caption = new Border
         {
-            Background = new LinearGradientBrush
-            {
-                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops = { new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.45),new GradientStop(Color.FromArgb(170, 0, 0, 0), 1) },
-            },
+            Background = new SolidColorBrush(Color.FromRgb(0xFF, 0xFD, 0xF8)), CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 4),
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(14, 0, 0, 12),
+            Child = Text($"{p.Artist} · {p.Title}", 12, wrap: false).Also(t => { t.Foreground = new SolidColorBrush(Color.FromRgb(0x1F, 0x1B, 0x16)); t.FontFamily = new FontFamily("Yu Mincho, Yu Gothic UI"); }),
         };
-        var caption = Col(1,
-            Text(p.Title, 15, bold: true, wrap: false).Also(t => t.Foreground = Brushes.White),
-            Text(p.Artist, 12, wrap: false).Also(t => t.Foreground = new SolidColorBrush(Color.FromArgb(220, 255, 255, 255))));
-        caption.VerticalAlignment = VerticalAlignment.Bottom;
-        caption.Margin = new Thickness(20, 0, 20, 14);
-        var grid = new Grid { Height = height, ClipToBounds = true, Children = { image, shade, caption } };
+        var grid = new Grid { Height = height, ClipToBounds = true, Children = { image, caption } };
         if (overlay is not null)
         {
             overlay.HorizontalAlignment = HorizontalAlignment.Right;
@@ -58,6 +51,6 @@ static class Artwork
             overlay.Margin = new Thickness(16);
             grid.Children.Add(overlay);
         }
-        return new Border { CornerRadius = new CornerRadius(16), ClipToBounds = true, Child = grid };
+        return new Border { CornerRadius = new CornerRadius(14), ClipToBounds = true, BorderThickness = new Thickness(1), Child = grid }.Themed(Border.BorderBrushProperty, "CardBorder");
     }
 }

@@ -9,61 +9,84 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
+        <!-- "Mực & giấy Nhật" (duyệt 12/11/2026): giấy ngà, mực đen, một màu nhấn đỏ son cùng màu logo 日 -->
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="PageBg">#F6F7F9</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBg">#FFFFFF</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBorder">#E5E7EB</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#FFFFFF</SolidColorBrush>
-          <SolidColorBrush x:Key="RowHover">#F3F4F6</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentSoft">#EEF0FF</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentInk">#3730A3</SolidColorBrush>
-          <SolidColorBrush x:Key="Ink">#111827</SolidColorBrush>
-          <SolidColorBrush x:Key="Muted">#5B6474</SolidColorBrush>
-          <SolidColorBrush x:Key="Track">#EEF0F4</SolidColorBrush>
-          <SolidColorBrush x:Key="SoftButton">#FFFFFF</SolidColorBrush>
-          <SolidColorBrush x:Key="Strong">#111827</SolidColorBrush>
-          <SolidColorBrush x:Key="WarnSoft">#FEF3C7</SolidColorBrush>
-          <SolidColorBrush x:Key="WarnInk">#92400E</SolidColorBrush>
-          <SolidColorBrush x:Key="GoodSoft">#DCFCE7</SolidColorBrush>
-          <SolidColorBrush x:Key="GoodInk">#166534</SolidColorBrush>
-          <SolidColorBrush x:Key="BadSoft">#FEE2E2</SolidColorBrush>
-          <SolidColorBrush x:Key="BadInk">#991B1B</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#F5F1EA</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#FFFDF8</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#E4DDD0</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#F5F1EA</SolidColorBrush>
+          <SolidColorBrush x:Key="RowHover">#EFE9DF</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#F5E3DD</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentInk">#8E1C16</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#1F1B16</SolidColorBrush>
+          <SolidColorBrush x:Key="Muted">#6A6257</SolidColorBrush>
+          <SolidColorBrush x:Key="Track">#EAE3D6</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#FFFDF8</SolidColorBrush>
+          <SolidColorBrush x:Key="Strong">#1F1B16</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnSoft">#FBEBC8</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnInk">#7A4F10</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodSoft">#E6EFE8</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodInk">#1F5139</SolidColorBrush>
+          <SolidColorBrush x:Key="BadSoft">#F7E3DE</SolidColorBrush>
+          <SolidColorBrush x:Key="BadInk">#7F1B14</SolidColorBrush>
+          <SolidColorBrush x:Key="Hairline">#D8CFC0</SolidColorBrush>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="PageBg">#0F1117</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBg">#181B24</SolidColorBrush>
-          <SolidColorBrush x:Key="CardBorder">#272B37</SolidColorBrush>
-          <SolidColorBrush x:Key="NavBg">#141720</SolidColorBrush>
-          <SolidColorBrush x:Key="RowHover">#1F2331</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentSoft">#262B4A</SolidColorBrush>
-          <SolidColorBrush x:Key="AccentInk">#A5B4FC</SolidColorBrush>
-          <SolidColorBrush x:Key="Ink">#E7E9F0</SolidColorBrush>
-          <SolidColorBrush x:Key="Muted">#9AA1B2</SolidColorBrush>
-          <SolidColorBrush x:Key="Track">#262A36</SolidColorBrush>
-          <SolidColorBrush x:Key="SoftButton">#181B24</SolidColorBrush>
-          <SolidColorBrush x:Key="Strong">#E7E9F0</SolidColorBrush>
+          <SolidColorBrush x:Key="PageBg">#16140F</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBg">#1F1C16</SolidColorBrush>
+          <SolidColorBrush x:Key="CardBorder">#332F27</SolidColorBrush>
+          <SolidColorBrush x:Key="NavBg">#16140F</SolidColorBrush>
+          <SolidColorBrush x:Key="RowHover">#26231C</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentSoft">#3A1F1B</SolidColorBrush>
+          <SolidColorBrush x:Key="AccentInk">#F0A59E</SolidColorBrush>
+          <SolidColorBrush x:Key="Ink">#EDE7DA</SolidColorBrush>
+          <SolidColorBrush x:Key="Muted">#A39B8C</SolidColorBrush>
+          <SolidColorBrush x:Key="Track">#2E2A22</SolidColorBrush>
+          <SolidColorBrush x:Key="SoftButton">#1F1C16</SolidColorBrush>
+          <SolidColorBrush x:Key="Strong">#EDE7DA</SolidColorBrush>
           <SolidColorBrush x:Key="WarnSoft">#3B2A10</SolidColorBrush>
-          <SolidColorBrush x:Key="WarnInk">#FCD34D</SolidColorBrush>
-          <SolidColorBrush x:Key="GoodSoft">#12301F</SolidColorBrush>
-          <SolidColorBrush x:Key="GoodInk">#86EFAC</SolidColorBrush>
-          <SolidColorBrush x:Key="BadSoft">#3A1717</SolidColorBrush>
-          <SolidColorBrush x:Key="BadInk">#FCA5A5</SolidColorBrush>
+          <SolidColorBrush x:Key="WarnInk">#F2C777</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodSoft">#16301F</SolidColorBrush>
+          <SolidColorBrush x:Key="GoodInk">#8FD1AC</SolidColorBrush>
+          <SolidColorBrush x:Key="BadSoft">#3A1B17</SolidColorBrush>
+          <SolidColorBrush x:Key="BadInk">#F2A59C</SolidColorBrush>
+          <SolidColorBrush x:Key="Hairline">#4A453A</SolidColorBrush>
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
       <FontFamily x:Key="ReadFont">Yu Gothic UI, Meiryo, Segoe UI</FontFamily>
       <x:Double x:Key="ReadSize">19</x:Double>
       <x:Double x:Key="ReadLine">30</x:Double>
       <x:Double x:Key="ReadViSize">15</x:Double>
-      <SolidColorBrush x:Key="Accent">#4338CA</SolidColorBrush>
-      <SolidColorBrush x:Key="AccentHover">#3730A3</SolidColorBrush>
-      <SolidColorBrush x:Key="Good">#15803D</SolidColorBrush>
-      <SolidColorBrush x:Key="Bad">#DC2626</SolidColorBrush>
-      <SolidColorBrush x:Key="Warn">#D97706</SolidColorBrush>
-      <SolidColorBrush x:Key="Hero">#4338CA</SolidColorBrush>
+      <SolidColorBrush x:Key="Accent">#B3261E</SolidColorBrush>
+      <SolidColorBrush x:Key="AccentHover">#8E1C16</SolidColorBrush>
+      <SolidColorBrush x:Key="Good">#2E6A4A</SolidColorBrush>
+      <SolidColorBrush x:Key="Bad">#9E2219</SolidColorBrush>
+      <SolidColorBrush x:Key="Warn">#B7791F</SolidColorBrush>
+      <SolidColorBrush x:Key="Hero">#B3261E</SolidColorBrush>
+      <!-- Tiêu đề và số to dùng kiểu có chân (Georgia có sẵn trên Windows, có đủ dấu tiếng Việt). -->
+      <FontFamily x:Key="SerifFont">Georgia, Yu Mincho, serif</FontFamily>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
-    <FluentTheme />
+    <!-- Màu nhấn của theme (ô tích, thanh trượt, dòng được chọn) theo đỏ son thay cho xanh mặc định của Fluent. -->
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#B3261E" />
+        <ColorPaletteResources x:Key="Dark" Accent="#D4574E" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+
+    <!-- Dòng được chọn trong danh sách (script đang phát, danh sách từ…): nền đỏ nhạt thay cho xanh mặc định -->
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+      <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover:not(:selected) /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource RowHover}" />
+    </Style>
 
     <!-- Thẻ -->
     <Style Selector="Border.card">
@@ -220,13 +243,18 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Foreground" Value="{DynamicResource Muted}" />
-      <Setter Property="BorderBrush" Value="#D1D5DB" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Hairline}" />
       <Setter Property="BorderThickness" Value="1.5" />
     </Style>
+    <!-- Đã làm: ô đặc màu mực (như phiếu tô đáp án) -->
     <Style Selector="Button.cell.done">
-      <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
-      <Setter Property="Foreground" Value="{DynamicResource AccentInk}" />
+      <Setter Property="Background" Value="{DynamicResource Strong}" />
+      <Setter Property="Foreground" Value="{DynamicResource PageBg}" />
       <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.cell.done:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Strong}" />
+      <Setter Property="Foreground" Value="{DynamicResource PageBg}" />
     </Style>
     <Style Selector="Button.cell.flag">
       <Setter Property="Background" Value="{DynamicResource WarnSoft}" />
@@ -238,6 +266,10 @@
       <Setter Property="Background" Value="{StaticResource Accent}" />
       <Setter Property="Foreground" Value="White" />
       <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.cell.current:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{StaticResource Accent}" />
+      <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.cell.right">
       <Setter Property="Background" Value="{DynamicResource GoodSoft}" />

@@ -49,35 +49,35 @@ sealed class TodayView : UserControl
         var lastExam = results.FirstOrDefault(r => r.Kind == "exam");
 
         // ---- đầu trang
+        var countdown = Row(16,
+            BigNumber($"{days}", 52).Tint("AccentInk"),
+            Col(2, Text("ngày tới kỳ thi", 15, bold: true), Text($"JLPT {ExamLevel} · {WeekDays[(int)ExamDay.DayOfWeek]} {ExamDay:dd/MM/yyyy}", 13, muted: true)));
         var header = Line(
-            Col(6, Text($"{WeekDays[(int)now.DayOfWeek]}, {now:dd/MM/yyyy}", 13, muted: true), Title("Hôm nay")),
-            Card(Row(14,
-                Text($"{days}", 34, bold: true).Also(t => t.FontWeight = FontWeight.Bold).Tint("AccentInk"),
-                Col(2, Text("ngày tới kỳ thi", 14, bold: true), Text($"JLPT {ExamLevel} · {WeekDays[(int)ExamDay.DayOfWeek]} {ExamDay:dd/MM/yyyy}", 12, muted: true))), 0).Also(c => c.Padding = new Thickness(18, 12)));
+            Col(6, Text($"{WeekDays[(int)now.DayOfWeek]} · {now:dd/MM/yyyy}".ToUpperInvariant(), 12, bold: true, muted: true).Also(t => t.LetterSpacing = 1.4), Title("Hôm nay")),
+            new Border { BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(24, 0, 0, 0), Child = countdown }.Themed(Border.BorderBrushProperty, "CardBorder"));
 
-        // ---- 3 ô số liệu
-        var stats = Columns(16,
-            Stat("Việc ôn đến hạn", $"{dueTotal}", dueTotal == 0 ? "đã xong hết" : $"khoảng {Math.Max(1, dueTotal / 3)} phút",
+        // ---- dải số liệu (một thẻ, ba ô chia bằng đường kẻ mảnh)
+        var stats = Strip(
+            StatCell("Việc ôn đến hạn", $"{dueTotal}", dueTotal == 0 ? "đã xong hết" : $"khoảng {Math.Max(1, dueTotal / 3)} phút",
                 Btn("Ôn ngay", () => StartReview(dueCards, dueQuestions), primary: true, enabled: dueTotal > 0).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left)),
-            Stat("Từ N2 đã chắc", $"{mastered:N0}", $"/ {n2.Count:N0} từ", Bar(mastered, n2.Count)),
-            Stat("Thi thử gần nhất", lastExam is null ? "—" : $"{lastExam.Correct}/{lastExam.Total}",
+            StatCell("Từ N2 đã chắc", $"{mastered:N0}", $"/ {n2.Count:N0} từ", Bar(mastered, n2.Count, 4)),
+            StatCell("Thi thử gần nhất", lastExam is null ? "—" : $"{lastExam.Correct}/{lastExam.Total}",
                 lastExam is null ? "chưa làm đề nào" : lastExam.Title,
-                lastExam is null ? null : Badge(lastExam.Correct * 2 >= lastExam.Total ? "Trên 50% số câu" : "Dưới 50% số câu", lastExam.Correct * 2 >= lastExam.Total ? "good" : "warn")));
+                lastExam is null ? null : Badge(lastExam.Correct * 2 >= lastExam.Total ? "Trên 50% số câu" : "Dưới 50% số câu", lastExam.Correct * 2 >= lastExam.Total ? "good" : "bad")));
 
         // ---- kế hoạch hôm nay
         var plan = Col(0);
         var doneCount = 0;
+        var stepNo = 0;
         void Step(bool isDone, string title, string meta, string time, string action, Action go, bool enabled = true)
         {
             if (isDone) doneCount++;
-            var mark = new Border
-            {
-                Width = 20, Height = 20, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.8),
-                Background = isDone ? Accent : Brushes.Transparent,
-                Child = isDone ? Text("✓", 11, bold: true, wrap: false).Also(t => { t.Foreground = Brushes.White; t.HorizontalAlignment = HorizontalAlignment.Center; t.VerticalAlignment = VerticalAlignment.Center; }) : null,
-            };
-            if (isDone) mark.BorderBrush = Accent; else mark.Themed(Border.BorderBrushProperty, "CardBorder");
-            var titleText = Text(title, 14.5).Also(t => { t.FontWeight = FontWeight.Medium; if (isDone) { t.TextDecorations = TextDecorations.Strikethrough; t.Tint("Muted"); } });
+            stepNo++;
+            // Số thứ tự kiểu có chân (✓ khi xong) thay cho vòng tròn.
+            var mark = isDone ? Text("✓", 15, bold: true, wrap: false).Tint("AccentInk") : Text($"{stepNo:00}", 15, wrap: false).Tint("Muted");
+            mark.FontFamily = Serif;
+            mark.Width = 30;
+            var titleText = Text(title, 15).Also(t => { t.FontWeight = FontWeight.Medium; if (isDone) { t.TextDecorations = TextDecorations.Strikethrough; t.Tint("Muted"); } });
             var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 14, Margin = new Thickness(0, 12) };
             Control[] cells = [mark, Col(3, titleText, Text(meta, 12.5, muted: true)), Badge(time, "plain"), Btn(action, go, enabled: enabled).Also(b => b.Classes.Add("link"))];
             for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
@@ -129,9 +129,9 @@ sealed class TodayView : UserControl
                 labels.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
                 var r = recent[i];
                 var pct = r.Total == 0 ? 0 : (double)r.Correct / r.Total;
-                var col = Col(6,
-                    Text($"{pct:P0}", 11.5, bold: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center),
-                    new Border { Width = 30, Height = Math.Max(4, pct * 118), CornerRadius = new CornerRadius(8, 8, 3, 3), Background = pct >= 0.5 ? Accent : (IBrush?)App.Current!.FindResource("Warn") });
+                var bar = new Border { Width = 28, Height = Math.Max(4, pct * 118), CornerRadius = new CornerRadius(6, 6, 2, 2) };
+                if (pct >= 0.5) bar.Themed(Border.BackgroundProperty, "Strong"); else bar.Background = Accent;
+                var col = Col(6, Text($"{pct:P0}", 12, bold: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center), bar);
                 col.VerticalAlignment = VerticalAlignment.Bottom;
                 Grid.SetColumn(col, i);
                 bars.Children.Add(col);
@@ -158,7 +158,7 @@ sealed class TodayView : UserControl
             var (ok, total) = stats2.Where(kv => questionsById.TryGetValue(kv.Key, out var q) && has(q)).Aggregate((0, 0), (a, kv) => (a.Item1 + kv.Value.Correct, a.Item2 + kv.Value.Total));
             var pct = total == 0 ? -1 : (double)ok / total;
             weak.Children.Add(Col(5, Line(Text(name, 13.5), Text(pct < 0 ? "chưa làm" : $"{pct:P0} · {total} lần", 12.5, muted: true)),
-                Bar(Math.Max(0, pct) * 100, 100, 6).Also(b => { if (pct is >= 0 and < 0.6) b.Foreground = (IBrush?)App.Current!.FindResource("Warn"); })));
+                Bar(Math.Max(0, pct) * 100, 100, 4).Also(b => { if (pct is >= 0 and < 0.6) b.Foreground = Accent; })));
         }
         var weakCard = Panel("Tỉ lệ đúng theo phần", weak);
 
@@ -168,7 +168,7 @@ sealed class TodayView : UserControl
         lower.Children.Add(planCard);
         lower.Children.Add(right);
 
-        Content = Scroll(Col(24, Artwork.Banner(), header, stats, lower).Also(c => c.MaxWidth = 1200));
+        Content = Scroll(Col(20, header, Artwork.Banner(), stats, lower).Also(c => { c.MaxWidth = 1200; c.Margin = new Thickness(0, 0, 14, 0); }));
     }
 
     /// <summary>Ôn: từ đến hạn làm 4 đáp án (từ trong sổ tay không đủ dữ liệu thì dùng thẻ lật), câu sai làm lại.</summary>

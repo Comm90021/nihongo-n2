@@ -36,12 +36,24 @@ static class Ui
     public static IBrush Bad => Brush(App.Current!.FindResource("Bad"));
     static IBrush Brush(object? o) => o as IBrush ?? Brushes.Gray;
 
+    /// <summary>Kiểu chữ có chân cho tiêu đề và số to (Georgia có sẵn trên Windows, đủ dấu tiếng Việt).</summary>
+    public static readonly FontFamily Serif = new("Georgia, Yu Mincho, serif");
+
+    /// <summary>Thang cỡ chữ chung của app (7 bậc). Mọi Text(…, size) tự gom về bậc gần nhất nên các màn đồng đều.</summary>
+    public static class Fs
+    {
+        public const double Caption = 12, Small = 13, Body = 15, Lead = 17, Heading = 22, Page = 28, Display = 40;
+
+        public static double Snap(double size) =>
+            size <= 12.5 ? Caption : size <= 13.5 ? Small : size <= 15 ? Body : size <= 18 ? Lead : size <= 24 ? Heading : size <= 30 ? Page : Display;
+    }
+
     public static TextBlock Text(string text, double size = 15, bool bold = false, bool muted = false, bool wrap = true)
     {
         var t = new TextBlock
         {
             Text = text,
-            FontSize = size,
+            FontSize = Fs.Snap(size),
             FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal,
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
         };
@@ -61,7 +73,55 @@ static class Ui
         return c;
     }
 
-    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontWeight = FontWeight.Bold; t.LetterSpacing = -0.4; });
+    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontFamily = Serif; t.FontSize = 34; t.FontWeight = FontWeight.SemiBold; t.LetterSpacing = -0.3; });
+
+    /// <summary>Số to kiểu có chân (điểm, số ngày, số câu).</summary>
+    public static TextBlock BigNumber(string text, double size = 34) =>
+        Text(text, size, bold: true, wrap: false).Also(t => { t.FontFamily = Serif; t.FontSize = size; t.FontWeight = FontWeight.SemiBold; });
+
+    /// <summary>
+    /// Thanh trên chung cho mọi màn làm bài/đọc: nút quay lại, tiêu đề (có chân) + dòng phụ, các nút bên phải.
+    /// Cao một dòng; <paramref name="subtitle"/> là TextBlock để màn chứa cập nhật được (trạng thái, số câu đã làm).
+    /// </summary>
+    public static Grid TopBar(string title, TextBlock subtitle, Action? back, params Control?[] actions)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, MinHeight = 48, Margin = new Thickness(0, 0, 0, 14) };
+        var titleBlock = Text(title, 17, bold: true, wrap: false).Also(t => { t.FontFamily = Serif; t.FontSize = 18; t.TextTrimming = TextTrimming.CharacterEllipsis; });
+        subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
+        subtitle.TextWrapping = TextWrapping.NoWrap;
+        var mid = Col(1, titleBlock, subtitle);
+        mid.VerticalAlignment = VerticalAlignment.Center;
+        var right = Row(8, actions);
+        Control[] cells = [back is null ? new Control() : IconBtn(Glyph.Back, "Quay lại", back), mid, right];
+        for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
+        return g;
+    }
+
+    /// <summary>Dải số liệu: một thẻ, các ô chia đều bằng đường kẻ mảnh (thay cho ba thẻ rời).</summary>
+    public static Border Strip(params Control[] cells)
+    {
+        var grid = new Grid();
+        for (var i = 0; i < cells.Length; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            cells[i].Margin = new Thickness(24, 18);
+            Grid.SetColumn(cells[i], i);
+            grid.Children.Add(cells[i]);
+            if (i < cells.Length - 1)
+            {
+                var line = new Border { Width = 1, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14) }.Themed(Border.BackgroundProperty, "CardBorder");
+                Grid.SetColumn(line, i);
+                grid.Children.Add(line);
+            }
+        }
+        return new Border { Classes = { "card" }, Padding = new Thickness(0), Child = grid };
+    }
+
+    /// <summary>Một ô trong <see cref="Strip"/>: nhãn nhỏ, số to có chân, dòng phụ, và control tùy chọn ở dưới.</summary>
+    public static StackPanel StatCell(string label, string value, string sub, Control? extra = null) => Col(8,
+        Text(label, 13, muted: true),
+        Row(10, BigNumber(value), Text(sub, 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+        extra);
 
     /// <summary>Tiêu đề trang kèm dòng mô tả.</summary>
     public static StackPanel Header(string title, string subtitle) =>
@@ -79,8 +139,11 @@ static class Ui
     }
 
     /// <summary>Thẻ có tiêu đề và (tuỳ chọn) chữ hoặc nút bên phải tiêu đề.</summary>
-    public static Border Panel(string title, Control body, Control? right = null) =>
-        Card(Col(14, right is null ? Text(title, 16, bold: true) : Line(Text(title, 16, bold: true), right), body), 0);
+    public static Border Panel(string title, Control body, Control? right = null)
+    {
+        TextBlock Head() => Text(title, 17, bold: true).Also(t => t.FontFamily = Serif);
+        return Card(Col(14, right is null ? Head() : Line(Head(), right), body), 0);
+    }
 
     /// <summary>Ô số liệu kiểu bản mẫu: nhãn nhỏ, số to, dòng phụ, và một control tuỳ chọn ở dưới.</summary>
     public static Border Stat(string label, string value, string sub, Control? extra = null) => Card(Col(10,

@@ -60,6 +60,16 @@ public partial class MainWindow : Window
         }
         SetCompact(Prefs.NavCompact);
         KeyDown += OnKey;
+        // Mở phóng to (trừ khi lần trước đóng ở cỡ thường); cỡ thường được kẹp vào vùng làm việc của màn hình
+        // để thanh tiêu đề với nút thu nhỏ/đóng không bao giờ nằm ngoài màn hình. Tự kiểm giữ cỡ cố định.
+        if (!SelfTest.Enabled)
+        {
+            if (App.Progress.Setting("win_state", "max") != "normal") WindowState = Avalonia.Controls.WindowState.Maximized;
+            else if (App.Progress.Setting("win_size").Split(',') is [var sw, var sh] && double.TryParse(sw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var savedW)
+                     && double.TryParse(sh, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var savedH)) { Width = savedW; Height = savedH; }
+            Opened += (_, _) => ClampToScreen();
+            Closing += (_, _) => SaveWindow();
+        }
         // Cửa sổ hẹp: tự thu thanh bên và lề để nội dung không bị cắt; rộng lại thì trả về lựa chọn của người dùng.
         SizeChanged += (_, e) => { ApplyWidth(e.NewSize.Width); ApplyHeight(e.NewSize.Height); };
         PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) OnWindowState(); };
@@ -78,13 +88,43 @@ public partial class MainWindow : Window
         else if (e.Key == Key.Escape && WindowState == WindowState.FullScreen) { WindowState = WindowState.Maximized; e.Handled = true; }
     }
 
+    /// <summary>Cửa sổ cỡ thường: thu cho vừa vùng làm việc (trừ thanh tác vụ) rồi đặt giữa màn hình đang dùng.</summary>
+    void ClampToScreen()
+    {
+        if (WindowState != Avalonia.Controls.WindowState.Normal) return;
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        if (screen is null) return;
+        var wa = screen.WorkingArea;
+        var scale = screen.Scaling;
+        var frameExtra = 40; // thanh tiêu đề Windows + viền
+        Width = Math.Clamp(Width, MinWidth, Math.Max(MinWidth, wa.Width / scale - 8));
+        Height = Math.Clamp(Height, MinHeight, Math.Max(MinHeight, wa.Height / scale - frameExtra));
+        Position = new Avalonia.PixelPoint(wa.X + (int)((wa.Width - Width * scale) / 2), wa.Y + Math.Max(0, (int)((wa.Height - (Height + frameExtra) * scale) / 2)));
+    }
+
+    void SaveWindow()
+    {
+        var max = WindowState != Avalonia.Controls.WindowState.Normal;
+        App.Progress.SetSetting("win_state", max ? "max" : "normal");
+        if (!max) App.Progress.SetSetting("win_size", string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{Width:0},{Height:0}"));
+    }
+
     public void ToggleFullScreen() => WindowState = WindowState == WindowState.FullScreen ? WindowState.Maximized : WindowState.FullScreen;
 
     bool _narrow;
     void ApplyWidth(double width)
     {
-        var narrow = width < 1100;
-        Main.Margin = narrow ? new Avalonia.Thickness(16, 14, 16, 12) : new Avalonia.Thickness(32, 24, 32, 20);
+        _width = width;
+        ApplyLayout();
+    }
+
+    double _width = 1400, _height = 900;
+
+    /// <summary>Lề trang và thanh bên theo cỡ cửa sổ: hẹp hoặc thấp (màn 1280×672 sau khi Windows phóng 150%) thì lề nhỏ và thanh bên thu gọn.</summary>
+    void ApplyLayout()
+    {
+        var narrow = _width < 1100 || _height < 760;
+        Main.Margin = narrow ? new Avalonia.Thickness(20, 14, 20, 12) : new Avalonia.Thickness(40, 28, 40, 24);
         if (narrow == _narrow) return;
         _narrow = narrow;
         if (_navBeforeDock is null) SetCompact(narrow || Prefs.NavCompact, save: false);
@@ -93,6 +133,8 @@ public partial class MainWindow : Window
     /// <summary>Cửa sổ thấp: mục thanh bên sát hơn (bỏ khoảng đệm) để đủ chỗ cho 12 mục.</summary>
     void ApplyHeight(double height)
     {
+        _height = height;
+        ApplyLayout();
         var pad = height < 760 ? new Avalonia.Thickness(4, 4, 4, 3) : new Avalonia.Thickness(4, 8, 4, 7);
         foreach (var item in Nav.Items.OfType<ListBoxItem>()) if (item.IsEnabled) item.Padding = pad;
         NavToggle.Margin = new Avalonia.Thickness(0, 0, 0, height < 760 ? 8 : 16);

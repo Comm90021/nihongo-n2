@@ -138,6 +138,15 @@ Dữ liệu nạp bằng `ImportExtra` (Importer), đọc bằng `ContentStore.E
 - **Chữa bài, lõi**: `ProgressStore.LogWrong/Wrongs/SaveExplain/Explain` (bảng `wrong`, `explain`, tạo bằng `IF NOT EXISTS`); `Quiz/ReviewPrompt.cs` dựng lời nhắc "thầy giáo" (`Build`, chia phần ≤7000 ký tự theo nhóm 文字・語彙/文法/読解/聴解) và tách lời giải theo dấu `【Câu n】` (`Split`). Số câu đánh liên tục theo thứ tự `ReviewPrompt.Numbered`.
 - Nhật ký lỗi: `Services/Log.cs` ghi `data/loi.log` (bắt lỗi toàn cục trong `Program.Main`).
 
+## Giao diện "Mực & giấy Nhật" (12/11/2026, thay bản chàm 08/11)
+- Bản mẫu đã duyệt: https://claude.ai/artifact/PckxZLiGSqkWiesow4ghfE. Màu trong `App.axaml` (giữ tên khóa cũ): giấy ngà `PageBg` #F5F1EA, `CardBg` #FFFDF8, viền #E4DDD0, mực #1F1B16, một màu nhấn đỏ son `Accent` #B3261E (cùng logo 日); `Hairline` cho nét mảnh. Màu nhấn của theme Fluent (ô tích, dòng chọn) đặt bằng `FluentTheme.Palettes`.
+- Chữ giao diện Segoe UI; tiêu đề và số to `Ui.Serif` = Georgia (có sẵn, đủ dấu Việt; **không nhúng phông**). Thang cỡ chữ `Ui.Fs` (12/13/15/17/22/28/40): `Ui.Text(…, size)` tự gom về bậc gần nhất, nên con số lẻ trong view vẫn đồng đều. Chữ tiếng Nhật đọc vẫn theo cỡ/phông trong Cài đặt.
+- Hàm dựng mới: `Ui.TopBar(title, subtitle, back, actions…)` (thanh trên một dòng, dùng ở Quiz/VocabQuiz/Exam/Review), `Ui.Strip` + `Ui.StatCell` (dải số liệu), `Ui.BigNumber`, `Ui.Numbered` (số + chữ xuống dòng).
+- **Cửa sổ** (`MainWindow`): mở phóng to; cỡ thường nhớ ở setting `win_state`/`win_size` và được kẹp vào `Screens…WorkingArea` (máy user: 1920×1080 phóng 150% = vùng 1280×672; trước đây cửa sổ cố định 1320×840 làm thanh tiêu đề tràn ra ngoài). Cửa sổ dưới 1100 rộng hoặc dưới 760 cao thì lề nhỏ + thanh bên thu gọn (`ApplyLayout`).
+- **Bảng Tra từ** (`SidePane`): đã tự đóng thì không tự mở lại khi bôi đen (nút đổi thành "● Có kết quả tra · Hiện bảng"); setting `auto_lookup` (Cài đặt) tắt thì không tự mở. Màn video: bảng nằm ở cột phải dùng chung với Gemini, mặc định đóng; bấm câu không mở bảng nữa, chỉ nút tên mẫu ngữ pháp dưới câu.
+- **Chữa bài**: chia đôi (`Grid *,12,*` + `GridSplitter`), Gemini mở sẵn, ẩn dải biểu tượng, nút gửi tự chạy qua các phần ("Gửi phần 1/2"), nút phụ trong menu "⋯". **Thi thử**: phiếu trả lời là dải mảnh dưới đáy (`ExamView.Strip`); câu không có bài đọc chiếm cả chiều ngang.
+- Tự kiểm `sizes` có thêm cỡ 1280×672; `review` đặt cửa sổ 1280×672.
+
 ## Đo được (06/11/2026, i7-8650U)
 Mở cửa sổ khoảng 1,0–1,1 giây. RAM khoảng 135MB, khi xem PDF khoảng 230MB. File exe 76MB. Bản nén chỉ 23MB nhưng mở mất 3,3 giây nên không dùng.
 

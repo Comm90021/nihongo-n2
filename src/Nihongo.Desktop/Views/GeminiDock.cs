@@ -28,7 +28,7 @@ sealed class GeminiDock : Border
     {
         Classes.Add("card");
         Padding = new Thickness(10);
-        MinWidth = 340;
+        MinWidth = 280;
         IsVisible = false;
         var header = Line(Text("Gemini", 16, bold: true),
             Row(4,

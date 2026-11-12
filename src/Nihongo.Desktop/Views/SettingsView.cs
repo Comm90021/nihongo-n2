@@ -57,10 +57,13 @@ sealed class SettingsView : UserControl
         theme.SelectionChanged += (_, _) => Prefs.SetTheme(theme.SelectedIndex);
         var compact = new CheckBox { Content = "Thu gọn thanh bên (chỉ hiện biểu tượng)", IsChecked = Prefs.NavCompact };
         compact.IsCheckedChanged += (_, _) => App.Shell.SetCompact(compact.IsChecked == true);
+        var autoLookup = new CheckBox { Content = "Tự mở bảng Tra từ khi bôi đen chữ (đóng bảng thì không tự mở lại)", IsChecked = Prefs.AutoLookup };
+        autoLookup.IsCheckedChanged += (_, _) => Prefs.SetAutoLookup(autoLookup.IsChecked == true);
         return Col(12,
             Text("Giao diện", 17, bold: true),
             Labeled("Màu nền", theme),
             compact,
+            autoLookup,
             Text("Phím tắt: Ctrl+B thu gọn/mở thanh bên · F11 toàn màn hình · Esc thoát toàn màn hình.", 13, muted: true));
     }
 

@@ -34,8 +34,8 @@ sealed class QuizView : UserControl
 
     void Render()
     {
-        var header = Col(8, Line(Col(2, Title(_title), Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", muted: true)),
-            Btn("Quay lại", App.Shell.BackToSection)), new ProgressBar { Minimum = 0, Maximum = Math.Max(1, _questions.Count), Value = _index, Height = 6 });
+        var header = Col(0, TopBar(_title, Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
+            Bar(_index, Math.Max(1, _questions.Count), 4).Also(b => b.Margin = new Thickness(0, 0, 0, 12)));
         if (_index >= _questions.Count)
         {
             Content = Col(12, header, Card(Col(10,
@@ -69,9 +69,10 @@ sealed class QuizView : UserControl
             var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 10), Classes = { "option" } };
             if (answered)
             {
-                if (n == q.Answer) { b.Background = Good; b.Foreground = Brushes.White; }
-                else if (n == _picked) { b.Background = Bad; b.Foreground = Brushes.White; }
-                else b.Opacity = 0.55;
+                // Cùng kiểu với Thi thử và Chữa bài: viền + nền nhạt, thêm ✓/✕ để không chỉ phân biệt bằng màu.
+                if (n == q.Answer) { b.Classes.Add("correct"); label.Children.Add(Text("✓", 15, bold: true, wrap: false).Tint("GoodInk")); }
+                else if (n == _picked) { b.Classes.Add("wrong"); label.Children.Add(Text("✕", 15, bold: true, wrap: false).Tint("BadInk")); }
+                else b.Opacity = 0.6;
             }
             else b.Click += (_, _) => Pick(n);
             options.Children.Add(b);

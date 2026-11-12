@@ -20,6 +20,8 @@ static class Prefs
     public static int Theme { get; private set; }
     public static bool NavCompact { get; private set; }
     public static bool ShowVi { get; private set; } = true;
+    /// <summary>Bôi đen mà bảng Tra từ đang đóng thì tự mở lại (mặc định bật). Mày tự đóng bảng thì không bật lại dù tùy chọn này bật.</summary>
+    public static bool AutoLookup { get; private set; } = true;
     public static string BackupDir { get; private set; } = DefaultBackupDir;
 
     public const string DefaultFont = "Yu Gothic UI";
@@ -36,6 +38,7 @@ static class Prefs
         Theme = (int)Math.Clamp(Num("theme", 0), 0, 2);
         NavCompact = App.Progress.Setting("nav_compact") == "1";
         ShowVi = App.Progress.Setting("show_vi", "1") == "1";
+        AutoLookup = App.Progress.Setting("auto_lookup", "1") == "1";
         BackupDir = App.Progress.Setting("backup_dir", DefaultBackupDir);
         Apply();
     }
@@ -55,6 +58,7 @@ static class Prefs
     public static void SetFont(string f) { ReadFont = f; App.Progress.SetSetting("read_font", f); Apply(); }
     public static void SetTheme(int t) { Theme = t; Save("theme", t); }
     public static void SetNavCompact(bool v) { NavCompact = v; App.Progress.SetSetting("nav_compact", v ? "1" : "0"); }
+    public static void SetAutoLookup(bool v) { AutoLookup = v; App.Progress.SetSetting("auto_lookup", v ? "1" : "0"); }
     public static void SetShowVi(bool v) { ShowVi = v; App.Progress.SetSetting("show_vi", v ? "1" : "0"); }
     public static void SetBackupDir(string d) { BackupDir = d; App.Progress.SetSetting("backup_dir", d); }
 

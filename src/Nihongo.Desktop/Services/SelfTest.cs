@@ -146,7 +146,7 @@ static class SelfTest
     static async Task Sizes(MainWindow w, string dir, List<string> log)
     {
         string[] tags = ["today", "vocab", "practice", "exam", "reading", "listening", "media", "library", "kaiwa", "denken", "settings"];
-        foreach (var (wd, ht) in new[] { (960, 620), (1366, 768), (1920, 1080) })
+        foreach (var (wd, ht) in new[] { (1280, 672), (960, 620), (1366, 768), (1920, 1080) })
         {
             w.WindowState = Avalonia.Controls.WindowState.Normal;
             w.Width = wd; w.Height = ht;
@@ -169,7 +169,9 @@ static class SelfTest
     // ---------------------------------------------------------------- chữa bài (ghi vào tien_do.db: chỉ chạy trên bản sao dữ liệu)
     static async Task Review(MainWindow w, string dir, List<string> log)
     {
+        w.Width = 1280; w.Height = 672; // vùng làm việc thật của máy user (1920×1080 phóng 150%)
         await Task.Delay(1200);
+        w.TestSelectNav("today"); await Task.Delay(1500); Shot(w, dir, "r0_hom_nay");
         var qs = App.Content.Questions.Where(q => q.IsExam && q.Mondai == 7).Take(3)
             .Concat(App.Content.Questions.Where(q => q.IsExam && q.Mondai == 10 && q.Context != "").Take(2)).ToList();
         log.Add($"Câu thử: {qs.Count} (có bài đọc: {qs.Count(q => q.Context != "")})");

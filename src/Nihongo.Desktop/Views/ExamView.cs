@@ -29,7 +29,9 @@ sealed class ExamView : UserControl
     readonly Border _clockPill;
     readonly Button _submit;
     readonly TextBlock _progress = Text("", 12.5, muted: true);
-    readonly ContentControl _left = new(), _right = new();
+    readonly ContentControl _left = new(), _right = new(), _stripHost = new();
+    readonly Grid _body;
+    readonly GridSplitter _splitter;
     readonly Image _pdf = new() { Stretch = Stretch.Uniform };
     readonly TextBlock _pdfLabel = Text("", 13, muted: true, wrap: false);
     readonly DateTime _started = DateTime.Now;
@@ -54,22 +56,23 @@ sealed class ExamView : UserControl
         _clockPill = new Border { Classes = { "chip" }, Padding = new Thickness(14, 9), CornerRadius = new CornerRadius(10), Child = Row(8, Icon(Glyph.Timer, 16).Tint("AccentInk"), _clock.Tint("AccentInk")) };
         _submit = Btn("Nộp bài", Submit, primary: true);
         var back = IconBtn(Glyph.Back, "Thoát bài thi (bài làm được lưu nháp)", App.Shell.BackToSection);
-        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 16 };
-        Control[] cells = [back, Col(2, Text(exam.Title, 16, bold: true), _progress), _clockPill, _submit];
-        for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; top.Children.Add(cells[i]); }
-        var bar = new Border { Classes = { "card" }, Padding = new Thickness(14, 10), Child = top };
+        // Thanh trên chung: quay lại · tên đề + tiến độ · đồng hồ · nộp bài.
+        var bar = TopBar(exam.Title, _progress, App.Shell.BackToSection, _clockPill, _submit);
+        bar.Margin = new Thickness(0, 0, 0, 12);
         DockPanel.SetDock(bar, Dock.Top);
+        _stripHost.Margin = new Thickness(0, 12, 0, 0);
+        DockPanel.SetDock(_stripHost, Dock.Bottom);
 
         // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột.
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,14,*"), Margin = new Thickness(0, 16, 0, 0) };
-        var splitter = new GridSplitter { Width = 14, Background = Brushes.Transparent, ResizeDirection = GridResizeDirection.Columns };
-        ToolTip.SetTip(splitter, "Kéo để đổi bề rộng hai cột");
-        Grid.SetColumn(splitter, 1);
+        _body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,12,*") };
+        _splitter = new GridSplitter { Width = 12, Background = Brushes.Transparent, ResizeDirection = GridResizeDirection.Columns };
+        ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
+        Grid.SetColumn(_splitter, 1);
         Grid.SetColumn(_right, 2);
-        body.Children.Add(_left);
-        body.Children.Add(splitter);
-        body.Children.Add(_right);
-        Content = new DockPanel { Children = { bar, body } };
+        _body.Children.Add(_left);
+        _body.Children.Add(_splitter);
+        _body.Children.Add(_right);
+        Content = new DockPanel { Children = { bar, _stripHost, _body } };
 
         _timer.Tick += (_, _) =>
         {
@@ -123,18 +126,28 @@ sealed class ExamView : UserControl
     {
         var item = Cur;
         var question = QuestionCard(item);
-        var grid = GridCard();
         if (item.HasPdf || item.Passage != "")
         {
+            Layout(two: true);
             _left.Content = item.HasPdf ? PdfCard(item) : IsListening(item) ? ListeningCard(item) : PassageCard(item);
-            _right.Content = Scroll(Col(14, question, grid));
+            _right.Content = Scroll(question);
         }
         else
         {
-            _left.Content = Scroll(question);
-            _right.Content = Scroll(grid);
+            // Câu không có bài đọc: câu hỏi đứng giữa, rộng vừa phải, không chừa nửa phải trống.
+            Layout(two: false);
+            _left.Content = Scroll(new Border { MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Center, Child = question });
+            _right.Content = null;
         }
+        _stripHost.Content = Strip();
         _progress.Text = $"{_exam.KindLabel} · Đã làm {_picked.Count} / {_items.Count} câu";
+    }
+
+    /// <summary>Hai nửa (bài đọc | câu hỏi) hoặc một nửa chiếm cả chiều ngang (câu không có bài đọc).</summary>
+    void Layout(bool two)
+    {
+        Grid.SetColumnSpan(_left, two ? 1 : 3);
+        _splitter.IsVisible = _right.IsVisible = two;
     }
 
     static string MondaiLabel(ExamItem it) => it.Q is null && it.Mondai == 10 ? "問題10–14 · 読解"
@@ -302,19 +315,20 @@ sealed class ExamView : UserControl
         return Card(body, 0).Also(c => c.Padding = new Thickness(24));
     }
 
-    Control GridCard()
+    /// <summary>
+    /// Phiếu trả lời: dải mảnh dưới đáy, các ô nhóm theo 問題 (tự xuống dòng khi hẹp). Đang làm: ô đặc mực = đã làm,
+    /// vàng = đánh dấu, đỏ son = câu hiện tại. Sau khi nộp: xanh = đúng, đỏ nhạt = sai.
+    /// </summary>
+    Control Strip()
     {
-        var legend = _submitted
-            ? Row(14, Legend("right", "Đúng"), Legend("wrongcell", "Sai"), Legend("", "Bỏ trống"))
-            : Row(14, Legend("done", "Đã làm"), Legend("", "Chưa làm"), Legend("flag", "Xem lại"));
-        var col = Col(10, legend);
+        var wrap = new WrapPanel();
         foreach (var g in _items.Select((it, i) => (it, i)).GroupBy(p => MondaiLabel(p.it)))
         {
-            var wrap = new WrapPanel();
+            var cells = new WrapPanel();
             foreach (var (it, i) in g)
             {
                 var idx = i;
-                var b = new Button { Content = $"{it.No}", Classes = { "cell" }, Margin = new Thickness(0, 0, 4, 4) };
+                var b = new Button { Content = $"{it.No}", Classes = { "cell" }, Width = 21, Height = 24, FontSize = 10.5, CornerRadius = new CornerRadius(5), Margin = new Thickness(0, 0, 2, 0), BorderThickness = new Thickness(1) };
                 Avalonia.Automation.AutomationProperties.SetName(b, $"Câu {it.No}");
                 if (_submitted) { if (_picked.GetValueOrDefault(i) == it.Answer) b.Classes.Add("right"); else if (_picked.ContainsKey(i)) b.Classes.Add("wrongcell"); }
                 else if (idx == _current) b.Classes.Add("current");
@@ -322,23 +336,12 @@ sealed class ExamView : UserControl
                 else if (_picked.ContainsKey(i)) b.Classes.Add("done");
                 if (_submitted && idx == _current) { b.BorderBrush = Accent; b.BorderThickness = new Thickness(2); }
                 b.Click += (_, _) => Go(idx);
-                wrap.Children.Add(b);
+                cells.Children.Add(b);
             }
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,*") };
-            var label = Text(g.Key.StartsWith("聴解") ? g.Key.Replace(" 問題", " ") : g.Key.Split(' ')[0], 11.5, muted: true, wrap: false).Also(t => { t.VerticalAlignment = VerticalAlignment.Top; t.Margin = new Thickness(0, 6, 0, 0); });
-            Grid.SetColumn(wrap, 1);
-            row.Children.Add(label);
-            row.Children.Add(wrap);
-            col.Children.Add(row);
+            var label = Text(g.Key.StartsWith("聴解") ? g.Key.Replace(" 問題", " ") : g.Key.Split(' ')[0], 12, muted: true, wrap: false).Also(t => t.FontFamily = new FontFamily("Yu Mincho, Yu Gothic UI"));
+            wrap.Children.Add(Col(3, label, cells).Also(c => c.Margin = new Thickness(0, 0, 14, 4)));
         }
-        return Card(col, 0).Also(c => c.Padding = new Thickness(18, 16));
-    }
-
-    static Control Legend(string cls, string text)
-    {
-        var sw = new Button { Classes = { "cell" }, Width = 14, Height = 14, IsHitTestVisible = false, Focusable = false, CornerRadius = new CornerRadius(4) };
-        if (cls != "") sw.Classes.Add(cls);
-        return Row(6, sw, Text(text, 12, muted: true));
+        return new Border { Classes = { "card" }, Padding = new Thickness(16, 8, 16, 4), CornerRadius = new CornerRadius(14), Child = wrap };
     }
 
     // ---------------------------------------------------------------- thao tác
@@ -394,8 +397,10 @@ sealed class ExamView : UserControl
 
         _submit.Content = "Về danh sách đề";
         _clock.Text = $"Đúng {score.Correct}/{_items.Count}";
+        Layout(two: true);
         _left.Content = Scroll(ResultCard(score, used));
-        _right.Content = Scroll(GridCard());
+        _right.Content = Scroll(QuestionCard(Cur));
+        _stripHost.Content = Strip();
     }
 
 
