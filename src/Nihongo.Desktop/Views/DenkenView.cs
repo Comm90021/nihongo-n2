@@ -63,18 +63,29 @@ sealed class DenkenView : UserControl
     Control Topics()
     {
         var attempts = App.Progress.AttemptStats();
+        // Lần chốt bài gần nhất của từng chủ đề (kết quả có mã dkt:<cấp>:<môn>:<chủ đề>).
+        var lastByTopic = App.Progress.Results().Where(r => r.Kind == "denken-practice" && r.SetId.StartsWith("dkt:")).GroupBy(r => r.SetId).ToDictionary(g => g.Key, g => g.First());
         var list = Col(6);
         foreach (var g in Current.GroupBy(q => (q.SubjectName, q.TopicCode, q.TopicName)).OrderBy(g => g.Min(q => q.Week)).ThenBy(g => g.Key.TopicCode))
         {
             var (done, weak) = Progress(g, attempts);
             var qs = g.ToList();
+            int right = 0, tried = 0;
+            foreach (var q in qs) if (attempts.TryGetValue(q.SrsId, out var a)) { right += a.Correct; tried += a.Total; }
+            var topicId = $"dkt:{_level}:{g.Key.SubjectName}:{g.Key.TopicCode}";
+            var last = lastByTopic.GetValueOrDefault(topicId);
+            var pct = tried == 0 ? 0 : 100.0 * right / tried;
+            var badge = tried == 0 ? Badge("chưa làm", "plain") : tried < 5 ? Badge("ít số liệu", "warn") : pct >= 80 ? Badge("ổn", "good") : pct >= 60 ? Badge("tạm", "warn") : Badge("yếu", "bad");
+            var title = g.Key.TopicName == "" ? g.Key.TopicCode : g.Key.TopicName;
             list.Children.Add(Card(Line(
-                Col(3, Text(g.Key.TopicName == "" ? g.Key.TopicCode : g.Key.TopicName, 15, bold: true),
+                Col(4, Row(8, Text(title, 15, bold: true), badge),
                     Text($"{g.Key.SubjectName} · {g.Key.TopicCode} · {qs.Count} câu · đã làm {done}{(weak > 0 ? $" · {weak} câu đang yếu" : "")}", 12, muted: true),
+                    Text(tried == 0 ? "chưa có lần trả lời nào" : $"đúng {pct:0}% ({right}/{tried} lần trả lời)" + (last is null ? "" : $" · chốt bài gần nhất {last.Correct}/{last.Total} ngày {last.At:dd/MM}"), 12, muted: true),
+                    Bar(right, Math.Max(1, tried), 5),
                     qs[0].Method != "" ? Text("Cách giải: " + qs[0].Method, 12, muted: true) : null),
                 Row(6,
-                    Btn("Xem câu", () => App.Shell.Show(new DenkenSessionView(qs.OrderBy(q => q.Year).ToList(), g.Key.TopicName, 0, Back))),
-                    Btn("Luyện 10 câu", () => Start(Pick(qs, 10), g.Key.TopicName), primary: true))), 3));
+                    Btn("Xem câu", () => App.Shell.Show(new DenkenSessionView(qs.OrderBy(q => q.Year).ToList(), title, 0, Back, topicId))),
+                    Btn("Luyện 10 câu", () => App.Shell.Show(new DenkenSessionView(Pick(qs, 10), title, 0, Back, topicId)), primary: true))), 3));
         }
         if (list.Children.Count == 0) list.Children.Add(Text("Không có câu nào.", muted: true));
         return list;
@@ -110,8 +121,9 @@ sealed class DenkenView : UserControl
         var dueList = weak.Where(q => due.Contains(q.SrsId)).ToList();
         var list = Col(6, Card(Line(
             Col(2, Text($"{weak.Count} câu sai đang ôn", 16, bold: true), Text($"{dueList.Count} câu đến hạn hôm nay. Làm đúng liên tiếp 3 lần (cách 1, 3, 7 ngày) là thuộc.", 13, muted: true)),
-            Row(6, Btn("Ôn câu đến hạn", () => Start(dueList, "Câu sai đến hạn"), primary: true, enabled: dueList.Count > 0),
-                Btn("Ôn tất cả câu sai", () => Start(weak, "Câu sai"), enabled: weak.Count > 0)))));
+            Ui.Wrap(Btn("Ôn câu đến hạn", () => Start(dueList, "Câu sai đến hạn"), primary: true, enabled: dueList.Count > 0),
+                Btn("Ôn tất cả câu sai", () => Start(weak, "Câu sai"), enabled: weak.Count > 0),
+                Btn("Chữa với Gemini (tối đa 30 câu)", () => App.Shell.Show(new ReviewView("Câu 電験 đang sai", _level, weak.Take(30).Select(q => q.ToWrongItem(0, null) with { PickedText = $"(sai {p.Get(q.SrsId)!.Lapses} lần)" }).ToList(), Back, denken: true)), enabled: weak.Count > 0)))));
         foreach (var q in weak.Take(200))
         {
             var e = p.Get(q.SrsId)!;
@@ -207,7 +219,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         _resultId = resultId;
         _submitted = minutes == 0; // luyện thường: trả lời là thấy đáp án ngay
         var bar = Line(Row(10, Btn("← Thoát", Exit), Text(title, 18, bold: true, wrap: false), _counter),
-            Row(8, _clock, minutes > 0 ? Btn("Nộp bài", Submit, primary: true) : null));
+            Row(8, _clock, minutes > 0 ? Btn("Nộp bài", Submit, primary: true) : Btn("Chốt bài", Finish, primary: true)));
         DockPanel.SetDock(bar, Dock.Top);
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 6, Margin = new Avalonia.Thickness(0, 10, 0, 0) };
         var frame = new Border { CornerRadius = new Avalonia.CornerRadius(12), ClipToBounds = true, Child = _web };
@@ -244,6 +256,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
     async void Go(int i)
     {
         _auto.Cancel();
+        _finished = false;
         if (_qs.Count == 0) { _panel.Content = Text("Không có câu nào.", muted: true); return; }
         _index = Math.Clamp(i, 0, _qs.Count - 1);
         _counter.Text = $"Câu {_index + 1}/{_qs.Count}";
@@ -275,8 +288,77 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
     }
 
     /// <summary>Phím: 1–5 chọn, Enter/→ câu sau, ← câu trước. Khung web đang giữ focus thì phím đi vào trang, không tới đây.</summary>
+    // ---------------------------------------------------------------- chốt bài, tổng kết, chữa với Gemini
+    bool _finished;
+
+    /// <summary>Câu đã chấm được: có đáp án chọn, hoặc tự chấm. Thi thử đã nộp thì câu trắc nghiệm bỏ trống cũng tính (sai).</summary>
+    bool Graded(int i) => _qs[i].Choice > 0 ? _state[i].Picked > 0 || (_minutes > 0 && _submitted) : _state[i].Self is not null;
+
+    bool IsRight(int i) => _qs[i].Choice > 0 ? _state[i].Picked == _qs[i].Choice : _state[i].Self == true;
+
+    List<int> WrongIndexes() => Enumerable.Range(0, _qs.Count).Where(i => Graded(i) && !IsRight(i)).ToList();
+
+    List<WrongItem> WrongItems() => WrongIndexes().Select(i => _qs[i].ToWrongItem(_state[i].Picked, _state[i].Self)).ToList();
+
+    void OpenReview()
+    {
+        var wrong = WrongIndexes();
+        if (wrong.Count == 0) return;
+        var retry = wrong.Select(i => _qs[i]).ToList();
+        var level = _qs[0].Level;
+        _timer?.Stop();
+        App.Shell.Show(new ReviewView(_title, level, WrongItems(), _back, () => App.Shell.Show(new DenkenSessionView(retry, "Làm lại câu sai", 0, _back)), denken: true));
+    }
+
+    // Dùng cho Services/SelfTest (NIHONGO_SELFTEST=denken).
+    internal int TestIndex => _index;
+    internal DenkenQuestion TestCurrent => Q;
+    internal void TestFinish() => Finish();
+    internal void TestOpenReview() => OpenReview();
+
+    /// <summary>Chốt bài luyện: chấm tổng, ghi kết quả theo chủ đề, ghi câu sai, hiện tổng kết.</summary>
+    void Finish()
+    {
+        _auto.Cancel();
+        var graded = Enumerable.Range(0, _qs.Count).Where(Graded).ToList();
+        var correct = graded.Count(IsRight);
+        var wrong = WrongIndexes();
+        _finished = true;
+        var session = $"dk:{DateTime.Now:yyyyMMddHHmmss}";
+        foreach (var i in wrong) App.Progress.LogWrong(_qs[i].SrsId, _state[i].Picked, session);
+        App.Progress.SaveResult(new ExamResult(_resultId != "" ? _resultId : $"dkp:{_title}", _title, "denken-practice", DateTime.Now, correct, graded.Count,
+            (int)(DateTime.Now - _startedAt).TotalSeconds));
+
+        var col = Col(14,
+            Text("Chốt bài", 13, muted: true),
+            Row(10, BigNumber($"{correct}/{graded.Count}", 40), Text(graded.Count == 0 ? "chưa chấm câu nào" : $"{100.0 * correct / graded.Count:0}% đúng", 15, muted: true).Also(t => t.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom)));
+        var pending = _qs.Count - graded.Count;
+        if (pending > 0) col.Children.Add(Text($"{pending} câu chưa làm hoặc chưa tự chấm, không tính vào kết quả.", 13, muted: true));
+        var topics = Col(8);
+        foreach (var g in graded.GroupBy(i => _qs[i].TopicName == "" ? _qs[i].TopicCode : _qs[i].TopicName))
+        {
+            var ok = g.Count(IsRight);
+            topics.Children.Add(Col(3, Line(Text(g.Key, 13.5), Text($"{ok}/{g.Count()}", 13, muted: true)), Bar(ok, g.Count(), 5)));
+        }
+        if (topics.Children.Count > 0) col.Children.Add(topics);
+        col.Children.Add(Divider());
+        col.Children.Add(Ui.Wrap(
+            Btn(wrong.Count > 0 ? $"Chữa {wrong.Count} câu sai với Gemini" : "Không có câu sai", OpenReview, primary: true, enabled: wrong.Count > 0),
+            Btn("Làm lại câu sai", () => App.Shell.Show(new DenkenSessionView(wrong.Select(i => _qs[i]).ToList(), "Làm lại câu sai", 0, _back)), enabled: wrong.Count > 0),
+            Btn("Quay lại làm tiếp", () => { _finished = false; Render(); }),
+            Btn("Về danh sách", Exit)));
+        if (wrong.Count > 0)
+        {
+            var list = Col(3);
+            foreach (var i in wrong) list.Children.Add(Text($"• {_qs[i].Title}", 13, muted: true));
+            col.Children.Add(list);
+        }
+        _panel.Content = col;
+    }
+
     public bool HandleKey(Avalonia.Input.KeyEventArgs e)
     {
+        if (_finished) return false;
         var digit = QuizNav.Digit(e.Key);
         if (digit is >= 1 and <= 5 && Q.Choice > 0) Choose(digit);
         else if (e.Key is Avalonia.Input.Key.Enter or Avalonia.Input.Key.Right && _index < _qs.Count - 1) Go(_index + 1);
@@ -365,7 +447,11 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
             grid.Children.Add(b);
         }
         if (_qs.Count > 1) col.Children.Add(grid);
-        if (_submitted && _minutes > 0) col.Children.Add(Text(Score(), 14, bold: true));
+        if (_submitted && _minutes > 0)
+        {
+            col.Children.Add(Text(Score(), 14, bold: true));
+            if (WrongIndexes().Count > 0) col.Children.Add(Btn($"Chữa {WrongIndexes().Count} câu sai với Gemini", OpenReview, primary: true));
+        }
         _panel.Content = col;
     }
 
@@ -393,6 +479,8 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
             App.Progress.SaveResult(new ExamResult(_resultId, _title, "denken", DateTime.Now, auto.Count(x => x.s.Picked == x.q.Choice), auto.Count,
                 (int)(DateTime.Now - _startedAt).TotalSeconds));
         _clock.Text = "Đã nộp";
+        var session = $"dk:{DateTime.Now:yyyyMMddHHmmss}";
+        foreach (var i in WrongIndexes()) App.Progress.LogWrong(_qs[i].SrsId, _state[i].Picked, session);
         Go(0);
         SetSolution(true);
     }

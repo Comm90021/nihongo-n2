@@ -17,7 +17,7 @@ namespace Nihongo.Desktop.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "video" or "ui" or "extra" or "sizes" or "dich" or "review" or "keys" or "stats";
+    public static bool Enabled => Mode is "video" or "ui" or "extra" or "sizes" or "dich" or "review" or "keys" or "stats" or "denken" or "speak";
 
     public static async void Run(MainWindow w)
     {
@@ -33,6 +33,8 @@ static class SelfTest
             else if (Mode == "review") await Review(w, dir, log);
             else if (Mode == "keys") await Keys(w, dir, log);
             else if (Mode == "stats") await Stats(w, dir, log);
+            else if (Mode == "denken") await Denken(w, dir, log);
+            else if (Mode == "speak") await Speak(w, dir, log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -257,6 +259,68 @@ static class SelfTest
         // Nghe: script chữ có trong DB
         foreach (var set in App.Content.LoadListeningSets().Where(s => s.Id.Contains("real-n1-2021-12") || s.Id.Contains("jtest-ac-187") || s.Id.Contains("2026-07")))
             log.Add($"{set.Id}: {App.Content.LoadListeningLines(set.Id).Count(l => l.Script.Trim() != "")}/{set.Items.Count} câu có script chữ, script PDF={(set.ScriptPdf != "" ? "có" : "KHÔNG")}");
+    }
+
+    // ---------------------------------------------------------------- nói: giọng đọc của Windows → file WAV → bộ nhận giọng → chấm (không cần micro)
+    static async Task Speak(MainWindow w, string dir, List<string> log)
+    {
+        log.Add($"Bộ nhận giọng tiếng Nhật: {(SpeechInput.Available ? "có" : "KHÔNG")}");
+        var cards = App.Content.LoadKaiwaCards().Where(c => c.Ja.Length is > 8 and < 40).Take(6).ToList();
+        foreach (var c in cards)
+        {
+            var wav = Path.Combine(dir, $"say_{c.Id}.wav");
+            using (var synth = new System.Speech.Synthesis.SpeechSynthesizer())
+            {
+                synth.SelectVoiceByHints(System.Speech.Synthesis.VoiceGender.NotSet, System.Speech.Synthesis.VoiceAge.NotSet, 0, new System.Globalization.CultureInfo("ja-JP"));
+                synth.SetOutputToWaveFile(wav);
+                synth.Speak(c.Ja);
+            }
+            var heard = await SpeechInput.RecognizeFileAsync(wav);
+            var r = SpeakScore.Compare(c.Ja, heard);
+            log.Add($"[{r.Score,3}] 原文: {c.Ja}\n      認識: {heard}");
+            File.Delete(wav);
+        }
+        w.Width = 1280; w.Height = 672;
+        var card = cards[0];
+        var view = new KaiwaCardView([card], "Tự kiểm nói", false);
+        w.Show(view); await Task.Delay(800);
+        Press(w, Avalonia.Input.Key.Space); await Task.Delay(800);
+        Shot(w, dir, "m1_the_mau_cau");
+        // Màn kết quả đọc theo với một câu nghe thiếu đoạn sau (không cần micro).
+        var partial = card.Ja[..(card.Ja.Length * 2 / 3)];
+        w.Show(new Avalonia.Controls.ScrollViewer { Content = SpeakFeedback.Build(card.Ja, partial) }); await Task.Delay(800);
+        Shot(w, dir, "m2_ket_qua");
+    }
+
+    // ---------------------------------------------------------------- 電験: chọn đáp án bằng phím, chốt bài, chữa với Gemini (ghi vào tien_do.db: chỉ chạy trên bản sao)
+    static async Task Denken(MainWindow w, string dir, List<string> log)
+    {
+        w.Width = 1280; w.Height = 672;
+        await Task.Delay(1200);
+        Prefs.SetAutoNext(0);
+        var qs = DenkenView.All.Where(q => q.Level == "3種" && q.Choice > 0).Take(5).ToList();
+        var view = new DenkenSessionView(qs, "Tự kiểm 電験", 0, () => { });
+        w.Show(view); await Task.Delay(2500);
+        w.FocusManager?.ClearFocus();
+        // Câu 1 đúng, câu 2 sai, câu 3 bỏ trống (không chọn), câu 4 sai, câu 5 đúng.
+        int Wrong(DenkenQuestion q) => q.Choice % 5 + 1;
+        void Pick(int n) => Press(w, Avalonia.Input.Key.D1 + (n - 1));
+        Pick(view.TestCurrent.Choice); await Task.Delay(300); Press(w, Avalonia.Input.Key.Enter); await Task.Delay(300);
+        Pick(Wrong(view.TestCurrent)); await Task.Delay(300); Press(w, Avalonia.Input.Key.Enter); await Task.Delay(300);
+        Press(w, Avalonia.Input.Key.Enter); await Task.Delay(300);
+        Pick(Wrong(view.TestCurrent)); await Task.Delay(300); Press(w, Avalonia.Input.Key.Enter); await Task.Delay(300);
+        Pick(view.TestCurrent.Choice); await Task.Delay(300);
+        log.Add($"Đang ở câu {view.TestIndex + 1} (mong đợi 5)");
+        view.TestFinish(); await Task.Delay(600); Shot(w, dir, "d1_tong_ket");
+        var res = App.Progress.Results().First(r => r.Kind == "denken-practice");
+        log.Add($"Kết quả ghi: {res.SetId} {res.Correct}/{res.Total} (mong đợi dkp:… 2/4)");
+        log.Add($"Câu sai vào bảng wrong: {App.Progress.Wrongs().Count(x => x.Session.StartsWith("dk:"))} (mong đợi 2)");
+        var items = new List<WrongItem> { qs[1].ToWrongItem(Wrong(qs[1])), qs[3].ToWrongItem(Wrong(qs[3])) };
+        foreach (var p in ReviewPrompt.Build("Tự kiểm 電験", "3種", items, denken: true)) log.Add($"--- lời nhắc ({p.Prompt.Length} ký tự)\n{p.Prompt}");
+        view.TestOpenReview(); await Task.Delay(7000); Shot(w, dir, "d2_chua_bai");
+        App.Progress.SetSetting("dk_tab", "0");
+        w.GoTo("today"); await Task.Delay(500);
+        w.GoTo("denken"); await Task.Delay(1500); Shot(w, dir, "d3_chu_de");
     }
 
     // ---------------------------------------------------------------- thống kê (ghi dữ liệu giả vào tien_do.db: chỉ chạy trên bản sao)

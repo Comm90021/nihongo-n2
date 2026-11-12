@@ -33,13 +33,17 @@ sealed class ReviewView : UserControl, IGeminiDock
     IReadOnlyList<WrongItem> _scope = [];   // tập câu của lời nhắc đã gửi gần nhất (để tách lời giải đúng số câu)
     int _next;                              // phần kế tiếp sẽ gửi khi bài dài bị chia nhiều phần
 
-    public ReviewView(string title, string level, IReadOnlyList<WrongItem> items, Action back, Action? retry = null)
+    readonly bool _denken;
+
+    /// <param name="denken">Câu 電験: đề là trang web nên gửi đường dẫn + chủ đề thay vì phương án; lời nhắc theo môn.</param>
+    public ReviewView(string title, string level, IReadOnlyList<WrongItem> items, Action back, Action? retry = null, bool denken = false)
     {
         _title = title;
         _level = level;
+        _denken = denken;
         _items = items.ToList();
-        _askable = _items.Where(i => i.Options.Count > 0).ToList();
-        _parts = ReviewPrompt.Build(title, level, _askable);
+        _askable = _items.Where(i => denken ? i.Askable : i.Options.Count > 0).ToList();
+        _parts = ReviewPrompt.Build(title, level, _askable, denken: denken);
         _scope = _askable;
         Idle();
 
@@ -164,8 +168,15 @@ sealed class ReviewView : UserControl, IGeminiDock
             body.Children.Add(new Border { Classes = { "chip", "plain" }, Padding = new Thickness(14, 10), CornerRadius = new CornerRadius(10),
                 Child = new ScrollViewer { MaxHeight = 200, Content = Reading(new SelectableTextBlock { Text = it.Context, TextWrapping = TextWrapping.Wrap }) } });
         if (it.Stem != "")
-            body.Children.Add(Reading(new TextBlock { TextWrapping = TextWrapping.Wrap, Inlines = JpText.Build(it.Stem) }));
-        if (it.Options.Count == 0)
+            body.Children.Add(_denken
+                ? new SelectableTextBlock { Text = it.Stem, TextWrapping = TextWrapping.Wrap, FontSize = 14 }
+                : Reading(new TextBlock { TextWrapping = TextWrapping.Wrap, Inlines = JpText.Build(it.Stem) }));
+        if (it.Options.Count == 0 && it.AnswerText != "")
+        {
+            // 電験: đề bài là trang web, hiện chủ đề/đường dẫn và đáp án của sổ ôn.
+            body.Children.Add(Text($"Mày: {(it.PickedText != "" ? it.PickedText : it.Picked > 0 ? $"({it.Picked})" : "(bỏ trống)")} · đáp án đúng: {it.AnswerText}", 14, bold: true).Tint("BadInk"));
+        }
+        else if (it.Options.Count == 0)
         {
             body.Children.Add(Text($"Câu chỉ có trang PDF trong đề: xem lại ở đề gốc. {(it.Picked > 0 ? $"Mày chọn {it.Picked}" : "Mày bỏ trống")}, đáp án đúng {it.Answer}.", 13, muted: true));
         }
@@ -204,9 +215,9 @@ sealed class ReviewView : UserControl, IGeminiDock
             body.Children.Add(new Border { Padding = new Thickness(14, 10), CornerRadius = new CornerRadius(10), Child = Col(4,
                 Text($"Lời giải của Gemini · lưu {saved.At:dd/MM}", 12, bold: true).Tint("AccentInk"),
                 new SelectableTextBlock { Text = saved.Text, TextWrapping = TextWrapping.Wrap, FontSize = 15 }) }.Themed(Border.BackgroundProperty, "AccentSoft"));
-        if (it.Options.Count > 0)
+        if (_denken ? it.Askable : it.Options.Count > 0)
         {
-            var single = ReviewPrompt.Build(_title, _level, [it]);
+            var single = ReviewPrompt.Build(_title, _level, [it], denken: _denken);
             body.Children.Add(Btn("Hỏi riêng câu này", () => Ask(single[0].Prompt, [it])).Also(b => { b.Classes.Add("link"); b.HorizontalAlignment = HorizontalAlignment.Left; }));
         }
         return new Border { Padding = new Thickness(20, 16), Child = body };

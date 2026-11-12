@@ -159,7 +159,13 @@ sealed class KaiwaPracticeView : UserControl
                 Divider(),
                 input,
                 Row(8,
-                    Btn("Nhờ Gemini sửa", () => _ = App.Shell.AskGemini(Correct(item, input.Text ?? "")), primary: true),
+                    new MicRecorder(heard =>
+                    {
+                        // Nói thay gõ: chữ nhận được nối vào ô trả lời (sửa tay được). Nhớ là câu này nói chứ không gõ để dặn Gemini.
+                        input.Text = ((input.Text ?? "").TrimEnd() + " " + heard).Trim();
+                        _spoken.Add(_index);
+                    }, "🎤 Nói câu trả lời"),
+                    Btn("Nhờ Gemini sửa", () => _ = App.Shell.AskGemini(Correct(item, input.Text ?? "", _spoken.Contains(_index))), primary: true),
                     Btn("Nghe câu của mày", () => Speech.Say(input.Text ?? "")),
                     Btn("Gợi ý cách trả lời", () => _ = App.Shell.AskGemini(Hint(item)))),
                 model), 0),
@@ -167,9 +173,12 @@ sealed class KaiwaPracticeView : UserControl
                 Btn("Câu tiếp ›", () => { _index++; Render(); }, primary: true, enabled: _index < _items.Count - 1)));
     }
 
-    string Correct(KaiwaPrompt item, string answer) =>
+    readonly HashSet<int> _spoken = [];
+
+    string Correct(KaiwaPrompt item, string answer, bool spoken = false) =>
         $"Tôi đang luyện hội thoại tiếng Nhật (trình độ N2{(_register != "" ? $", văn phong {_register}" : "")}, chủ đề: {_title}).\n" +
-        $"Câu hỏi: {item.Ja}\nCâu trả lời của tôi: {(answer.Trim() == "" ? "(chưa trả lời)" : answer.Trim())}\n\n" +
+        $"Câu hỏi: {item.Ja}\nCâu trả lời của tôi: {(answer.Trim() == "" ? "(chưa trả lời)" : answer.Trim())}\n" +
+        (spoken ? "(Đây là câu tôi NÓI, chữ do máy nhận giọng ghi lại nên có thể sai chữ đồng âm hoặc thiếu dấu câu; đừng coi đó là lỗi của tôi, chỉ chỉ ra lỗi ngữ pháp, từ vựng, kính ngữ, độ tự nhiên.)\n" : "") + "\n" +
         "Hãy: (1) chỉ ra lỗi ngữ pháp, từ vựng, kính ngữ, trợ từ; (2) viết lại câu tự nhiên như người Nhật nói, kèm một phiên bản lịch sự hơn; " +
         "(3) giải thích ngắn gọn bằng tiếng Việt; (4) chấm điểm /10.";
 
@@ -181,10 +190,13 @@ sealed class KaiwaPracticeView : UserControl
 sealed class KaiwaCardView : UserControl, IKeyTarget
 {
     /// <summary>Space/Enter lật thẻ; sau khi lật: 1 chưa nhớ, 2 nhớ.</summary>
+    MicRecorder? _mic;
+
     public bool HandleKey(Avalonia.Input.KeyEventArgs e)
     {
         if (_browse || _index >= _cards.Count) return false;
         var card = _cards[_index];
+        if (_flipped && e.Key == Avalonia.Input.Key.R && _mic is not null) { _mic.Toggle(); return true; }
         if (!_flipped && e.Key is Avalonia.Input.Key.Space or Avalonia.Input.Key.Enter) { _flipped = true; Render(); }
         else if (_flipped && QuizNav.Digit(e.Key) == 1) Answer(card, false);
         else if (_flipped && QuizNav.Digit(e.Key) == 2) Answer(card, true);
@@ -240,6 +252,14 @@ sealed class KaiwaCardView : UserControl, IKeyTarget
         {
             face.Children.Add(Divider());
             face.Children.Add(Back(card));
+            // Đọc theo: máy nghe, so với câu mẫu, tô chỗ lệch. Ghi vào thống kê phần Nói (không đổi lịch ôn: vẫn tự bấm Nhớ/Chưa nhớ).
+            var feedback = new ContentControl();
+            _mic = new MicRecorder(heard =>
+            {
+                feedback.Content = SpeakFeedback.Build(card.Ja, heard);
+                App.Progress.LogAttempt($"kw:say:{card.Id}", SpeakFeedback.Passed(card.Ja, heard));
+            }, "🎤 Đọc theo (R)");
+            face.Children.Add(Col(8, _mic, feedback));
             face.Children.Add(Row(8,
                 Btn("Chưa nhớ", () => Answer(card, false)),
                 Btn("Nhớ", () => Answer(card, true), primary: true)));

@@ -17,6 +17,19 @@ public sealed record DenkenQuestion(string Id, string Level, string SubjectCode,
 
     /// <summary>Thời gian thi một môn (phút): 法規 65, 二次 電力・管理 120, 機械・制御 60, còn lại 90.</summary>
     public int ExamMinutes => SubjectName switch { "法規" => 65, "電力・管理" => 120, "機械・制御" => 60, _ => 90 };
+
+    /// <summary>
+    /// Câu này dưới dạng một câu để Gemini chữa. Đề bài là trang web nên chỉ gửi đường dẫn + chủ đề, cách giải, công thức.
+    /// <paramref name="picked"/>: phương án đã chọn (0 = bỏ trống); <paramref name="self"/>: kết quả tự chấm của câu không có đáp án đánh số.
+    /// </summary>
+    public WrongItem ToWrongItem(int picked = 0, bool? self = null)
+    {
+        var stem = $"Đề và lời giải: {Url}\nChủ đề: {(TopicName != "" ? TopicName : TopicCode)}" +
+                   (Method != "" ? $"\nCách giải gợi ý: {Method}" : "") + (Formula != "" ? $"\nCông thức: {Formula}" : "");
+        var mine = Choice > 0 ? (picked > 0 ? $"({picked})" : "(bỏ trống)")
+            : self switch { true => "tự chấm là đúng", false => "tự chấm là sai", _ => "(chưa chấm)" };
+        return new WrongItem(SrsId, Title, SubjectName, "", stem, [], picked, Choice, "", mine, Answer == "" ? "(sổ ôn không ghi đáp án)" : Answer);
+    }
 }
 
 /// <summary>Một câu nghe dạng chữ (V30): lời thoại, phương án in trong đề, đáp án 1-based. Dùng để chữa bài Nghe.</summary>
