@@ -1,4 +1,4 @@
-using System.Speech.Recognition;
+﻿using System.Speech.Recognition;
 using Avalonia.Threading;
 using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
@@ -36,6 +36,9 @@ sealed class SpeechInput : IDisposable
     /// <summary>File thu âm của lần nói gần nhất bằng bộ cũ (null nếu chưa có).</summary>
     public static string? LastRecording { get; private set; }
 
+    /// <summary>Đỉnh âm lượng của lần ghi gần nhất (0–1, trước khi khuếch đại). Dưới ~0,15 là micro thu quá nhỏ.</summary>
+    public static double LastPeak { get; private set; } = 1;
+
     static RecognizerInfo? Japanese()
     {
         try { return SpeechRecognitionEngine.InstalledRecognizers().FirstOrDefault(r => r.Culture.Name == "ja-JP"); }
@@ -46,50 +49,45 @@ sealed class SpeechInput : IDisposable
     public static bool Available => Japanese() is not null || Prefs.SpeechEngine != "old";
 
     string Joined() { lock (_lock) return string.Concat(_parts); }
+    string Joined2() => string.Concat(_parts); // gọi khi đã giữ _lock
+    string _lastHypothesis = "";
 
     // ================================================================ bắt đầu / dừng
+    // Luồng (sửa 12/11 sau lỗi "bấm Dừng mà không hiện chữ"): LUÔN ghi âm ra file; nếu được thì bộ mới chạy song song.
+    // Bấm Dừng: dừng ghi ngay, chờ bộ mới tối đa StopWaitMs (lệnh dừng của bộ mới có lúc mất ~10 giây và không trả gì),
+    // có chữ thì dùng, không có thì nhận dạng file ghi âm bằng bộ cũ. Không bao giờ chờ sự kiện Completed.
+    const int StopWaitMs = 3000;
+
     /// <param name="onEnd">Khi xong: chữ nhận được và thông báo lỗi (null nếu bình thường). Luồng giao diện.</param>
-    /// <param name="onEngine">Bộ đang dùng, và lý do nếu phải lùi về bộ cũ. Luồng giao diện.</param>
-    /// <param name="onProcessing">Đã dừng ghi, đang nhận dạng (bộ cũ mất vài giây). Luồng giao diện.</param>
+    /// <param name="onEngine">Bộ đang dùng, và lý do nếu bộ mới không chạy. Luồng giao diện.</param>
+    /// <param name="onProcessing">Đã dừng ghi, đang nhận dạng. Luồng giao diện.</param>
     public async void Start(Action<string, string?> onEnd, Action<string, string?>? onEngine = null, Action? onProcessing = null, int maxSeconds = 30)
     {
         Stop();
-        lock (_lock) _parts.Clear();
+        lock (_lock) { _parts.Clear(); _lastHypothesis = ""; }
         _onEnd = onEnd;
         _onProcessing = onProcessing;
         _stopping = false;
         _active = true;
-        string? fallbackReason = null;
-        if (Prefs.SpeechEngine != "old")
-        {
-            try
-            {
-                await StartNew();
-                onEngine?.Invoke(EngineNew, null);
-                ArmLimit(maxSeconds);
-                return;
-            }
-            catch (Exception ex)
-            {
-                fallbackReason = ExplainNew(ex);
-                Log.Error("SpeechInput.StartNew", ex);
-                CleanupNew();
-            }
-        }
-        if (!_active) return; // đã bấm dừng trong lúc chờ
-        try
-        {
-            await StartRecording();
-            onEngine?.Invoke(EngineOld, fallbackReason);
-            ArmLimit(maxSeconds);
-        }
+        try { await StartRecording(); }
         catch (Exception ex)
         {
             Log.Error("SpeechInput.StartRecording", ex);
             var onEndNow = _onEnd;
             Cleanup();
             onEndNow?.Invoke("", ExplainRecording(ex));
+            return;
         }
+        if (!_active) return; // đã bấm dừng trong lúc mở micro
+        string? reason = null;
+        var engine = EngineOld;
+        if (Prefs.SpeechEngine != "old")
+        {
+            try { await StartNew(); engine = EngineNew; }
+            catch (Exception ex) { reason = ExplainNew(ex); Log.Error("SpeechInput.StartNew", ex); CleanupNew(); }
+        }
+        onEngine?.Invoke(engine, reason);
+        ArmLimit(maxSeconds);
     }
 
     void ArmLimit(int seconds)
@@ -99,28 +97,47 @@ sealed class SpeechInput : IDisposable
         _limit.Start();
     }
 
-    /// <summary>Dừng ghi. Kết quả đến qua onEnd (bộ cũ: sau khi nhận dạng xong file thu âm).</summary>
+    /// <summary>Dừng ghi. Kết quả đến qua onEnd sau vài giây (luôn có, kể cả khi rỗng hoặc lỗi).</summary>
     public async void Stop()
     {
         _limit?.Stop();
         if (!_active || _stopping) return;
         _stopping = true;
+        var onEnd = _onEnd;
         try
         {
-            if (_new is not null) await _new.ContinuousRecognitionSession.StopAsync(); // Completed báo xong
-            else if (_capture is not null) await FinishRecording();
-            else { Finish(null); }                                                    // bấm dừng khi còn đang khởi động
+            _onProcessing?.Invoke();
+            // 1) Dừng ghi âm trước: file luôn có để dự phòng và để nghe lại.
+            string? wav = null;
+            if (_capture is { } capture)
+            {
+                try { await capture.StopRecordAsync(); NormalizeWav(_wav!); wav = _wav; LastRecording = wav; }
+                catch (Exception ex) { Log.Error("SpeechInput.StopRecord", ex); }
+            }
+            // 2) Bộ mới: chờ tối đa StopWaitMs.
+            var text = "";
+            if (_new is { } rec)
+            {
+                var stop = Task.Run(async () => { try { await rec.ContinuousRecognitionSession.StopAsync(); } catch (Exception ex) { Log.Error("SpeechInput.StopNew", ex); } });
+                await Task.WhenAny(stop, Task.Delay(StopWaitMs));
+                lock (_lock) text = _parts.Count > 0 ? string.Concat(_parts) : _lastHypothesis;
+                if (text.Trim() != "") Log.Info($"SpeechInput: bộ mới trả \"{text}\"");
+            }
+            // 3) Không có chữ từ bộ mới: nhận dạng file ghi âm bằng bộ cũ.
+            if (text.Trim() == "" && wav is not null && LastPeak >= 0.12)
+            {
+                text = await RecognizeFileAsync(wav);
+                Log.Info($"SpeechInput: bộ cũ (file) trả \"{text}\"");
+            }
+            Cleanup();
+            onEnd?.Invoke(text.Trim(), null);
         }
-        catch (Exception ex) { Log.Error("SpeechInput.Stop", ex); Finish(ex); }
-    }
-
-    void Finish(Exception? error)
-    {
-        var text = Joined();
-        var onEnd = _onEnd;
-        var wasNew = _new is not null;
-        Cleanup();
-        onEnd?.Invoke(text, error is null ? null : (wasNew ? ExplainNew(error) : ExplainRecording(error)));
+        catch (Exception ex)
+        {
+            Log.Error("SpeechInput.Stop", ex);
+            Cleanup();
+            onEnd?.Invoke("", $"Không nhận dạng được: {ex.Message.Split('\n')[0].Trim()}");
+        }
     }
 
     void Cleanup()
@@ -137,11 +154,12 @@ sealed class SpeechInput : IDisposable
         try { capture?.Dispose(); } catch { }
     }
 
-    // ================================================================ bộ cũ: ghi âm → file → nhận dạng một lần
+    // ================================================================ ghi âm → file (dự phòng, nghe lại)
     async Task StartRecording()
     {
         var dir = Path.Combine(Path.GetTempPath(), "nihongo-ghi-am");
         Directory.CreateDirectory(dir);
+        foreach (var old in Directory.GetFiles(dir, "noi_*.wav").OrderByDescending(f => f).Skip(5)) { try { File.Delete(old); } catch { } } // giữ 5 file gần nhất
         _wav = Path.Combine(dir, $"noi_{DateTime.Now:HHmmssfff}.wav");
         var capture = new MediaCapture();
         await capture.InitializeAsync(new MediaCaptureInitializationSettings { StreamingCaptureMode = StreamingCaptureMode.Audio });
@@ -154,23 +172,6 @@ sealed class SpeechInput : IDisposable
         profile.Audio.BitsPerSample = 16;
         await capture.StartRecordToStorageFileAsync(profile, file);
     }
-
-    async Task FinishRecording()
-    {
-        var capture = _capture!;
-        var wav = _wav!;
-        _onProcessing?.Invoke();
-        await capture.StopRecordAsync();
-        try { capture.Dispose(); } catch { }
-        _capture = null;
-        LastRecording = wav;
-        string text;
-        try { NormalizeWav(wav); text = await RecognizeFileAsync(wav); }
-        catch (Exception ex) { Log.Error("SpeechInput.RecognizeFile", ex); Finish(ex); return; }
-        lock (_lock) { _parts.Clear(); _parts.Add(text); }
-        Finish(null);
-    }
-
     static string ExplainRecording(Exception ex) => ex is UnauthorizedAccessException || ex.HResult == unchecked((int)0x80070005)
         ? "Chưa được phép dùng micro. Vào Cài đặt Windows → Quyền riêng tư → Micro và cho phép ứng dụng trên máy tính dùng micro."
         : ex.Message.Contains("device", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) || ex.HResult == unchecked((int)0xC00D3704)
@@ -195,6 +196,23 @@ sealed class SpeechInput : IDisposable
             p += 8 + len + (len & 1);
         }
         if (dataStart < 0) throw new InvalidDataException("File ghi âm không có dữ liệu âm thanh.");
+        // Micro laptop thu rất nhỏ (đo 12/11: đỉnh 5–12% mức tối đa): đo đỉnh rồi khuếch đại tối đa 8 lần cho bộ nhận nghe rõ hơn.
+        if (bits == 16)
+        {
+            var peak = 1;
+            for (var i = dataStart; i + 1 < dataStart + dataLen; i += 2) peak = Math.Max(peak, Math.Abs((int)BitConverter.ToInt16(b, i)));
+            LastPeak = peak / 32767.0;
+            // Dưới 12% là phòng im hoặc tiếng quá xa (đo 12/11: phòng im đỉnh 8%): khuếch đại chỉ làm bộ cũ bịa chữ từ tiếng ồn.
+            var gain = Math.Min(4.0, 26000.0 / peak);
+            if (LastPeak >= 0.12 && gain > 1.2)
+                for (var i = dataStart; i + 1 < dataStart + dataLen; i += 2)
+                {
+                    var v = (int)Math.Round(BitConverter.ToInt16(b, i) * gain);
+                    var s = (short)Math.Clamp(v, short.MinValue, short.MaxValue);
+                    b[i] = (byte)(s & 0xFF);
+                    b[i + 1] = (byte)((s >> 8) & 0xFF);
+                }
+        }
         using var ms = new MemoryStream();
         using (var w = new BinaryWriter(ms))
         {
@@ -231,15 +249,21 @@ sealed class SpeechInput : IDisposable
         _new = rec;
         var compiled = await rec.CompileConstraintsAsync();
         if (compiled.Status != SpeechRecognitionResultStatus.Success) throw new InvalidOperationException($"CompileConstraints: {compiled.Status}");
+        rec.HypothesisGenerated += (_, e) => { lock (_lock) _lastHypothesis = Joined2() + e.Hypothesis.Text; };
         rec.ContinuousRecognitionSession.ResultGenerated += (_, e) =>
         {
             if (e.Result.Confidence == SpeechRecognitionConfidence.Rejected || e.Result.Text == "") return;
-            lock (_lock) _parts.Add(e.Result.Text);
+            lock (_lock) { _parts.Add(e.Result.Text); _lastHypothesis = ""; }
         };
-        rec.ContinuousRecognitionSession.Completed += (_, e) =>
-            Dispatcher.UIThread.Post(() => Finish(e.Status is SpeechRecognitionResultStatus.Success or SpeechRecognitionResultStatus.UserCanceled or SpeechRecognitionResultStatus.TimeoutExceeded
-                or SpeechRecognitionResultStatus.PauseLimitExceeded ? null : new InvalidOperationException($"Completed: {e.Status}")));
-        rec.ContinuousRecognitionSession.AutoStopSilenceTimeout = TimeSpan.FromSeconds(10); // im 10 giây thì tự dừng
+        // Ghi diễn biến vào loi.log để chẩn đoán khi người dùng báo "nói mà không ra chữ" (micro có nghe tiếng không, phiên dừng vì sao).
+        var t0 = DateTime.Now;
+        string Ms() => $"{(DateTime.Now - t0).TotalSeconds:0.0}s";
+        var states = new List<string>();
+        rec.StateChanged += (_, e) => { lock (states) states.Add($"{Ms()} {e.State}"); };
+        rec.ContinuousRecognitionSession.ResultGenerated += (_, e) => Log.Info($"SpeechInput.New kết quả {Ms()}: \"{e.Result.Text}\" ({e.Result.Status}, {e.Result.Confidence})");
+        rec.ContinuousRecognitionSession.Completed += (_, e) => { lock (states) Log.Info($"SpeechInput.New phiên kết thúc {Ms()}: {e.Status} · trạng thái: {string.Join(", ", states)}"); };
+        // Phiên tự kết thúc (im lâu) thì thôi, việc ghi âm vẫn chạy; kết quả chỉ lấy lúc người dùng bấm Dừng.
+        rec.ContinuousRecognitionSession.AutoStopSilenceTimeout = TimeSpan.FromSeconds(60);
         await rec.ContinuousRecognitionSession.StartAsync();
     }
 

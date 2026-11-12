@@ -84,8 +84,12 @@ sealed class MicRecorder : StackPanel
                 _button.Content = _idleText;
                 _button.IsEnabled = true;
                 if (error is not null) { _status.Text = error; return; }
-                if (text.Trim() == "") { _status.Text = "Không nghe rõ (hoặc không có tiếng nói). Nói to, gần micro hơn rồi thử lại; bấm \"Nghe lại\" để kiểm tra micro có thu được tiếng không."; _replay.IsVisible = SpeechInput.LastRecording is not null; return; }
-                _status.Text = "";
+                // Micro thu quá nhỏ là nguyên nhân hay gặp trên laptop: báo rõ kèm cách chỉnh.
+                var quiet = SpeechInput.LastPeak < 0.15
+                    ? $" Micro thu rất nhỏ (đỉnh {SpeechInput.LastPeak:P0}): nói gần micro hơn, hoặc tăng âm lượng micro ở Cài đặt Windows → Hệ thống → Âm thanh → Đầu vào."
+                    : "";
+                if (text.Trim() == "") { _status.Text = "Không nghe rõ (hoặc không có tiếng nói). Bấm \"Nghe lại\" để kiểm tra micro có thu được tiếng không." + quiet; _replay.IsVisible = SpeechInput.LastRecording is not null; return; }
+                _status.Text = quiet.Trim();
                 _replay.IsVisible = SpeechInput.LastRecording is not null;
                 _onFinal(text.Trim());
             },

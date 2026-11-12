@@ -266,6 +266,29 @@ static class SelfTest
     {
         log.Add($"Bộ nhận giọng tiếng Nhật: {(SpeechInput.Available ? "có" : "KHÔNG")}");
         log.Add($"Bộ mới (trực tuyến): {await SpeechInput.ProbeNewAsync()}");
+        // Đi đúng đường của nút Nói (Start → Stop → onEnd) với bộ đang chọn: máy tự đọc một câu ra loa, micro thu lại.
+        // Kiểm chủ yếu là bấm Dừng thì có kết quả trả về (lỗi 12/11: dừng mà không hiện gì).
+        foreach (var mode in new[] { "auto", "old" })
+        {
+            Prefs.SetSpeechEngine(mode);
+            var input = new SpeechInput();
+            var done = new TaskCompletionSource<string>();
+            string engineUsed = "";
+            input.Start((text, error) => done.TrySetResult(error ?? $"chữ: \"{text}\""), (e, why) => engineUsed = e + (why is null ? "" : $" ({why})"));
+            await Task.Delay(1500);
+            using (var synth = new System.Speech.Synthesis.SpeechSynthesizer())
+            {
+                synth.SelectVoiceByHints(System.Speech.Synthesis.VoiceGender.NotSet, System.Speech.Synthesis.VoiceAge.NotSet, 0, new System.Globalization.CultureInfo("ja-JP"));
+                synth.Volume = 100;
+                await Task.Run(() => synth.Speak("来週の会議までに資料を準備しておきます。"));
+            }
+            await Task.Delay(800);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            input.Stop();
+            var finished = await Task.WhenAny(done.Task, Task.Delay(10000)) == done.Task;
+            log.Add($"Nút Nói ({mode}), bộ {engineUsed}: bấm Dừng → {(finished ? $"có kết quả sau {sw.Elapsed.TotalSeconds:0.0}s: {done.Task.Result}" : "KHÔNG có kết quả sau 10 giây (LỖI)")}");
+            input.Dispose();
+        }
         var rec = await SpeechInput.ProbeRecordingAsync(2);
         log.Add($"Ghi âm thử 2 giây (phòng im, không có người nói): {rec}");
         if (rec.StartsWith('C') || rec.StartsWith('/'))
