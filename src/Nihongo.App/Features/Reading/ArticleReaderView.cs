@@ -101,6 +101,20 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         return col;
     }
 
+    /// <summary>Xen ký tự rộng 0 sau mỗi chữ Nhật để dòng được ngắt ở bất cứ chữ nào (ngắt theo "từ" làm dòng ngắn hẳn đi). Không chèn trước dấu câu đóng, chữ kana nhỏ.</summary>
+    static string Breakable(string s)
+    {
+        const string noStart = "、。，．」』）】！？ー々ゝゞぁぃぅぇぉっゃゅょァィゥェォッャュョ・：；";
+        var sb = new System.Text.StringBuilder(s.Length * 2);
+        for (var i = 0; i < s.Length; i++)
+        {
+            sb.Append(s[i]);
+            var cjk = s[i] >= '\u2E80' && s[i] != '\u200B';
+            var openAfter = "「『（【".IndexOf(s[i]) >= 0;
+            if (cjk && !openAfter && i + 1 < s.Length && s[i + 1] >= '\u2E80' && noStart.IndexOf(s[i + 1]) < 0) sb.Append('\u200B');
+        }
+        return sb.ToString();
+    }
     TextBlock Paragraph(string line)
     {
         var tb = Reading(new TextBlock { TextWrapping = TextWrapping.Wrap });
@@ -109,15 +123,16 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         foreach (var seg in ArticleText.Segments(line))
         {
             var mark = seg.MarkNo is int n ? Article.Marks.FirstOrDefault(m => m.No == n) : null;
-            var run = new Run(seg.Text);
+            var shown = Breakable(seg.Text);
+            var run = new Run(shown);
             if (mark is not null)
             {
                 run.Background = KindBrush(mark.Kind);
                 run.FontWeight = FontWeight.SemiBold;
-                ranges.Add((pos, pos + seg.Text.Length, mark));
+                ranges.Add((pos, pos + shown.Length, mark));
             }
             tb.Inlines!.Add(run);
-            pos += seg.Text.Length;
+            pos += shown.Length;
         }
         if (ranges.Count > 0)
             tb.PointerPressed += (_, e) =>
