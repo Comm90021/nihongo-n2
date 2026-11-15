@@ -91,4 +91,103 @@ public class VocabQuizTests
         Assert.Null(VocabQuiz.Make(Words[^1], QuizKind.Reading));
         Assert.Null(VocabQuiz.Make(Words[^1], QuizKind.Writing));
     }
+
+    [Fact]
+    public void NghiaNhanLoaiChuKhongBaoGioLaPhuongAn()
+    {
+        var src = new List<VocabItem>
+        {
+            W("ひらがな", "ひらがな", "hiragana"),
+            W("カタカナ", "かたかな", "Katakana"),
+            W("出勤", "しゅっきん", "đi làm"),
+            W("出産", "しゅっさん", "sinh con"),
+            W("出世", "しゅっせ", "thăng tiến"),
+            W("勤務", "きんむ", "làm việc"),
+            W("通勤", "つうきん", "hiragana / đi lại"),
+        };
+        VocabQuiz.Source = () => src;
+        VocabQuiz.Reset();
+
+        var qs = VocabQuiz.Build(src, QuizKind.Meaning, 100);
+        Assert.NotEmpty(qs);
+        foreach (var q in qs)
+        {
+            Assert.All(q.Options, o =>
+            {
+                Assert.DoesNotContain("hiragana", o, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("katakana", o, StringComparison.OrdinalIgnoreCase);
+            });
+            Assert.Equal(4, q.Options.Distinct().Count());
+        }
+        // Đáp án là nhãn loại chữ thì không ra câu.
+        Assert.Null(VocabQuiz.Make(src[0], QuizKind.Meaning));
+        Assert.Null(VocabQuiz.Make(src[1], QuizKind.Meaning));
+    }
+
+    [Theory]
+    [InlineData("hiragana", "")]
+    [InlineData("Katakana", "")]
+    [InlineData("từ láy", "")]
+    [InlineData("nộp / đệ trình", "nộp")]
+    [InlineData("nghĩa a；nghĩa b", "nghĩa a")]
+    [InlineData("ý một; ý hai", "ý một")]
+    [InlineData("đi làm (đi lại)", "đi làm")]
+    public void LamSachNghia(string raw, string expected)
+    {
+        Assert.Equal(expected, VocabQuiz.CleanMeaning(raw));
+    }
+
+    [Fact]
+    public void NghiaDaiBiRutGonDuoi40KyTu()
+    {
+        var longs = new[]
+        {
+            "làm cái gì đó 1 chút xíu rồi quay lại việc chính",
+            "một khi đã bắt đầu thì phải làm đến cùng không được bỏ dở giữa chừng",
+            "mộtchuỗikhôngcókhoảngtrắngdàiquárấtnhiềuvượtquáhaimươiký tự",
+        };
+        foreach (var m in longs)
+        {
+            var c = VocabQuiz.CleanMeaning(m);
+            Assert.NotEmpty(c);
+            Assert.True(c.Length <= 40, $"dài {c.Length}: {c}");
+            Assert.EndsWith("…", c);
+            Assert.StartsWith(c[..^1], m);
+        }
+
+        var src = new List<VocabItem>
+        {
+            W("出勤", "しゅっきん", longs[0]),
+            W("出産", "しゅっさん", longs[1]),
+            W("出世", "しゅっせ", longs[2]),
+            W("勤務", "きんむ", "làm việc"),
+        };
+        VocabQuiz.Source = () => src;
+        VocabQuiz.Reset();
+        var q = VocabQuiz.Make(src[0], QuizKind.Meaning);
+        Assert.NotNull(q);
+        Assert.All(q!.Options, o => Assert.True(o.Length <= 40, o));
+    }
+
+    [Fact]
+    public void BonPhuongAnLuonKhacNhauDuNghiaTrungNhauSauLamSach()
+    {
+        var src = new List<VocabItem>
+        {
+            W("出勤", "しゅっきん", "đi làm"),
+            W("通勤", "つうきん", "đi làm (đi lại)"),
+            W("勤務", "きんむ", "đi làm; làm việc"),
+            W("出産", "しゅっさん", "sinh con"),
+            W("出世", "しゅっせ", "thăng tiến"),
+            W("一般", "いっぱん", "thông thường"),
+        };
+        VocabQuiz.Source = () => src;
+        VocabQuiz.Reset();
+        for (var round = 0; round < 20; round++)
+        {
+            VocabQuiz.Reset();
+            foreach (var q in VocabQuiz.Build(src, QuizKind.Meaning, 100))
+                Assert.Equal(4, q.Options.Distinct().Count());
+        }
+    }
 }

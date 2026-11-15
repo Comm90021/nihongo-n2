@@ -136,7 +136,9 @@ public static class VocabQuiz
             }
             case QuizKind.Meaning:
             {
-                var opts = Pick(Short(v.Meaning), SameClass(v).Select(o => Short(o.Meaning)), out var a);
+                var answer = CleanMeaning(v.Meaning);
+                if (answer == "") return null;
+                var opts = Pick(answer, SameClass(v).Select(o => CleanMeaning(o.Meaning)), out var a);
                 return opts is null ? null : new(v, kind, "Chọn nghĩa đúng", v.Word, opts, a);
             }
             case QuizKind.Context when v.ExampleJa.Contains(v.Word) && v.Word.Length >= 2:
@@ -149,13 +151,22 @@ public static class VocabQuiz
         return null;
     }
 
-    /// <summary>Nghĩa ngắn gọn để làm phương án: lấy ý đầu, bỏ phần giải thích trong ngoặc.</summary>
-    static string Short(string meaning)
+    const int MaxMeaning = 40;
+    static readonly HashSet<string> LabelOnly = new(StringComparer.OrdinalIgnoreCase) { "hiragana", "katakana", "kanji", "từ láy", "từ ghép", "từ hán việt" };
+
+    /// <summary>
+    /// Nghĩa dùng làm phương án ở dạng Meaning: lấy ý đầu (tách " / ", ";", "；", xuống dòng), bỏ ngoặc,
+    /// bỏ nhãn loại chữ, cắt ≤ 40 ký tự ở dấu phẩy/khoảng trắng gần nhất. Trả "" nếu không dùng được.
+    /// </summary>
+    public static string CleanMeaning(string meaning)
     {
-        var s = meaning.Split([';', '；', '\n'])[0].Trim();
+        var s = meaning.Split([" / ", ";", "；", "\n"], StringSplitOptions.None)[0].Trim();
         var p = s.IndexOf('(');
         if (p > 3) s = s[..p].Trim();
-        return s.Length > 60 ? s[..60] + "…" : s;
+        if (s.Length == 0 || LabelOnly.Contains(s)) return "";
+        if (s.Length <= MaxMeaning) return s;
+        var cut = s.LastIndexOfAny([',', ' '], MaxMeaning - 2);
+        return cut > 0 ? s[..cut].TrimEnd(',', ' ') + "…" : s[..(MaxMeaning - 1)] + "…";
     }
 
     /// <summary>Sinh bộ câu: dạng chỉ định, hoặc trộn (ưu tiên dạng đề hay ra với từ có chữ Hán).</summary>
