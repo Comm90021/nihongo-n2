@@ -6,8 +6,8 @@ using Nihongo.Importer.Sources;
 using static Nihongo.Importer.Util;
 
 // Dựng data/noi_dung.db từ mọi nguồn (mỗi nguồn một file trong Sources/). Chạy lại bất cứ lúc nào; tien_do.db không bị đụng tới.
-// Dùng: Nihongo.Importer [thư mục gốc "JLPT n2 ôn thi"] [file db đầu ra]
-var root = args.Length > 0 ? args[0] : @"D:\JLPT n2 ôn thi";
+// Dùng: Nihongo.Importer [thư mục cha của repo] [file db đầu ra] (mặc định: thư mục cha của repo chứa NihongoApp.sln)
+var root = args.Length > 0 ? args[0] : FindRepoParent() ?? throw new InvalidOperationException("Không tìm thấy NihongoApp.sln; truyền thư mục gốc làm tham số đầu tiên.");
 var output = args.Length > 1 ? args[1] : Path.Combine(root, "NihongoApp", "data", "noi_dung.db");
 Root = root;
 var web = Web;

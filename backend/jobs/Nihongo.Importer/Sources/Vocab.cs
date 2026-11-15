@@ -93,7 +93,8 @@ public static class Vocab
 
         // Core 6000: bù nghĩa Việt và Hán Việt cho từ chưa có.
         var core = Core6000Path();
-        if (File.Exists(core))
+        if (core is null) Console.WriteLine("  Bỏ qua Core 6000: chưa có config/paths.local.json (xem paths.local.example.json).");
+        else if (File.Exists(core))
             foreach (var line in File.ReadLines(core))
             {
                 if (line.StartsWith('#')) continue;
