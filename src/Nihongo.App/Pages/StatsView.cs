@@ -14,7 +14,7 @@ namespace Nihongo.App.Views;
 /// Số liệu lấy từ bảng attempt (mỗi lần trả lời có giờ) và result (các lần thi thử). Phần chưa có số liệu ghi "chưa đo", không đoán bừa.
 /// Logic ở Nihongo.Core.Stats (có test); màn này chỉ vẽ.
 /// </summary>
-sealed class StatsView : UserControl
+sealed partial class StatsView : UserControl
 {
     static readonly string[] Tabs = ["JLPT", "電験"];
     static readonly string[] DayNames = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -34,7 +34,7 @@ sealed class StatsView : UserControl
         _results = App.Progress.Results();
         int.TryParse(App.Progress.Setting("stats_tab", "0"), out _tab);
         var top = Col(10,
-            Header("Thống kê", "Số liệu từ mọi câu mày đã trả lời. Ngày nào cũng làm một ít thì biểu đồ tuần tự đẹp lên."),
+            Header("Tiến độ","Số liệu từ mọi câu mày đã trả lời. Ngày nào cũng làm một ít thì biểu đồ tuần tự đẹp lên."),
             Segmented(Tabs, _tab, i => { _tab = i; App.Progress.SetSetting("stats_tab", i.ToString()); Refresh(); }));
         DockPanel.SetDock(top, Dock.Top);
         Content = new DockPanel { Children = { top, Scroll(_body) } };
@@ -53,6 +53,7 @@ sealed class StatsView : UserControl
         var scoped = J2Stats.ForLevel(_attempts, level).ToList();
         var pred = PassPredictor.Jlpt(level, _now, _results, scoped, mondaiOf);
         var col = Col(14);
+        col.Children.Add(Overview());
         col.Children.Add(Prediction(pred, level));
         col.Children.Add(Week(scoped, mondaiOf, StudySection.Jlpt));
         col.Children.Add(BySection(scoped, mondaiOf));
