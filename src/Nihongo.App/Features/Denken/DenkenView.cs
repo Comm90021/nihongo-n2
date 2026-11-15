@@ -122,8 +122,7 @@ sealed class DenkenView : UserControl
         var list = Col(6, Card(Line(
             Col(2, Text($"{weak.Count} câu sai đang ôn", 16, bold: true), Text($"{dueList.Count} câu đến hạn hôm nay. Làm đúng liên tiếp 3 lần (cách 1, 3, 7 ngày) là thuộc.", 13, muted: true)),
             Ui.Wrap(Btn("Ôn câu đến hạn", () => Start(dueList, "Câu sai đến hạn"), primary: true, enabled: dueList.Count > 0),
-                Btn("Ôn tất cả câu sai", () => Start(weak, "Câu sai"), enabled: weak.Count > 0),
-                Btn("Chữa với Gemini (tối đa 30 câu)", () => App.Shell.Show(new ReviewView("Câu 電験 đang sai", _level, weak.Take(30).Select(q => q.ToWrongItem(0, null) with { PickedText = $"(sai {p.Get(q.SrsId)!.Lapses} lần)" }).ToList(), Back, denken: true)), enabled: weak.Count > 0)))));
+                Btn("Ôn tất cả câu sai", () => Start(weak, "Câu sai"), enabled: weak.Count > 0)))));
         foreach (var q in weak.Take(200))
         {
             var e = p.Get(q.SrsId)!;
@@ -288,7 +287,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
     }
 
     /// <summary>Phím: 1–5 chọn, Enter/→ câu sau, ← câu trước. Khung web đang giữ focus thì phím đi vào trang, không tới đây.</summary>
-    // ---------------------------------------------------------------- chốt bài, tổng kết, chữa với Gemini
+    // ---------------------------------------------------------------- chốt bài, tổng kết, làm lại câu sai
     bool _finished;
 
     /// <summary>Câu đã chấm được: có đáp án chọn, hoặc tự chấm. Thi thử đã nộp thì câu trắc nghiệm bỏ trống cũng tính (sai).</summary>
@@ -297,24 +296,19 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
     bool IsRight(int i) => _qs[i].Choice > 0 ? _state[i].Picked == _qs[i].Choice : _state[i].Self == true;
 
     List<int> WrongIndexes() => Enumerable.Range(0, _qs.Count).Where(i => Graded(i) && !IsRight(i)).ToList();
-
-    List<WrongItem> WrongItems() => WrongIndexes().Select(i => _qs[i].ToWrongItem(_state[i].Picked, _state[i].Self)).ToList();
-
-    void OpenReview()
+    void RetryWrong()
     {
         var wrong = WrongIndexes();
         if (wrong.Count == 0) return;
-        var retry = wrong.Select(i => _qs[i]).ToList();
-        var level = _qs[0].Level;
         _timer?.Stop();
-        App.Shell.Show(new ReviewView(_title, level, WrongItems(), _back, () => App.Shell.Show(new DenkenSessionView(retry, "Làm lại câu sai", 0, _back)), denken: true));
+        App.Shell.Show(new DenkenSessionView(wrong.Select(i => _qs[i]).ToList(), "Làm lại câu sai", 0, _back));
     }
 
     // Dùng cho Services/SelfTest (NIHONGO_SELFTEST=denken).
     internal int TestIndex => _index;
     internal DenkenQuestion TestCurrent => Q;
     internal void TestFinish() => Finish();
-    internal void TestOpenReview() => OpenReview();
+    internal void TestRetryWrong() => RetryWrong();
 
     /// <summary>Chốt bài luyện: chấm tổng, ghi kết quả theo chủ đề, ghi câu sai, hiện tổng kết.</summary>
     void Finish()
@@ -343,8 +337,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         if (topics.Children.Count > 0) col.Children.Add(topics);
         col.Children.Add(Divider());
         col.Children.Add(Ui.Wrap(
-            Btn(wrong.Count > 0 ? $"Chữa {wrong.Count} câu sai với Gemini" : "Không có câu sai", OpenReview, primary: true, enabled: wrong.Count > 0),
-            Btn("Làm lại câu sai", () => App.Shell.Show(new DenkenSessionView(wrong.Select(i => _qs[i]).ToList(), "Làm lại câu sai", 0, _back)), enabled: wrong.Count > 0),
+            Btn(wrong.Count > 0 ? $"Làm lại {wrong.Count} câu sai" : "Không có câu sai", RetryWrong, primary: true, enabled: wrong.Count > 0),
             Btn("Quay lại làm tiếp", () => { _finished = false; Render(); }),
             Btn("Về danh sách", Exit)));
         if (wrong.Count > 0)
@@ -423,9 +416,6 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
                 col.Children.Add(s.Self is null
                     ? Row(8, Text("Tự chấm:", 14), Btn("Đúng", () => { s.Self = true; Record(true); Render(); }), Btn("Sai", () => { s.Self = false; Record(false); Render(); }))
                     : Text(s.Self == true ? "Đã chấm: đúng" : "Đã chấm: sai · vào lịch ôn", 14, bold: true).Tint(s.Self == true ? "GoodInk" : "BadInk"));
-            col.Children.Add(Btn("Hỏi Gemini câu này", () => _ = App.Shell.AskGemini(
-                $"Tôi đang ôn 電験{q.Level}. Giải thích bằng tiếng Việt bài {q.Title} (đề và lời giải: {q.Url}). Chủ đề: {q.TopicName}. " +
-                $"Hướng dẫn từng bước, nêu công thức cần nhớ và thuật ngữ tiếng Nhật quan trọng.")));
         }
         else if (!_submitted)
             col.Children.Add(Text(s.Picked > 0 ? $"Đã chọn ({s.Picked}). Đáp án hiện sau khi nộp bài." : "Đang thi: đáp án hiện sau khi nộp bài.", 13, muted: true));
@@ -450,7 +440,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         if (_submitted && _minutes > 0)
         {
             col.Children.Add(Text(Score(), 14, bold: true));
-            if (WrongIndexes().Count > 0) col.Children.Add(Btn($"Chữa {WrongIndexes().Count} câu sai với Gemini", OpenReview, primary: true));
+            if (WrongIndexes().Count > 0) col.Children.Add(Btn($"Làm lại {WrongIndexes().Count} câu sai", RetryWrong, primary: true));
         }
         _panel.Content = col;
     }

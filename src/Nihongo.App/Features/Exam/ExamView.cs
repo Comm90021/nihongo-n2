@@ -40,7 +40,7 @@ sealed class ExamView : UserControl, IKeyTarget
     int _pdfPage, _pdfFirst, _pdfLast, _zoom = 100;
     int _current, _remain, _usedBefore;
     bool _submitted, _confirming;
-    List<WrongItem> _wrongItems = [];
+
     string DraftKey => $"exam_draft:{_exam.Id}";
 
     public ExamView(ExamDef exam)
@@ -312,11 +312,6 @@ sealed class ExamView : UserControl, IKeyTarget
                 if (q2.Point != "") body.Children.Add(Text(q2.Point, 15, bold: true));
                 if (q2.Why != "") body.Children.Add(Text(q2.Why, 14));
                 if (q2.FullSentence != "") body.Children.Add(Text($"Câu hoàn chỉnh: {q2.FullSentence}", 13, muted: true));
-                if (q2.Why == "" && q2.Point == "" && App.Progress.Explain(q2.Id) is { } saved)
-                    body.Children.Add(Col(4, Text($"Lời giải của Gemini · lưu {saved.At:dd/MM}", 12, bold: true).Tint("AccentInk"), new SelectableTextBlock { Text = saved.Text, TextWrapping = TextWrapping.Wrap, FontSize = 14 }));
-                if (q2.Why == "" && q2.Point == "")
-                    body.Children.Add(Btn("Hỏi Gemini câu này", () => _ = App.Shell.AskGemini(GeminiView.PromptFor($"{q2.Context}\n\n{JpText.Plain(q2.Text)}\n" +
-                        string.Join("\n", q2.Options.Select((o, i) => $"{i + 1}. {JpText.Plain(o)}")) + $"\nĐáp án đúng: {item.Answer}"))));
             }
         }
 
@@ -435,23 +430,17 @@ sealed class ExamView : UserControl, IKeyTarget
     void CollectWrong()
     {
         var session = $"exam:{_exam.Id}:{DateTime.Now:yyyyMMddHHmmss}";
-        _wrongItems = [];
         for (var i = 0; i < _items.Count; i++)
         {
             var it = _items[i];
             var picked = _picked.GetValueOrDefault(i);
             if (picked == 0 || picked == it.Answer) continue;
-            var label = $"{_exam.Title} · {MondaiLabel(it)} · câu {it.No}";
             var id = it.Q?.Id ?? $"{_exam.Id}:m{it.Mondai}:q{it.No}";
             App.Progress.LogWrong(id, picked, session);
-            _wrongItems.Add(it.Q is { } q
-                ? ReviewView.From(q, picked, _exam.Level) with { Label = label }
-                : new WrongItem(id, $"{label} (trang {it.PageFrom} của PDF đề)", ReviewPrompt.GroupOf(it.Mondai, _exam.Level), "", "", [], picked, it.Answer));
         }
     }
 
-    Control? ReviewButton() => _wrongItems.Count == 0 ? null
-        : Btn($"Chữa bài ({_wrongItems.Count} câu sai)", () => App.Shell.Show(new ReviewView(_exam.Title, _exam.Level, _wrongItems, () => App.Shell.Show(this))), primary: true);
+
 
     /// <summary>Điểm quy đổi ước lượng theo tỉ lệ đúng mỗi phần (JLPT chấm theo thang riêng, không công bố cách quy đổi).</summary>
     Control ResultCard(ExamScore s, int used)
@@ -474,7 +463,7 @@ sealed class ExamView : UserControl, IKeyTarget
                     Row(10, Text($"{right}/{_items.Count}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"câu đúng ({100.0 * right / Math.Max(1, _items.Count):0}%)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
                     Badge($"Thời gian {used / 60} phút", "plain"),
                     Text("J.TEST chấm theo thang riêng; app chỉ đếm câu đúng của phần trắc nghiệm đọc (phần tự viết 記述 không có trong đề).", 12, muted: true),
-                    Ui.Wrap(ReviewButton(), Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: _wrongItems.Count == 0), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                    Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
                 Panel("Theo từng phần", byMondai));
         }
         var hasLang = langTotal > 0;
@@ -494,7 +483,7 @@ sealed class ExamView : UserControl, IKeyTarget
                     ? s.ListenTotal > 0 ? "Trên điểm sàn 19/60 mỗi phần; kỳ thi thật cần tổng từ 90/180 (N2) hoặc 100/180 (N1)." : "Trên điểm sàn 19/60 mỗi phần. Kỳ thi thật còn phần Nghe (60 điểm); tổng cần từ 90/180 để đỗ."
                     : "Có phần dưới điểm sàn 19/60: kỳ thi thật sẽ trượt dù tổng điểm cao. Xem lại các câu sai bên phải.", 13.5, muted: true),
                 Text("Điểm quy đổi theo tỉ lệ câu đúng, chỉ để tham khảo; JLPT dùng thang điểm riêng không công bố.", 12, muted: true),
-                Ui.Wrap(ReviewButton(), Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: _wrongItems.Count == 0), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
             Panel("Theo từng phần", byMondai));
     }
 

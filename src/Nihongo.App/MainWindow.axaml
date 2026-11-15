@@ -26,6 +26,13 @@
             <TextBlock x:Name="QuitLabel" Text="Thoát" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
+        <Button x:Name="SettingsButton" DockPanel.Dock="Bottom" HorizontalAlignment="Stretch" Margin="0,8,0,0" Classes="ghost"
+                Click="OnSettings" ToolTip.Tip="Cài đặt">
+          <StackPanel Spacing="4" HorizontalAlignment="Center">
+            <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="18" HorizontalAlignment="Center" />
+            <TextBlock x:Name="SettingsLabel" Text="Cài đặt" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <!-- Cửa sổ thấp: danh sách mục cuộn bằng con lăn (thanh cuộn ẩn), không đè lên nút Thoát. -->
         <ListBox x:Name="Nav" Classes="nav" Background="Transparent" SelectionChanged="OnNav" ClipToBounds="True"
                  ScrollViewer.VerticalScrollBarVisibility="Hidden" />
@@ -34,7 +41,6 @@
     <Grid>
       <Grid x:Name="Main" Margin="32,24,32,20">
         <ContentControl x:Name="Host" />
-        <ContentControl x:Name="GeminiSlot" IsVisible="False" />
       </Grid>
       <!-- Khi toàn màn hình thanh tiêu đề Windows bị ẩn: cụm nút nhỏ góc trên phải để thu nhỏ / thoát toàn màn hình / đóng. -->
       <StackPanel x:Name="FullScreenBar" Orientation="Horizontal" Spacing="4" IsVisible="False"

@@ -9,7 +9,7 @@ using static Nihongo.App.Views.Ui;
 
 namespace Nihongo.App.Views;
 
-/// <summary>Cài đặt chữ đọc, giao diện, sao lưu tiến độ và tài khoản Google dùng cho video và Gemini.</summary>
+/// <summary>Cài đặt chữ đọc, giao diện, sao lưu tiến độ.</summary>
 sealed class SettingsView : UserControl
 {
     readonly TextBlock _backupInfo = Text("", 13, muted: true);
@@ -23,7 +23,6 @@ sealed class SettingsView : UserControl
             Card(Practice()),
             Card(Exam()),
             Card(Backup()),
-            Card(Google()),
             Card(About())));
     }
 
@@ -58,13 +57,10 @@ sealed class SettingsView : UserControl
         theme.SelectionChanged += (_, _) => Prefs.SetTheme(theme.SelectedIndex);
         var compact = new CheckBox { Content = "Thu gọn thanh bên (chỉ hiện biểu tượng)", IsChecked = Prefs.NavCompact };
         compact.IsCheckedChanged += (_, _) => App.Shell.SetCompact(compact.IsChecked == true);
-        var autoLookup = new CheckBox { Content = "Tự mở bảng Tra từ khi bôi đen chữ (đóng bảng thì không tự mở lại)", IsChecked = Prefs.AutoLookup };
-        autoLookup.IsCheckedChanged += (_, _) => Prefs.SetAutoLookup(autoLookup.IsChecked == true);
         return Col(12,
             Text("Giao diện", 17, bold: true),
             Labeled("Màu nền", theme),
             compact,
-            autoLookup,
             Text("Phím tắt: Ctrl+B thu gọn/mở thanh bên · F11 toàn màn hình · Esc thoát toàn màn hình.", 13, muted: true));
     }
 
@@ -78,16 +74,11 @@ sealed class SettingsView : UserControl
         delay.SelectionChanged += (_, _) => { if (delay.SelectedIndex >= 0) Prefs.SetAutoNextMs(delays[delay.SelectedIndex]); };
         var play = new CheckBox { Content = "Tự phát âm thanh (bài nghe khi mở đề, câu nghe trong thi thử, đọc từ sau khi trả lời)", IsChecked = Prefs.AutoPlay };
         play.IsCheckedChanged += (_, _) => Prefs.SetAutoPlay(play.IsChecked == true);
-        var engine = new ComboBox { ItemsSource = new[] { "Tự chọn (mới nếu đã bật, nếu không thì cũ)", "Chỉ bộ cũ (trên máy, không cần mạng)" }, SelectedIndex = Prefs.SpeechEngine == "old" ? 1 : 0 };
-        engine.SelectionChanged += (_, _) => Prefs.SetSpeechEngine(engine.SelectedIndex == 1 ? "old" : "auto");
-        var openSpeech = Btn("Mở cài đặt giọng nói của Windows", SpeechInput.OpenSpeechPrivacy);
         return Col(12,
             Text("Làm bài", 17, bold: true),
             Labeled("Tự chuyển câu", mode),
             Labeled("Chờ trước khi chuyển", delay),
             play,
-            Labeled("Bộ nhận giọng khi nói", engine),
-            Row(10, openSpeech, Text("Bộ mới chính xác hơn nhiều nhưng cần bật \"Nhận dạng giọng nói trực tuyến\" (âm thanh gửi cho Microsoft xử lý).", 12, muted: true).Also(t => t.MaxWidth = 460)),
             Text("Câu sai luôn đứng lại để đọc giải thích (chế độ \"chỉ khi đúng\"). Phím: 1–4 chọn, Enter/Space/→ câu sau. Thi thử: ←/→ đổi câu, F đánh dấu.", 13, muted: true));
     }
 
@@ -114,7 +105,7 @@ sealed class SettingsView : UserControl
         RefreshInfo();
         return Col(12,
             Text("Sao lưu tiến độ", 17, bold: true),
-            Text("Tiến độ (lịch ôn, kết quả, sổ tay, video đã học, cài đặt) nằm trong một file tien_do.db. App tự sao lưu mỗi ngày một lần, giữ 20 bản mới nhất. Nên đặt thư mục sao lưu ở ổ khác hoặc thư mục OneDrive/Google Drive.", 13, muted: true),
+            Text("Tiến độ (lịch ôn, kết quả, sổ tay, cài đặt) nằm trong một file tien_do.db. App tự sao lưu mỗi ngày một lần, giữ 20 bản mới nhất. Nên đặt thư mục sao lưu ở ổ khác hoặc thư mục OneDrive/Google Drive.", 13, muted: true),
             Row(8, dir, Btn("Chọn thư mục...", async () =>
             {
                 var picked = await TopLevel.GetTopLevel(this)!.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Thư mục sao lưu" });
@@ -148,13 +139,6 @@ sealed class SettingsView : UserControl
         var count = Directory.Exists(Prefs.BackupDir) ? Directory.GetFiles(Prefs.BackupDir, "tien_do_*.db").Length : 0;
         _backupInfo.Text = last == "" ? "Chưa có bản sao lưu nào." : $"Lần sao lưu gần nhất: {DateTime.Parse(last):dd/MM/yyyy HH:mm} · {count} bản trong thư mục.";
     }
-
-    static Control Google() => Col(12,
-        Text("Tài khoản Google", 17, bold: true),
-        Text("Đăng nhập một lần trong tab Gemini. Khung video và Gemini dùng chung đăng nhập này: video xem trong app được tính là tài khoản của mày xem, Gemini có lịch sử trò chuyện của mày. Thông tin đăng nhập chỉ nằm trong data/webview trên máy này.", 13, muted: true),
-        Ui.Wrap(
-            Btn("Mở tab Gemini để đăng nhập", () => _ = App.Shell.AskGemini(""), primary: true),
-            Btn("Đăng xuất Google khỏi app", async () => await App.Shell.SignOutGoogle())));
 
     static Control About() => Col(8,
         Text("Dữ liệu", 17, bold: true),
