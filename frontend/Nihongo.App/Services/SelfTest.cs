@@ -202,9 +202,27 @@ static class SelfTest
             await Cycle("exam_pdf", () => Task.Delay(1200));
         }
         w.Show(ev); await Task.Delay(400);
+        // Chọn sai 8 câu có phương án để màn kết quả có câu sai (nút "Hỏi Gemini" bật).
+        Prefs.SetAutoNext(0);
+        var wrongCount = 0;
+        for (var i = 0; i < exam.Items.Count && wrongCount < 8; i++)
+            if (exam.Items[i].Q is not null) { ev.TestGo(i); ev.TestPick(exam.Items[i].Answer % exam.Items[i].Choices + 1); wrongCount++; }
         ev.TestGo(0); await Task.Delay(300);
         ev.TestSubmit(); await Task.Delay(600);
         await Cycle("exam_ketqua");
+        var prompts = ev.TestPrompts();
+        log.Add($"Hỏi Gemini (kết quả thi): {prompts.Count} phần, độ dài {string.Join("/", prompts.Select(p => p.Length))}; câu sai {wrongCount}");
+        if (prompts.Count > 0)
+        {
+            log.Add("  Dòng đầu: " + prompts[0].Split('\n')[0]);
+            await AskGemini.CopyAsync(ev, prompts[0]);
+#pragma warning disable CS0618
+            var back = await (Avalonia.Controls.TopLevel.GetTopLevel(ev)!.Clipboard!.GetTextAsync());
+#pragma warning restore CS0618
+            log.Add($"  Clipboard khớp lời nhắc: {back == prompts[0]}; có 'Tôi chọn': {prompts[0].Contains("Tôi chọn")}");
+        }
+        ev.TestGo(Math.Max(0, ev.TestFirstWrong())); await Task.Delay(500);
+        Shot(w, dir, "resp_gemini_cau_sai");
         // Nghe (đề thi thử có lời thoại đọc bằng giọng máy).
         var listenExam = all.FirstOrDefault(e => e.Items.Any(i => i.Mondai > ExamScore.ListeningBase && i.Passage != "" && !i.HasPdf));
         if (listenExam is not null)

@@ -201,10 +201,15 @@ sealed class SessionView : UserControl, IKeyTarget
             .Also(t => t.HorizontalAlignment = HorizontalAlignment.Center);
 
         var gentle = todayXp >= goal ? "Hôm nay mày đã chạm mục tiêu. Nghỉ được rồi, hoặc học thêm chút cho chắc." : $"Còn {goal - todayXp} XP nữa là tới mục tiêu hôm nay ({goal} XP).";
-        var buttons = Row(12,
-            Btn("Học thêm 15 phút", () => App.Shell.Show(new SessionView(PlannerInputBuilder.Plan(15)))),
-            Btn("Về Hôm nay  (Enter)", GoHome, primary: true));
-        buttons.HorizontalAlignment = HorizontalAlignment.Center;
+        // Câu sai của buổi học này (bảng wrong từ lúc bắt đầu), tối đa 40, kèm phương án đã chọn.
+        var byId = PlannerInputBuilder.QuestionsById();
+        var wrongs = App.Progress.Wrongs().Where(w => w.At >= _started.AddSeconds(-2)).GroupBy(w => w.ItemId).Select(g => g.First())
+            .Where(w => byId.ContainsKey(w.ItemId)).Select(w => AskGemini.From(byId[w.ItemId], w.Picked)).Take(AskGemini.MaxItems).ToList();
+        var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        foreach (var c in new Control[] { Btn("Học thêm 15 phút", () => App.Shell.Show(new SessionView(PlannerInputBuilder.Plan(15)))),
+            AskGemini.Button("Hỏi Gemini các câu sai", wrongs.Count, () => AskGemini.Prompts("Buổi học hôm nay", "N2", wrongs)),
+            Btn("Về Hôm nay  (Enter)", GoHome, primary: true) })
+        { c.Margin = new Thickness(6, 4); buttons.Children.Add(c); }
 
         var body = Col(18,
             Text("Xong buổi học", 15, bold: true, muted: true).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center),

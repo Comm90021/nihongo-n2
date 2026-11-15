@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Nihongo.Core;
+using Nihongo.App.Services;
 using static Nihongo.App.Views.Ui;
 
 namespace Nihongo.App.Views;
@@ -70,13 +71,15 @@ sealed class PracticeView : UserControl
         var col = Col(6, Text("Mọi câu đã làm sai, mới nhất trước. Làm lại cho nhớ.", muted: true));
         if (rows.Count == 0) { col.Children.Add(Card(Text("Chưa có câu sai nào. Làm vài câu ở tab khác rồi quay lại đây.", muted: true))); return col; }
         col.Children.Add(Card(Line(Text($"{rows.Count} câu", 16, bold: true),
-            Row(8, Btn($"Làm lại {Math.Min(Batch, rows.Count)} câu", () => Start(rows.Take(Batch).Select(r => r.Q), "Làm lại câu đã sai"), primary: true)))));
+            Row(8, AskGemini.Button($"Hỏi Gemini {Math.Min(AskGemini.MaxItems, rows.Count)} câu sai", rows.Count, () => AskGemini.Prompts("Câu đã sai", "N2", rows.Take(AskGemini.MaxItems).Select(r => AskGemini.From(r.Q, r.Picked)))).Also(b => b.Classes.Add("strong")),
+                Btn($"Làm lại {Math.Min(Batch, rows.Count)} câu", () => Start(rows.Take(Batch).Select(r => r.Q), "Làm lại câu đã sai"), primary: true)))));
         foreach (var g in rows.GroupBy(r => r.Q.Mondai).OrderBy(g => g.Key))
         {
             var name = g.Key > 100 ? "Nghe (đề mô phỏng)" : g.Key < MondaiNames.Length ? $"Mondai {g.Key}: {MondaiNames[g.Key]}" : $"Mondai {g.Key}";
             var list = g.ToList();
             col.Children.Add(Card(Line(Col(2, Text(name, 16, bold: true), Text($"{list.Count} câu", muted: true)),
-                Row(8, Btn("Làm lại", () => Start(list.Take(Batch).Select(r => r.Q), $"Làm lại · {name}"), primary: true)))));
+                Row(8, AskGemini.Button("Hỏi Gemini", list.Count, () => AskGemini.Prompts(name, "N2", list.Take(AskGemini.MaxItems).Select(r => AskGemini.From(r.Q, r.Picked))), link: true),
+                    Btn("Làm lại", () => Start(list.Take(Batch).Select(r => r.Q), $"Làm lại · {name}"), primary: true)))));
         }
         return col;
     }

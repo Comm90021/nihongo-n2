@@ -130,7 +130,9 @@ sealed class VocabQuizView : UserControl, IKeyTarget
                 list.Children.Add(Line(Row(10, Text(v.Word, 16, bold: true), Text(v.Reading, 14, muted: true)), Text(v.Meaning, 14, muted: true).Also(t => t.MaxWidth = 420)));
             body.Children.Add(Panel($"Từ làm sai ({_wrong.Distinct().Count()})", list));
         }
+        var wrongWords = _wrong.Distinct().Take(AskGemini.MaxItems).ToList();
         body.Children.Add(Ui.Wrap(
+            AskGemini.Button("Hỏi Gemini các từ sai", wrongWords.Count, () => [ReviewPrompt.VocabPrompt(_title, wrongWords.Select(v => (v.Word, v.Reading, v.Meaning)))]).Also(b => b.Classes.Add("strong")),
             Btn("Làm lại các từ sai", () => App.Shell.Show(new VocabQuizView(VocabQuiz.Build(_wrong.Distinct(), null, 50), "Ôn lại từ sai")), primary: true, enabled: _wrong.Count > 0),
             Btn("Về danh sách từ", App.Shell.BackToSection)));
         return Card(body, 0).Also(c => c.Padding = new Thickness(28, 24));

@@ -55,8 +55,9 @@ sealed class QuizView : UserControl, IKeyTarget
             QuizNav.Show(_card, Card(Col(10,
                 Text($"Xong: đúng {_correct}/{_questions.Count}", 22, bold: true),
                 Text("Câu sai đã vào lịch ôn, sẽ quay lại ở trang Hôm nay.", muted: true),
-                Row(8,
+                Ui.Wrap(
                     _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry, primary: true) : null,
+                    AskGemini.Button("Hỏi Gemini các câu sai", _wrong.Count, () => AskGemini.Prompts(_title, "N2", _wrong.Select(w => AskGemini.From(w.Q, w.Picked)))).Also(b => b.Classes.Add("strong")),
                     Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))), animate);
             return;
         }
@@ -107,6 +108,11 @@ sealed class QuizView : UserControl, IKeyTarget
                 foreach (var r in new[] { WrongReason.Meaning, WrongReason.Connection, WrongReason.Nuance, WrongReason.Unknown })
                     reasons.Children.Add(Btn(TodayView.Label(r), () => { _auto.Cancel(); App.Progress.SetReason(q.Id, r); RefreshBar(); }));
                 body.Children.Add(reasons);
+                var picked = _picked ?? 0;
+                var ask = AskGemini.Button("Hỏi Gemini câu này", 1, () => AskGemini.Prompts(_title, "N2", [AskGemini.From(q, picked)]), link: true);
+                ask.Click += (_, _) => { _auto.Cancel(); RefreshBar(); };
+                ask.HorizontalAlignment = HorizontalAlignment.Left;
+                body.Children.Add(ask);
             }
             body.Children.Add(Row(8, Btn("Nghe câu", () => { _auto.Cancel(); RefreshBar(); Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText)); })));
         }
