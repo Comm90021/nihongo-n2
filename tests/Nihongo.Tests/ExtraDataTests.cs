@@ -37,7 +37,10 @@ public class ExtraDataTests
     static string? Root()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        {
+            if (Directory.Exists(Path.Combine(d.FullName, "storage", "xu_ly"))) return Path.Combine(d.FullName, "storage", "xu_ly");
             if (Directory.Exists(Path.Combine(d.FullName, "antigravity_out"))) return Path.Combine(d.FullName, "antigravity_out");
+        }
         return null;
     }
 

@@ -57,6 +57,8 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
     var extra = Extra.ImportExtra(db);
     var docs = Docs.ImportDocs(db);
     DocHieu.Import(db);
+    var remapped = RemapPaths(db);
+    if (remapped > 0) Console.WriteLine($"Đường dẫn: đổi {remapped} ô sang chỗ mới (storage/, legacy/) theo config/paths.json");
 
     using var meta = db.BeginTransaction();
     foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()), ("docs", docs.ToString()) })

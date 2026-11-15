@@ -12,7 +12,11 @@ public class ExamDataTests
     static string? Root()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        {
+            // Từ 16/11/2026 antigravity_out dời về storage/xu_ly (config/paths.json); tìm cả hai chỗ.
+            if (Directory.Exists(Path.Combine(d.FullName, "storage", "xu_ly"))) return Path.Combine(d.FullName, "storage", "xu_ly");
             if (Directory.Exists(Path.Combine(d.FullName, "antigravity_out"))) return Path.Combine(d.FullName, "antigravity_out");
+        }
         return null;
     }
 
@@ -27,7 +31,7 @@ public class ExamDataTests
             foreach (var f in Directory.GetFiles(dir, "*.json").Order()) yield return [Path.GetRelativePath(root, f)];
         }
         // 40 đề mô phỏng 30 câu (thư mục "Tạo đề JLPT", chuyển bằng tools/to_app_json.py).
-        var mock = Path.Combine(root, "..", "Tạo đề JLPT", "app", "exams");
+        var mock = new[] { Path.Combine(root, "..", "tai_lieu", "tao_de", "app", "exams"), Path.Combine(root, "..", "Tạo đề JLPT", "app", "exams") }.FirstOrDefault(Directory.Exists) ?? "";
         if (Directory.Exists(mock))
             foreach (var f in Directory.GetFiles(mock, "*.json").Order()) yield return [Path.GetRelativePath(root, f)];
     }

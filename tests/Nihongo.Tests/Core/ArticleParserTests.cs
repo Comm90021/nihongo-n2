@@ -188,7 +188,8 @@ public class ArticleParserTests
 
     // ---- thư mục thật (bỏ qua nếu không có)
 
-    private const string Root = @"d:\JLPT n2 ôn thi\Các đoạn văn";
+    // Kho bài đọc dời từ "Các đoạn văn" về storage\bai_doc ngày 16/11/2026.
+    private static readonly string Root = new[] { @"d:\JLPT n2 ôn thi\storage\bai_doc", @"d:\JLPT n2 ôn thi\Các đoạn văn" }.FirstOrDefault(Directory.Exists) ?? "";
 
     [Fact]
     public void RealDocHieu_FirstHundredN2_AndFiftyN1_ParseWithoutErrors()
@@ -200,12 +201,10 @@ public class ArticleParserTests
         foreach (var f in Directory.GetFiles(dir, "*.md").OrderBy(x => x))
             all.AddRange(ArticleParser.ParseDocHieu(File.ReadAllText(f), errors));
 
-        // bài mới (N2-1xx, N1-05x+) có thể chưa xong: chỉ đòi các mã cũ
-        bool Old(string id) => id.StartsWith("N2-") ? int.Parse(id[3..]) <= 100 : int.Parse(id[3..]) <= 50;
-        var oldErrors = errors.Where(e => Old(e[..Math.Min(6, e.IndexOf(':') < 0 ? e.Length : e.IndexOf(':'))])).ToList();
-        Assert.True(oldErrors.Count == 0, string.Join("\n", oldErrors));
-        Assert.Equal(100, all.Count(a => a.Level == "N2" && Old(a.Id)));
-        Assert.Equal(50, all.Count(a => a.Level == "N1" && Old(a.Id)));
+        // 16/11/2026: đủ 300 bài (N2-001..200, N1-001..100), không bài nào được lỗi.
+        Assert.True(errors.Count == 0, string.Join("\n", errors));
+        Assert.Equal(200, all.Count(a => a.Level == "N2"));
+        Assert.Equal(100, all.Count(a => a.Level == "N1"));
         Assert.All(all, a => Assert.NotEmpty(a.Group));
     }
 

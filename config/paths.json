@@ -1,3 +1,15 @@
 {
-  "core6000": "D:\\Tài liệu Tiếng Nhật\\Japanese Core 6000 Vocab+.txt"
+  "core6000": "D:\\Tài liệu Tiếng Nhật\\Japanese Core 6000 Vocab+.txt",
+  "folders": {
+    "N2_ĐỀ CÁC NĂM": "storage/de_thi/N2_that",
+    "Đề thi N1 các năm": "storage/de_thi/N1_that",
+    "nguon_jtest": "storage/de_thi/jtest",
+    "Các đoạn văn": "storage/bai_doc",
+    "Tạo đề JLPT": "storage/tai_lieu/tao_de",
+    "Tài liệu tiếng nhật .md": "storage/tai_lieu/md",
+    "HE_THONG_ON_THI_N2_2026": "storage/tai_lieu/he_thong",
+    "antigravity_out": "storage/xu_ly",
+    "nguon_github": "storage/nguon_mo",
+    "japan_n2_quiz": "legacy/japan_n2_quiz"
+  }
 }
