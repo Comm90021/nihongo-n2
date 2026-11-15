@@ -15,9 +15,12 @@ sealed class FlashView : UserControl, IKeyTarget
     readonly string _title;
     bool _revealed;
     int _known, _forgot;
+    /// <summary>Chạy trong Buổi học: không có nút quay lại, hết thẻ thì gọi (số thẻ nhớ ngay, tổng thẻ).</summary>
+    readonly Action<int, int>? _onDone;
 
-    public FlashView(IEnumerable<VocabItem> cards, string title)
+    public FlashView(IEnumerable<VocabItem> cards, string title, Action<int, int>? onDone = null)
     {
+        _onDone = onDone;
         _queue = new Queue<VocabItem>(cards);
         _total = _queue.Count;
         _title = title;
@@ -27,7 +30,8 @@ sealed class FlashView : UserControl, IKeyTarget
     void Render()
     {
         var header = Line(Col(2, Title(_title), Text($"{_total - _queue.Count}/{_total} thẻ xong", muted: true)),
-            Btn("Quay lại", App.Shell.BackToSection));
+            _onDone is null ? Btn("Quay lại", App.Shell.BackToSection) : new Control());
+        if (_queue.Count == 0 && _onDone is not null) { _onDone(Math.Max(0, _total - _forgot), _total); return; }
         if (_queue.Count == 0)
         {
             Content = Col(12, header, Card(Col(10,

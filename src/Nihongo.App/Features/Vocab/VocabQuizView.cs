@@ -24,6 +24,8 @@ sealed class VocabQuizView : UserControl, IKeyTarget
     readonly AutoAdvance _auto = new();
     int _index, _correct;
     int? _picked;
+    /// <summary>Chạy trong Buổi học: không có nút quay lại, hết câu thì gọi (đúng, tổng) thay cho màn kết quả.</summary>
+    readonly Action<int, int>? _onDone;
 
     static readonly Dictionary<QuizKind, string> KindName = new()
     {
@@ -33,9 +35,10 @@ sealed class VocabQuizView : UserControl, IKeyTarget
         [QuizKind.Context] = "文脈 · điền từ",
     };
 
-    public VocabQuizView(List<VocabQuestion> questions, string title)
+    public VocabQuizView(List<VocabQuestion> questions, string title, Action<int, int>? onDone = null)
     {
         _qs = questions;
+        _onDone = onDone;
         _title = title;
         DetachedFromVisualTree += (_, _) => { _auto.Cancel(); Speech.Stop(); };
         Content = QuizNav.Layout(_header, _card, _bar);
@@ -51,8 +54,9 @@ sealed class VocabQuizView : UserControl, IKeyTarget
     void Render(bool animate = true)
     {
         _header.Content = Col(0,
-            TopBar(_title, Text($"Câu {Math.Min(_index + 1, _qs.Count)}/{_qs.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
+            TopBar(_title, Text($"Câu {Math.Min(_index + 1, _qs.Count)}/{_qs.Count} · đúng {_correct}", 13, muted: true), _onDone is null ? App.Shell.BackToSection : null),
             Bar(_index, _qs.Count, 4));
+        if (_index >= _qs.Count && _onDone is not null) { _onDone(_correct, _qs.Count); return; }
         if (_index >= _qs.Count) { _bar.Content = null; QuizNav.Show(_card, Scroll(Summary()), animate); return; }
 
         var q = _qs[_index];
