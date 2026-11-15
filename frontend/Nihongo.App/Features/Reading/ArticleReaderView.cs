@@ -95,6 +95,7 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         _markHost.VerticalAlignment = wide ? VerticalAlignment.Top : VerticalAlignment.Stretch;
         var avail = wide && _markHost.IsVisible ? width - 360 : width;
         _col.Width = Math.Clamp(avail * (wide && _markHost.IsVisible ? 0.94 : 0.82), Math.Min(480, avail - 40), 980);
+        foreach (var r in _reflow) r(_col.Width);
     }
 
     public Article Article { get; }
@@ -131,44 +132,83 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         return col;
     }
 
-    /// <summary>Xen ký tự rộng 0 sau mỗi chữ Nhật để dòng được ngắt ở bất cứ chữ nào (ngắt theo "từ" làm dòng ngắn hẳn đi). Không chèn trước dấu câu đóng, chữ kana nhỏ.</summary>
-    static string Breakable(string s)
-    {
-        const string noStart = "、。，．」』）】！？ー々ゝゞぁぃぅぇぉっゃゅょァィゥェォッャュョ・：；";
-        var sb = new System.Text.StringBuilder(s.Length * 2);
-        for (var i = 0; i < s.Length; i++)
-        {
-            // \u7981\u5247: d\u1EA5u c\u00E2u \u0111\u00F3ng kh\u00F4ng \u0111\u1EE9ng \u0111\u1EA7u d\u00F2ng. U+2060 (word joiner) c\u1EA5m ng\u1EAFt tr\u01B0\u1EDBc n\u00F3, k\u1EC3 c\u1EA3 khi d\u1EA5u c\u00E2u
-            // m\u1EDF \u0111\u1EA7u m\u1ED9t Run ngay sau m\u1EE5c t\u00F4 m\u00E0u.
-            if (noStart.IndexOf(s[i]) >= 0) sb.Append('\u2060');
-            sb.Append(s[i]);
-            var cjk = s[i] >= '\u2E80' && s[i] != '\u200B' && s[i] != '\u2060';
-            var openAfter = "「『（【".IndexOf(s[i]) >= 0;
-            if (cjk && !openAfter && i + 1 < s.Length && s[i + 1] >= '\u2E80' && noStart.IndexOf(s[i + 1]) < 0) sb.Append('\u200B');
-        }
-        return sb.ToString();
-    }
+    const string NoStart = "、。，．」』）】！？ー々ゝゞぁぃぅぇぉっゃゅょァィゥェォッャュョ・：；";
+    const string NoEnd = "「『（【";
+    const string Hang = "、。，．";
+    readonly List<Action<double>> _reflow = [];
+
+    /// <summary>
+    /// Đoạn Nhật tự ngắt dòng theo 禁則: Avalonia 11 vẫn ngắt trước 。、」 (kể cả khi chèn U+2060/ZWSP), nên tự xếp dòng.
+    /// Đo vị trí x từng ký tự khi chữ nằm một dòng, rồi xếp tham lam theo bề rộng cột: dòng không bắt đầu bằng dấu đóng/kana nhỏ,
+    /// không kết thúc bằng dấu mở; 、。 được treo ra lề phải. Dòng được chèn '\n' vào Run, vùng bấm mục tô màu tính lại theo đó.
+    /// </summary>
     TextBlock Paragraph(string line)
     {
-        // WrapWithOverflow: chỉ ngắt ở chỗ được phép (ZWSP giữa các chữ), không "ngắt khẩn cấp" trước dấu câu.
-        var tb = Reading(new TextBlock { TextWrapping = TextWrapping.WrapWithOverflow });
+        var tb = Reading(new TextBlock { TextWrapping = TextWrapping.NoWrap });
+        var segs = ArticleText.Segments(line)
+            .Select(s => (s.Text, Mark: s.MarkNo is int n ? Article.Marks.FirstOrDefault(m => m.No == n) : null)).ToList();
+        var raw = string.Concat(segs.Select(s => s.Text));
         var ranges = new List<(int Start, int End, ArticleMark Mark)>();
-        var pos = 0;
-        foreach (var seg in ArticleText.Segments(line))
+
+        void Build(HashSet<int> breaks)
         {
-            var mark = seg.MarkNo is int n ? Article.Marks.FirstOrDefault(m => m.No == n) : null;
-            var shown = Breakable(seg.Text);
-            var run = new Run(shown);
-            if (mark is not null)
+            tb.Inlines!.Clear();
+            ranges.Clear();
+            var pos = 0; // vị trí trong chuỗi đã chèn '\n'
+            var idx = 0; // vị trí trong chuỗi gốc
+            foreach (var (text, mark) in segs)
             {
-                run.Background = KindBrush(mark.Kind);
-                run.FontWeight = FontWeight.SemiBold;
-                ranges.Add((pos, pos + shown.Length, mark));
+                var sb = new System.Text.StringBuilder();
+                foreach (var ch in text)
+                {
+                    if (breaks.Contains(idx)) sb.Append('\n');
+                    sb.Append(ch);
+                    idx++;
+                }
+                var run = new Run(sb.ToString());
+                if (mark is not null)
+                {
+                    run.Background = KindBrush(mark.Kind);
+                    run.FontWeight = FontWeight.SemiBold;
+                    ranges.Add((pos, pos + sb.Length, mark));
+                }
+                tb.Inlines.Add(run);
+                pos += sb.Length;
             }
-            tb.Inlines!.Add(run);
-            pos += shown.Length;
         }
-        if (ranges.Count > 0)
+
+        double last = -1;
+        void Reflow(double width)
+        {
+            if (Math.Abs(width - last) < 0.5 || raw.Length == 0) return;
+            last = width;
+            Build([]);
+            tb.Measure(Size.Infinity);
+            var n = raw.Length;
+            var xs = new double[n + 1];
+            for (var i = 0; i <= n; i++) xs[i] = tb.TextLayout.HitTestTextPosition(i).X;
+            var em = tb.FontSize;
+            var breaks = new HashSet<int>();
+            var start = 0;
+            while (xs[n] - xs[start] > width)
+            {
+                var e = start + 1;
+                while (e < n && xs[e + 1] - xs[start] <= width) e++;
+                if (e >= n) break;
+                // treo dấu 、。 ra lề phải (tối đa một chữ)
+                if (Hang.IndexOf(raw[e]) >= 0 && xs[e + 1] - xs[start] <= width + em) e++;
+                while (e > start + 1 && e < n && (NoStart.IndexOf(raw[e]) >= 0 || NoEnd.IndexOf(raw[e - 1]) >= 0)) e--;
+                if (e >= n) break;
+                breaks.Add(e);
+                start = e;
+            }
+            Build(breaks);
+        }
+        _reflow.Add(Reflow);
+        tb.Margin = new Thickness(0, 0, -Math.Max(Prefs.ReadSize, 16), 0); // chỗ cho dấu treo
+        Build([]);
+
+        if (segs.Any(s => s.Mark is not null))
             tb.PointerPressed += (_, e) =>
             {
                 if (!e.GetCurrentPoint(tb).Properties.IsLeftButtonPressed) return;
@@ -178,7 +218,6 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
             };
         return tb;
     }
-
     /// <summary>Danh sách mục đánh dấu dạng nút: dự phòng khi khó bấm trúng chữ, và để lướt nhanh các mục.</summary>
     Control MarkChips()
     {
