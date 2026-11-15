@@ -65,6 +65,7 @@ sealed class VocabQuizView : UserControl, IKeyTarget
         stem.Inlines = JpText.Build(q.Stem);
 
         var options = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 12, RowSpacing = 12 };
+        var optionButtons = new List<Button>();
         for (var i = 0; i < 4; i++)
         {
             var n = i;
@@ -81,9 +82,23 @@ sealed class VocabQuizView : UserControl, IKeyTarget
             Grid.SetColumn(b, i % 2);
             Grid.SetRow(b, i / 2);
             options.Children.Add(b);
+            optionButtons.Add(b);
         }
+        // Hẹp (&lt; 620): bốn phương án xếp một cột để chữ không bị bóp.
+        Responsive.Watch(options, 620, narrow =>
+        {
+            options.ColumnDefinitions.Clear();
+            options.RowDefinitions.Clear();
+            for (var c = 0; c < (narrow ? 1 : 2); c++) options.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            for (var r = 0; r < (narrow ? 4 : 2); r++) options.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            for (var i = 0; i < optionButtons.Count; i++)
+            {
+                Grid.SetColumn(optionButtons[i], narrow ? 0 : i % 2);
+                Grid.SetRow(optionButtons[i], narrow ? i : i / 2);
+            }
+        });
 
-        var body = Col(18, Row(8, Badge(KindName[q.Kind]), Text(q.Prompt, 14, muted: true)), stem, options);
+        var body = Col(18, Ui.Wrap(Badge(KindName[q.Kind]), Text(q.Prompt, 14, muted: true)), stem, options);
         if (answered) body.Children.Add(Detail(q.Item, _picked == q.Answer, _auto.Cancel, RefreshBar));
         QuizNav.Show(_card, Scroll(Card(body, 0).Also(c => c.Padding = new Thickness(28, 24))), animate);
         RefreshBar();
@@ -92,7 +107,7 @@ sealed class VocabQuizView : UserControl, IKeyTarget
     static Control Detail(VocabItem v, bool ok, Action cancelAuto, Action refreshBar)
     {
         var info = Col(8,
-            Row(10, Badge(ok ? "Đúng" : "Sai", ok ? "good" : "bad"), Text(v.Word, 22, bold: true).Also(t => t.FontFamily = new FontFamily("Yu Gothic UI, Meiryo")),
+            Ui.Wrap(Badge(ok ? "Đúng" : "Sai", ok ? "good" : "bad"), Text(v.Word, 22, bold: true).Also(t => t.FontFamily = new FontFamily("Yu Gothic UI, Meiryo")),
                 Text(string.Join("  ·  ", new[] { v.Reading != v.Word ? v.Reading : "", v.HanViet }.Where(s => s != "")), 15, muted: true),
                 Btn("Nghe", () => { cancelAuto(); refreshBar(); Speech.Say(v.Reading != "" ? v.Reading : v.Word); }).Also(b => b.Classes.Add("ghost"))),
             Text(v.Meaning, 16, bold: true).Tint("AccentInk"));
@@ -148,6 +163,7 @@ sealed class VocabQuizView : UserControl, IKeyTarget
     internal int TestIndex => _index;
     internal bool TestAnswered => _picked is not null;
     internal int TestAnswer => _qs[_index].Answer;
+    internal void TestPickAny() => Pick((_qs[_index].Answer + 1) % 4);
 
     public bool HandleKey(KeyEventArgs e)
     {

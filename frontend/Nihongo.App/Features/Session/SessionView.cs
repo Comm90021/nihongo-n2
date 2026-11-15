@@ -23,7 +23,8 @@ sealed class SessionView : UserControl, IKeyTarget
     readonly DateTime _started = DateTime.Now;
     readonly int _startXp;
     readonly ContentControl _host = new();
-    readonly StackPanel _pills = Row(6);
+    readonly WrapPanel _pills = new();
+    bool _compact;
     readonly ProgressBar _progress;
     readonly TextBlock _xp = Text("+0 XP", 16, bold: true, wrap: false);
     readonly Border _confirm;
@@ -43,6 +44,8 @@ sealed class SessionView : UserControl, IKeyTarget
         Control[] cells = [_pills, _xp, exit];
         for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; top.Children.Add(cells[i]); }
         var head = Col(8, top, _progress);
+        // Hẹp: viên bước rút gọn (chỉ số/dấu ✓, viên hiện tại giữ tên), XP và Thoát không bị đẩy ra ngoài.
+        Responsive.Watch(top, 700, narrow => { _compact = narrow; top.ColumnSpacing = narrow ? 8 : 16; RenderPills(); });
 
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 14 };
         Grid.SetRow(_host, 1);
@@ -78,8 +81,9 @@ sealed class SessionView : UserControl, IKeyTarget
         {
             var done = i < _step || _finished;
             var current = i == _step && !_finished;
-            var t = Text((done ? "✓ " : $"{i + 1}  ") + StepName(_plan.Steps[i].Kind), 13, bold: current, wrap: false);
-            var pill = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(12, 5), Child = t };
+            var name = _compact && !current ? (done ? "✓" : $"{i + 1}") : (done ? "✓ " : $"{i + 1}  ") + StepName(_plan.Steps[i].Kind);
+            var t = Text(name, 13, bold: current, wrap: false);
+            var pill = new Border { CornerRadius = new CornerRadius(999), Padding = new Thickness(_compact ? 10 : 12, 5), Margin = new Thickness(0, 2, 6, 2), Child = t };
             if (current) { pill.Themed(Border.BackgroundProperty, "AccentSoft"); t.Tint("AccentInk"); }
             else if (done) { pill.Themed(Border.BackgroundProperty, "GoodSoft"); t.Tint("GoodInk"); }
             else { pill.Themed(Border.BackgroundProperty, "Track"); t.Tint("Muted"); }

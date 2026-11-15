@@ -48,7 +48,7 @@ sealed class ListeningStepView : UserControl, IKeyTarget
         if (_audio is not null)
         {
             _play = Btn("▶ Phát  (Space)", Toggle, primary: true);
-            body.Children.Add(Row(8, _play, Btn("−10s", () => Seek(-10)), Btn("+10s", () => Seek(10)), _time.Also(t => t.VerticalAlignment = VerticalAlignment.Center)));
+            body.Children.Add(Ui.Wrap(_play, Btn("−10s", () => Seek(-10)), Btn("+10s", () => Seek(10)), _time.Also(t => t.VerticalAlignment = VerticalAlignment.Center)));
             _timer.Tick += (_, _) => Tick();
             _timer.Start();
         }

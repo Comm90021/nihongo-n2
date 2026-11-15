@@ -68,16 +68,17 @@ sealed class QuizView : UserControl, IKeyTarget
         stem.Inlines = JpText.Build(q.Word != "" ? q.Word : q.Text, answered ? JpText.Plain(answerText) : null, answered ? Good : null);
 
         var body = Col(12, Text($"{q.SourceTitle} · Mondai {q.Mondai} · câu {q.Number}", 13, muted: true));
-        if (q.Context != "") body.Children.Add(Card(new ScrollViewer { MaxHeight = q.Mondai >= 10 ? 420 : 260, Content = new SelectableTextBlock { Text = q.Context, FontSize = 17, LineHeight = 30, TextWrapping = TextWrapping.Wrap } }));
+        if (q.Context != "") body.Children.Add(Card(new ScrollViewer { MaxHeight = Math.Clamp((TopLevel.GetTopLevel(this)?.ClientSize.Height ?? 700) * (q.Mondai >= 10 ? 0.48 : 0.3), 140, q.Mondai >= 10 ? 420 : 260), Content = new SelectableTextBlock { Text = q.Context, FontSize = 17, LineHeight = 30, TextWrapping = TextWrapping.Wrap } }));
         body.Children.Add(stem);
 
         var options = new UniformGrid { Columns = q.Word != "" ? 1 : 2 };
+        if (q.Word == "") Responsive.Watch(options, 560, narrow => options.Columns = narrow ? 1 : 2);
         for (var i = 0; i < 4; i++)
         {
             var n = i + 1;
             var text = JpText.Plain(q.Options.ElementAtOrDefault(i) ?? "");
             if (text == "") continue;
-            var label = Col(2, Text($"{n}.  {text}", 18));
+            var label = Col(2, Ui.Numbered(Text($"{n}", 14, bold: true, wrap: false).Tint("Muted").Also(t => t.Margin = new Thickness(0, 4, 0, 0)), Text(text, 18), 10));
             if (answered && q.OptionsVi.ElementAtOrDefault(i) is { Length: > 0 } vi) label.Children.Add(Text(vi, 13, muted: true));
             var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 10), Classes = { "option" } };
             if (answered)
@@ -145,6 +146,7 @@ sealed class QuizView : UserControl, IKeyTarget
     internal int TestIndex => _index;
     internal bool TestAnswered => _picked is not null;
     internal Question TestCurrent => Current;
+    internal void TestPickAny() => Pick(Current.Answer % 4 + 1);
 
     public bool HandleKey(KeyEventArgs e)
     {

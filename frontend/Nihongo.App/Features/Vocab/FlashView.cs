@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -42,8 +43,9 @@ sealed class FlashView : UserControl, IKeyTarget
         }
 
         var v = _queue.Peek();
-        var front = Row(12, Text(v.Word, 44, bold: true, wrap: false), Btn("Nghe", () => Speech.Say(v.Reading != "" ? v.Reading : v.Word)));
-        front.HorizontalAlignment = HorizontalAlignment.Center;
+        var front = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
+        foreach (var c in new Control[] { Text(v.Word, 44, bold: true), Btn("Nghe", () => Speech.Say(v.Reading != "" ? v.Reading : v.Word)) })
+        { c.Margin = new Thickness(6, 0); c.VerticalAlignment = VerticalAlignment.Center; front.Children.Add(c); }
         var body = Col(10, front);
         if (_revealed)
         {
@@ -57,7 +59,7 @@ sealed class FlashView : UserControl, IKeyTarget
             if (v.Note != "") body.Children.Add(Text(v.Note, muted: true));
             if (v.ExampleJa != "") body.Children.Add(Card(Col(4, Text(v.ExampleJa, 17), v.ExampleVi != "" ? Text(v.ExampleVi, muted: true) : null)));
             body.Children.Add(Text($"Cấp {v.Level} · {v.Sources}{(v.FreqExam > 0 ? $" · ra đề {v.FreqExam} lần" : "")}", 12, muted: true));
-            var buttons = Row(12, Btn("Quên  (1)", () => Answer(false)), Btn("Nhớ  (2)", () => Answer(true), primary: true));
+            var buttons = Ui.Wrap(Btn("Quên  (1)", () => Answer(false)), Btn("Nhớ  (2)", () => Answer(true), primary: true));
             buttons.HorizontalAlignment = HorizontalAlignment.Center;
             body.Children.Add(buttons);
         }
@@ -67,7 +69,14 @@ sealed class FlashView : UserControl, IKeyTarget
             show.HorizontalAlignment = HorizontalAlignment.Center;
             body.Children.Add(show);
         }
-        Content = Col(12, header, Card(body));
+        // Đầu trang cố định, thẻ cuộn được khi cửa sổ thấp.
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 12 };
+        Grid.SetRow(header, 0);
+        var card = Scroll(Card(body));
+        Grid.SetRow(card, 1);
+        grid.Children.Add(header);
+        grid.Children.Add(card);
+        Content = grid;
     }
 
     void Reveal() { _revealed = true; Render(); }

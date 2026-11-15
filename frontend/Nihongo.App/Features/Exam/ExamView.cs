@@ -39,7 +39,7 @@ sealed class ExamView : UserControl, IKeyTarget
     string _pdfPath = "";
     int _pdfPage, _pdfFirst, _pdfLast, _zoom = 100;
     int _current, _remain, _usedBefore;
-    bool _submitted, _confirming;
+    bool _submitted, _confirming, _narrow, _two, _leftPdf;
 
     string DraftKey => $"exam_draft:{_exam.Id}";
 
@@ -62,16 +62,24 @@ sealed class ExamView : UserControl, IKeyTarget
         _stripHost.Margin = new Thickness(0, 12, 0, 0);
         DockPanel.SetDock(_stripHost, Dock.Bottom);
 
-        // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột.
-        _body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,12,*") };
-        _splitter = new GridSplitter { Width = 12, Background = Brushes.Transparent, ResizeDirection = GridResizeDirection.Columns };
-        ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
-        Grid.SetColumn(_splitter, 1);
-        Grid.SetColumn(_right, 2);
+        // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột (hẹp: hai hàng xếp chồng).
+        _body = new Grid();
+        _splitter = new GridSplitter { Background = Brushes.Transparent };
         _body.Children.Add(_left);
         _body.Children.Add(_splitter);
         _body.Children.Add(_right);
-        Content = new DockPanel { Children = { bar, _stripHost, _body } };
+        ApplyBody();
+        Responsive.Watch(_body, Responsive.Stack, narrow => { _narrow = narrow; ApplyBody(); _stripHost.Content = Strip(); });
+        // Trang PDF vẽ lại cho vừa bề rộng mới sau khi kéo cửa sổ.
+        Responsive.OnResized(_left, () => { if (_leftPdf) _ = LoadPage(); });
+        // Dải phiếu trả lời nằm dưới cùng (hàng riêng), không đè lên nội dung.
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+        Grid.SetRow(_body, 1);
+        Grid.SetRow(_stripHost, 2);
+        root.Children.Add(bar);
+        root.Children.Add(_body);
+        root.Children.Add(_stripHost);
+        Content = root;
 
         _timer.Tick += (_, _) =>
         {
@@ -127,6 +135,7 @@ sealed class ExamView : UserControl, IKeyTarget
         var question = QuestionCard(item);
         if (item.HasPdf || item.Passage != "")
         {
+            _leftPdf = item.HasPdf;
             Layout(two: true);
             _left.Content = item.HasPdf ? PdfCard(item) : IsListening(item) ? ListeningCard(item) : PassageCard(item);
             _right.Content = Scroll(question);
@@ -134,6 +143,7 @@ sealed class ExamView : UserControl, IKeyTarget
         else
         {
             // Câu không có bài đọc: câu hỏi đứng giữa, rộng vừa phải, không chừa nửa phải trống.
+            _leftPdf = false;
             Layout(two: false);
             _left.Content = Scroll(new Border { MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Center, Child = question });
             _right.Content = null;
@@ -145,8 +155,50 @@ sealed class ExamView : UserControl, IKeyTarget
     /// <summary>Hai nửa (bài đọc | câu hỏi) hoặc một nửa chiếm cả chiều ngang (câu không có bài đọc).</summary>
     void Layout(bool two)
     {
-        Grid.SetColumnSpan(_left, two ? 1 : 3);
-        _splitter.IsVisible = _right.IsVisible = two;
+        _two = two;
+        ApplyBody();
+    }
+
+    /// <summary>
+    /// Rộng: hai cột (bài đọc | câu hỏi) có thanh kéo. Hẹp (&lt; <see cref="Responsive.Stack"/>): bài đọc ở trên, câu hỏi ở dưới,
+    /// thanh kéo ngang chia chiều cao; mỗi nửa tự cuộn. Câu không có bài đọc: một nửa duy nhất.
+    /// </summary>
+    void ApplyBody()
+    {
+        _body.ColumnDefinitions.Clear();
+        _body.RowDefinitions.Clear();
+        _splitter.IsVisible = _right.IsVisible = _two;
+        Grid.SetRow(_left, 0); Grid.SetColumn(_left, 0);
+        Grid.SetRowSpan(_left, 1); Grid.SetColumnSpan(_left, 1);
+        if (!_two)
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            return;
+        }
+        if (_narrow)
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            // Trang PDF cần nhiều chỗ hơn (câu hỏi chỉ là bốn nút); bài đọc chữ thì chia gần đều.
+            _body.RowDefinitions.Add(new RowDefinition(_leftPdf ? 2 : 1, GridUnitType.Star) { MinHeight = 90 });
+            _body.RowDefinitions.Add(new RowDefinition(10, GridUnitType.Pixel));
+            _body.RowDefinitions.Add(new RowDefinition(_leftPdf ? 1 : _submitted ? 1.2 : 1.5, GridUnitType.Star) { MinHeight = 140 });
+            Grid.SetRow(_splitter, 1); Grid.SetColumn(_splitter, 0);
+            Grid.SetRow(_right, 2); Grid.SetColumn(_right, 0);
+            _splitter.ResizeDirection = GridResizeDirection.Rows;
+            _splitter.Width = double.NaN; _splitter.Height = 10;
+            ToolTip.SetTip(_splitter, "Kéo để đổi chiều cao bài đọc / câu hỏi");
+        }
+        else
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(1.15, GridUnitType.Star) { MinWidth = 280 });
+            _body.ColumnDefinitions.Add(new ColumnDefinition(12, GridUnitType.Pixel));
+            _body.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 280 });
+            Grid.SetRow(_splitter, 0); Grid.SetColumn(_splitter, 1);
+            Grid.SetRow(_right, 0); Grid.SetColumn(_right, 2);
+            _splitter.ResizeDirection = GridResizeDirection.Columns;
+            _splitter.Height = double.NaN; _splitter.Width = 12;
+            ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
+        }
     }
 
     static string MondaiLabel(ExamItem it) => it.Q is null && it.Mondai == 10 ? "問題10–14 · 読解"
@@ -227,10 +279,12 @@ sealed class ExamView : UserControl, IKeyTarget
             _pdfPage = item.PageFrom;
             _ = LoadPage();
         }
-        var nav = Row(6, Badge(MondaiLabel(item)), IconBtn(Glyph.Back, "Trang trước", () => GoPage(-1)), _pdfLabel, IconBtn(Glyph.Forward, "Trang sau", () => GoPage(1)),
-            IconBtn(Glyph.ZoomOut, "Thu nhỏ", () => Zoom(-15)), IconBtn(Glyph.ZoomIn, "Phóng to", () => Zoom(15)));
+        var nav = new WrapPanel();
+        foreach (var c in new Control[] { Badge(MondaiLabel(item)), IconBtn(Glyph.Back, "Trang trước", () => GoPage(-1)), _pdfLabel, IconBtn(Glyph.Forward, "Trang sau", () => GoPage(1)),
+            IconBtn(Glyph.ZoomOut, "Thu nhỏ", () => Zoom(-15)), IconBtn(Glyph.ZoomIn, "Phóng to", () => Zoom(15)) })
+        { c.VerticalAlignment = VerticalAlignment.Center; c.Margin = new Thickness(0, 0, 6, 4); nav.Children.Add(c); }
         DockPanel.SetDock(nav, Dock.Top);
-        nav.Margin = new Thickness(0, 0, 0, 10);
+        nav.Margin = new Thickness(0, 0, 0, 6);
         if (_pdf.Parent is ScrollViewer old) old.Content = null;
         return Card(new DockPanel { Children = { nav, new ScrollViewer { Content = _pdf, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto } } }, 0).Also(b => b.Padding = new Thickness(16));
     }
@@ -251,7 +305,7 @@ sealed class ExamView : UserControl, IKeyTarget
         try
         {
             var scale = VisualRoot?.RenderScaling ?? 1;
-            var width = (int)(Math.Max(_left.Bounds.Width - 40, 600) * _zoom / 100.0 * scale);
+            var width = (int)(Math.Max(_left.Bounds.Width - 56, 320) * _zoom / 100.0 * scale);
             var bitmap = await PdfPages.RenderAsync(_pdfPath, _pdfPage, width);
             var old = _pdf.Source as IDisposable;
             _pdf.Source = bitmap;
@@ -326,7 +380,8 @@ sealed class ExamView : UserControl, IKeyTarget
     /// </summary>
     Control Strip()
     {
-        var wrap = new WrapPanel();
+        // Rộng: các nhóm xuống dòng. Hẹp: một hàng duy nhất, cuộn ngang (khỏi chiếm chiều cao của câu hỏi).
+        Panel wrap = _narrow ? new StackPanel { Orientation = Orientation.Horizontal } : new WrapPanel();
         foreach (var g in _items.Select((it, i) => (it, i)).GroupBy(p => MondaiLabel(p.it)))
         {
             var cells = new WrapPanel();
@@ -346,7 +401,10 @@ sealed class ExamView : UserControl, IKeyTarget
             var label = Text(g.Key.StartsWith("聴解") ? g.Key.Replace(" 問題", " ") : g.Key.Split(' ')[0], 12, muted: true, wrap: false).Also(t => t.FontFamily = new FontFamily("Yu Mincho, Yu Gothic UI"));
             wrap.Children.Add(Col(3, label, cells).Also(c => c.Margin = new Thickness(0, 0, 14, 4)));
         }
-        return new Border { Classes = { "card" }, Padding = new Thickness(16, 8, 16, 4), CornerRadius = new CornerRadius(14), Child = wrap };
+        Control inner = wrap;
+        if (_narrow) inner = new ScrollViewer { Content = wrap, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(0, 0, 0, 8) };
+        else inner = new ScrollViewer { Content = wrap, MaxHeight = 150, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        return new Border { Classes = { "card" }, Padding = new Thickness(16, 8, 16, 4), CornerRadius = new CornerRadius(14), Child = inner };
     }
 
     // ---------------------------------------------------------------- thao tác
@@ -400,6 +458,7 @@ sealed class ExamView : UserControl, IKeyTarget
         }
         _submitted = true;
         _timer.Stop();
+        ApplyBody();
         App.Progress.SetSetting(DraftKey, "");
 
         var results = _items.Select((it, i) => (it.Mondai, Correct: _picked.GetValueOrDefault(i) == it.Answer)).ToList();
@@ -416,6 +475,7 @@ sealed class ExamView : UserControl, IKeyTarget
 
         _submit.Content = "Về danh sách đề";
         _clock.Text = $"Đúng {score.Correct}/{_items.Count}";
+        _leftPdf = false;
         Layout(two: true);
         _left.Content = Scroll(ResultCard(score, used));
         _right.Content = Scroll(QuestionCard(Cur));
