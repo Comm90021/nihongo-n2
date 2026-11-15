@@ -5,5 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />
+    <ProjectReference Include="..\Nihongo.Data\Nihongo.Data.csproj" />
+    <Using Include="Nihongo.Data" />
   </ItemGroup>
 </Project>

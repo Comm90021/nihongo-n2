@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Tầng dữ liệu: đọc noi_dung.db (chỉ đọc) và tien_do.db (tiến độ, chỉ được thêm cột/bảng qua Migrations). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\*.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />
+  </ItemGroup>
+</Project>

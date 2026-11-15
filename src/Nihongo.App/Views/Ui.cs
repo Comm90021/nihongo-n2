@@ -1,0 +1,358 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
+using Avalonia.Media;
+
+namespace Nihongo.App.Views;
+
+/// <summary>Mã biểu tượng của font Segoe Fluent Icons (Windows 11), dự phòng Segoe MDL2 Assets (Windows 10).</summary>
+static partial class Glyph
+{
+    public const string Settings = "", Chat = "", Menu = "", Add = "", Copy = "",
+        FullScreen = "", Close = "", Accept = "", People = "", Timer = "",
+        Back = "", Forward = "", FlagOutline = "", ZoomIn = "", ZoomOut = "", Sparkle = "";
+}
+
+static partial class Glyph
+{
+    public const string Home = "", Library = "", Education = "", Reading = "", Headphone = "",
+        News = "", Video = "", Save = "", Calendar = "", Check = "", Play = "",
+        Light = "", Refresh = "", Flag = "", Search = "";
+}
+
+static partial class Glyph
+{
+    public const string Lightning = "\uE945", Book = "\uE82D", Globe = "\uE774", Chart = "\uE9D2";
+}
+
+/// <summary>Hàm dựng control dùng chung để các màn hình viết ngắn gọn bằng C#.</summary>
+static class Ui
+{
+    static readonly FontFamily IconFont = new("Segoe Fluent Icons, Segoe MDL2 Assets");
+
+    public static IBrush Accent => Brush(App.Current!.FindResource("Accent"));
+    public static IBrush Good => Brush(App.Current!.FindResource("Good"));
+    public static IBrush Bad => Brush(App.Current!.FindResource("Bad"));
+    static IBrush Brush(object? o) => o as IBrush ?? Brushes.Gray;
+
+    /// <summary>Kiểu chữ có chân cho tiêu đề và số to (Georgia có sẵn trên Windows, đủ dấu tiếng Việt).</summary>
+    public static readonly FontFamily Serif = new("Georgia, Yu Mincho, serif");
+
+    /// <summary>Thang cỡ chữ chung của app (7 bậc). Mọi Text(…, size) tự gom về bậc gần nhất nên các màn đồng đều.</summary>
+    public static class Fs
+    {
+        public const double Caption = 12, Small = 13, Body = 15, Lead = 17, Heading = 22, Page = 28, Display = 40;
+
+        public static double Snap(double size) =>
+            size <= 12.5 ? Caption : size <= 13.5 ? Small : size <= 15 ? Body : size <= 18 ? Lead : size <= 24 ? Heading : size <= 30 ? Page : Display;
+    }
+
+    public static TextBlock Text(string text, double size = 15, bool bold = false, bool muted = false, bool wrap = true)
+    {
+        var t = new TextBlock
+        {
+            Text = text,
+            FontSize = Fs.Snap(size),
+            FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal,
+            TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+        };
+        // Chữ phụ dùng màu Muted của giao diện (đủ tương phản cả nền sáng lẫn tối), không làm mờ bằng Opacity.
+        if (muted) t.Bind(TextBlock.ForegroundProperty, t.GetResourceObservable("Muted"));
+        return t;
+    }
+
+    /// <summary>Gắn màu từ bảng màu giao diện (đổi sáng/tối là đổi theo).</summary>
+    public static T Tint<T>(this T c, string resource) where T : Control
+    {
+        switch (c)
+        {
+            case TextBlock tb: tb.Bind(TextBlock.ForegroundProperty, tb.GetResourceObservable(resource)); break;
+            case TemplatedControl tc: tc.Bind(TemplatedControl.ForegroundProperty, tc.GetResourceObservable(resource)); break;
+        }
+        return c;
+    }
+
+    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontFamily = Serif; t.FontSize = 34; t.FontWeight = FontWeight.SemiBold; t.LetterSpacing = -0.3; });
+
+    /// <summary>Số to kiểu có chân (điểm, số ngày, số câu).</summary>
+    public static TextBlock BigNumber(string text, double size = 34) =>
+        Text(text, size, bold: true, wrap: false).Also(t => { t.FontFamily = Serif; t.FontSize = size; t.FontWeight = FontWeight.SemiBold; });
+
+    /// <summary>
+    /// Thanh trên chung cho mọi màn làm bài/đọc: nút quay lại, tiêu đề (có chân) + dòng phụ, các nút bên phải.
+    /// Cao một dòng; <paramref name="subtitle"/> là TextBlock để màn chứa cập nhật được (trạng thái, số câu đã làm).
+    /// </summary>
+    public static Grid TopBar(string title, TextBlock subtitle, Action? back, params Control?[] actions)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, MinHeight = 48, Margin = new Thickness(0, 0, 0, 14) };
+        var titleBlock = Text(title, 17, bold: true, wrap: false).Also(t => { t.FontFamily = Serif; t.FontSize = 18; t.TextTrimming = TextTrimming.CharacterEllipsis; });
+        subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
+        subtitle.TextWrapping = TextWrapping.NoWrap;
+        var mid = Col(1, titleBlock, subtitle);
+        mid.VerticalAlignment = VerticalAlignment.Center;
+        var right = Row(8, actions);
+        Control[] cells = [back is null ? new Control() : IconBtn(Glyph.Back, "Quay lại", back), mid, right];
+        for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
+        return g;
+    }
+
+    /// <summary>Dải số liệu: một thẻ, các ô chia đều bằng đường kẻ mảnh (thay cho ba thẻ rời).</summary>
+    public static Border Strip(params Control[] cells)
+    {
+        var grid = new Grid();
+        for (var i = 0; i < cells.Length; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            cells[i].Margin = new Thickness(24, 18);
+            Grid.SetColumn(cells[i], i);
+            grid.Children.Add(cells[i]);
+            if (i < cells.Length - 1)
+            {
+                var line = new Border { Width = 1, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14) }.Themed(Border.BackgroundProperty, "CardBorder");
+                Grid.SetColumn(line, i);
+                grid.Children.Add(line);
+            }
+        }
+        return new Border { Classes = { "card" }, Padding = new Thickness(0), Child = grid };
+    }
+
+    /// <summary>Một ô trong <see cref="Strip"/>: nhãn nhỏ, số to có chân, dòng phụ, và control tùy chọn ở dưới.</summary>
+    public static StackPanel StatCell(string label, string value, string sub, Control? extra = null) => Col(8,
+        Text(label, 13, muted: true),
+        Row(10, BigNumber(value), Text(sub, 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+        extra);
+
+    /// <summary>Tiêu đề trang kèm dòng mô tả.</summary>
+    public static StackPanel Header(string title, string subtitle) =>
+        Col(4, Title(title), Text(subtitle, 14, muted: true)).Also(p => p.Margin = new Thickness(0, 0, 0, 12));
+
+    public static TextBlock Section(string text) =>
+        Text(text, 16, bold: true).Also(t => t.Margin = new Thickness(2, 12, 0, 4));
+
+    /// <summary>Nhãn nhỏ có màu: "" (chàm), "warn", "good", "bad", "plain".</summary>
+    public static Border Badge(string text, string kind = "")
+    {
+        var b = new Border { Classes = { "chip" }, Child = Text(text, 12, bold: true, wrap: false), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center };
+        if (kind != "") b.Classes.Add(kind);
+        return b;
+    }
+
+    /// <summary>Thẻ có tiêu đề và (tuỳ chọn) chữ hoặc nút bên phải tiêu đề.</summary>
+    public static Border Panel(string title, Control body, Control? right = null)
+    {
+        TextBlock Head() => Text(title, 17, bold: true).Also(t => t.FontFamily = Serif);
+        return Card(Col(14, right is null ? Head() : Line(Head(), right), body), 0);
+    }
+
+    /// <summary>Ô số liệu kiểu bản mẫu: nhãn nhỏ, số to, dòng phụ, và một control tuỳ chọn ở dưới.</summary>
+    public static Border Stat(string label, string value, string sub, Control? extra = null) => Card(Col(10,
+        Text(label, 13, muted: true).Also(t => t.FontWeight = FontWeight.Medium),
+        Row(8, Text(value, 30, bold: true, wrap: false).Also(t => { t.FontWeight = FontWeight.Bold; t.LetterSpacing = -0.6; }), Text(sub, 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
+        extra), 0);
+
+    /// <summary>
+    /// Gắn màu theo bảng màu sáng/tối cho một thuộc tính bất kỳ. Không dùng App.Current.FindResource với các màu
+    /// trong ThemeDictionaries: ngoài cây giao diện nó trả về UnsetValue và làm app chết khi ép kiểu.
+    /// </summary>
+    public static T Themed<T>(this T c, AvaloniaProperty property, string resource) where T : Control
+    {
+        c.Bind(property, c.GetResourceObservable(resource));
+        return c;
+    }
+
+    /// <summary>Đường kẻ ngang mảnh màu viền thẻ.</summary>
+    public static Border Divider() => new Border { Height = 1 }.Themed(Border.BackgroundProperty, "CardBorder");
+
+    /// <summary>Nhóm nút chọn một (bộ lọc). Bấm nút nào thì nút đó sáng và gọi <paramref name="changed"/>.</summary>
+    public static WrapPanel Segmented(string[] labels, int selected, Action<int> changed)
+    {
+        var p = new WrapPanel();
+        var buttons = new List<Button>();
+        for (var i = 0; i < labels.Length; i++)
+        {
+            var idx = i;
+            var b = new Button { Content = labels[i], Classes = { "seg" }, Margin = new Thickness(0, 0, 6, 6) };
+            b.Classes.Set("on", i == selected);
+            b.Click += (_, _) => { foreach (var x in buttons) x.Classes.Set("on", x == b); changed(idx); };
+            buttons.Add(b);
+            p.Children.Add(b);
+        }
+        return p;
+    }
+
+    /// <summary>Thanh tiến độ mảnh bo tròn.</summary>
+    public static ProgressBar Bar(double value, double max, double height = 8) =>
+        new() { Minimum = 0, Maximum = Math.Max(1, max), Value = value, Height = height, MinHeight = height };
+
+    public static TextBlock Icon(string glyph, double size = 18, IBrush? brush = null)
+    {
+        var t = new TextBlock { Text = glyph, FontFamily = IconFont, FontSize = size, VerticalAlignment = VerticalAlignment.Center };
+        // Không gán Foreground = null: null làm chữ trong suốt; để trống thì biểu tượng lấy màu chữ của nơi chứa nó.
+        if (brush is not null) t.Foreground = brush;
+        return t;
+    }
+
+    /// <summary>Biểu tượng trong ô tròn màu nhạt, dùng ở đầu các hàng việc cần làm.</summary>
+    public static Border IconBadge(string glyph, IBrush? brush = null) => new()
+    {
+        Width = 44,
+        Height = 44,
+        CornerRadius = new CornerRadius(12),
+        Classes = { "chip" },
+        Child = Icon(glyph, 20, brush ?? Accent).Also(i => i.HorizontalAlignment = HorizontalAlignment.Center),
+    };
+
+    public static Button Btn(string text, Action onClick, bool primary = false, bool enabled = true)
+    {
+        var b = new Button { Content = text, IsEnabled = enabled };
+        if (primary) b.Classes.Add("primary");
+        b.Click += (_, _) => onClick();
+        return b;
+    }
+
+    public static Border Card(Control child, double margin = 5) => new()
+    {
+        Child = child,
+        Margin = new Thickness(0, margin),
+        Classes = { "card" },
+    };
+
+    /// <summary>Ô số liệu: số to, nhãn nhỏ, biểu tượng.</summary>
+    public static Border Tile(string value, string label, string glyph) => Card(Row(14, IconBadge(glyph),
+        Col(0, Text(value, 24, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text(label, 13, muted: true))), 0);
+
+    public static Border Chip(string text) => new() { Classes = { "chip" }, Child = Text(text, 12, wrap: false) };
+
+    public static StackPanel Col(double spacing, params Control?[] children)
+    {
+        var p = new StackPanel { Spacing = spacing };
+        foreach (var c in children) if (c is not null) p.Children.Add(c);
+        return p;
+    }
+
+    public static StackPanel Row(double spacing, params Control?[] children)
+    {
+        var p = new StackPanel { Orientation = Orientation.Horizontal, Spacing = spacing };
+        foreach (var c in children) if (c is not null) { c.VerticalAlignment = VerticalAlignment.Center; p.Children.Add(c); }
+        return p;
+    }
+
+    public static WrapPanel Wrap(params Control?[] children)
+    {
+        var p = new WrapPanel();
+        foreach (var c in children) { if (c is null) continue; c.Margin = new Thickness(0, 0, 8, 8); p.Children.Add(c); }
+        return p;
+    }
+
+    /// <summary>
+    /// Số thứ tự + chữ xuống dòng được (phương án trắc nghiệm). Không dùng Row: StackPanel ngang cho chữ bề rộng vô hạn
+    /// nên phương án dài bị cắt cụt thay vì xuống dòng (lỗi thấy ở đọc hiểu dạng chữ, 12/11/2026).
+    /// </summary>
+    public static Grid Numbered(Control number, Control text, double spacing = 14)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = spacing };
+        number.VerticalAlignment = VerticalAlignment.Top;
+        text.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(text, 1);
+        g.Children.Add(number);
+        g.Children.Add(text);
+        return g;
+    }
+
+    /// <summary>Hàng có phần chữ co giãn bên trái và nút bên phải.</summary>
+    public static Grid Line(Control left, Control right)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        right.VerticalAlignment = VerticalAlignment.Center;
+        left.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(right, 1);
+        g.Children.Add(left);
+        g.Children.Add(right);
+        return g;
+    }
+
+    /// <summary>Lưới chia đều các cột, dùng cho hàng ô số liệu.</summary>
+    public static Grid Columns(double spacing, params Control[] children)
+    {
+        var g = new Grid { ColumnSpacing = spacing };
+        for (var i = 0; i < children.Length; i++)
+        {
+            g.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            Grid.SetColumn(children[i], i);
+            g.Children.Add(children[i]);
+        }
+        return g;
+    }
+
+    /// <summary>Gắn phông và cỡ chữ đọc theo trang Cài đặt (đổi là cập nhật ngay).</summary>
+    public static T Reading<T>(T t, bool vi = false) where T : TextBlock
+    {
+        if (!vi)
+        {
+            t.Bind(TextBlock.FontFamilyProperty, t.GetResourceObservable("ReadFont"));
+            t.Bind(TextBlock.FontSizeProperty, t.GetResourceObservable("ReadSize"));
+            t.Bind(TextBlock.LineHeightProperty, t.GetResourceObservable("ReadLine"));
+        }
+        else t.Bind(TextBlock.FontSizeProperty, t.GetResourceObservable("ReadViSize"));
+        return t;
+    }
+
+    /// <summary>Nút chỉ có biểu tượng, có tên cho trình đọc màn hình và chú thích khi rê chuột.</summary>
+    public static Button IconBtn(string glyph, string tip, Action onClick)
+    {
+        var b = new Button { Content = Icon(glyph, 16), Padding = new Thickness(10, 8) };
+        ToolTip.SetTip(b, tip);
+        Avalonia.Automation.AutomationProperties.SetName(b, tip);
+        b.Click += (_, _) => onClick();
+        return b;
+    }
+
+    /// <summary>
+    /// Khung bên phải kéo giãn được: tay nắm 6px ở mép trái, kéo để đổi bề rộng, nhớ trong setting "w:&lt;key&gt;".
+    /// Trả về khung bọc ngoài; đặt khung này vào chỗ của <paramref name="pane"/>. Ẩn/hiện bằng IsVisible của khung bọc.
+    /// </summary>
+    public static DockPanel Resizable(Control pane, string key, double width, double min = 240, double max = 900)
+    {
+        var saved = double.TryParse(App.Progress.Setting("w:" + key, ""), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w) ? w : width;
+        var line = new Border { Width = 2, HorizontalAlignment = HorizontalAlignment.Center, CornerRadius = new CornerRadius(1), Opacity = 0 }.Themed(Border.BackgroundProperty, "Accent");
+        var grip = new Border { Width = 10, Background = Brushes.Transparent, Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeWestEast), Child = line };
+        ToolTip.SetTip(grip, "Kéo để đổi bề rộng");
+        DockPanel.SetDock(grip, Dock.Left);
+        var host = new DockPanel { Width = Math.Clamp(saved, min, max), Children = { grip, pane } };
+        // Khung bên trong tự ẩn/hiện (bảng tra, cột Gemini) thì khung bọc ẩn/hiện theo, không để lại tay nắm trơ trọi.
+        host.IsVisible = pane.IsVisible;
+        pane.PropertyChanged += (_, e) => { if (e.Property == Visual.IsVisibleProperty) host.IsVisible = pane.IsVisible; };
+        double startX = 0, startW = 0;
+        var dragging = false;
+        grip.PointerEntered += (_, _) => line.Opacity = 0.6;
+        grip.PointerExited += (_, _) => { if (!dragging) line.Opacity = 0; };
+        grip.PointerPressed += (_, e) =>
+        {
+            dragging = true;
+            startX = e.GetPosition(null).X;
+            startW = host.Width;
+            e.Pointer.Capture(grip);
+            e.Handled = true;
+        };
+        grip.PointerMoved += (_, e) =>
+        {
+            if (!dragging) return;
+            // Tay nắm ở mép trái: kéo sang trái là khung rộng ra.
+            host.Width = Math.Clamp(startW - (e.GetPosition(null).X - startX), min, max);
+        };
+        grip.PointerReleased += (_, e) =>
+        {
+            if (!dragging) return;
+            dragging = false;
+            line.Opacity = 0;
+            e.Pointer.Capture(null);
+            App.Progress.SetSetting("w:" + key, host.Width.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        };
+        return host;
+    }
+
+    public static ScrollViewer Scroll(Control child) => new() { Content = child, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
+
+    public static string Clock(int seconds) => $"{Math.Max(0, seconds) / 60:00}:{Math.Max(0, seconds) % 60:00}";
+}

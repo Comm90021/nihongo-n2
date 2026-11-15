@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Nghiệp vụ thuần (không giao diện, không SQL): model, chấm điểm, lịch ôn, thống kê, lập buổi học. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
-  </ItemGroup>
 </Project>
