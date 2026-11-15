@@ -1,0 +1,7 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Model dùng chung (POCO, không phụ thuộc gì). Giữ namespace Nihongo.Core để chỗ gọi không phải đổi. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Nihongo.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

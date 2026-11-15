@@ -71,9 +71,14 @@ Kết quả biên dịch là tệp thực thi duy nhất tự chứa tại `dist
 
 | Thư mục / Tệp tin | Vai trò |
 |---|---|
-| `src/Nihongo.Core` | Mô hình dữ liệu, ContentStore (đọc `noi_dung.db`), ProgressStore (quản lý `tien_do.db`), AppPaths |
-| `src/Nihongo.Desktop` | Giao diện đồ họa Avalonia (các màn hình trong `Views/`, dịch vụ âm thanh, PDF và WebView2 trong `Services/`) |
-| `src/Nihongo.Importer` | Công cụ dòng lệnh dựng `data/noi_dung.db` từ các nguồn tài liệu của người dùng |
+| `frontend/Nihongo.App` | Giao diện đồ họa Avalonia (trang, thành phần, dịch vụ âm thanh, PDF và WebView2) |
+| `backend/Nihongo.Core` | Logic nghiệp vụ thuần: chấm điểm, lịch ôn, thống kê, AppPaths |
+| `backend/Nihongo.Data` | ContentStore (đọc `noi_dung.db`), ProgressStore (quản lý `tien_do.db`), Migrator |
+| `backend/jobs/Nihongo.Importer` | Công cụ dòng lệnh dựng `data/noi_dung.db` từ các nguồn tài liệu của người dùng |
+| `shared/Nihongo.Shared` | Mô hình dữ liệu dùng chung |
+| `database/` | `migrations/*.sql` (nâng cấp `tien_do.db`) và `schema/` (bản dump cấu trúc hai CSDL) |
+| `tests/Nihongo.Tests` | Kiểm thử xUnit |
+| `docs/` | Kiến trúc (`architecture.md`) và tiến độ v2 |
 | `data/` | Thư mục chứa cơ sở dữ liệu `noi_dung.db`, `tien_do.db` và các bản sao lưu tự động trong `sao_luu/` |
 | `dist/` | Chứa tệp thực thi đóng gói `NihongoN2.exe` tự chứa sau khi hoàn tất quá trình build |
 | `scripts/` | Các tập lệnh hỗ trợ sao lưu (`backup.ps1`), khôi phục (`restore.ps1`) và cập nhật ứng dụng (`update.ps1`) |

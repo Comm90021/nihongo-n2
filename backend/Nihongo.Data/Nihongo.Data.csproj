@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!-- Tầng dữ liệu: đọc noi_dung.db (chỉ đọc) và tien_do.db (tiến độ, chỉ được thêm cột/bảng qua Migrations). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,7 +7,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Migrations\*.sql" />
+    <!-- File .sql nằm ở database/migrations; giữ tên tài nguyên cũ để Migrator dò theo đuôi .NNN_*.sql. -->
+    <EmbeddedResource Include="..\..\database\migrations\*.sql" LogicalName="Nihongo.Data.Migrations.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />
