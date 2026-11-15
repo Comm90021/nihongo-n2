@@ -14,7 +14,8 @@ public static partial class ArticleParser
     private static readonly Regex StyleRx = new(@"Văn phong\s*[:：]\s*([^\]|`]+)", RegexOptions.Compiled);
     private static readonly Regex BodyMarkRx = new($@"\*\*(?:(?!\*\*).)+?\*\*\s*\[\s*({Digit}+)\s*\]", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex QuestionRx = new($@"^\s*\*{{0,2}}\s*問\s*({Digit})\s*[:：.．]?\s*\*{{0,2}}\s*[:：.．]?\s*(.*)$", RegexOptions.Compiled);
-    private static readonly Regex AnswerRx = new($@"^\s*[-*•]\s*\*{{0,2}}\s*問\s*({Digit})\s*[:：]?\s*\*{{0,2}}\s*[:：]?\s*({Digit})\s*\*{{0,2}}\s*[—–\-:：]*\s*(.*)$", RegexOptions.Compiled);
+    // Dấu đầu dòng phải có khoảng trắng theo sau: "**問1** 1955年…" (câu hỏi bắt đầu bằng số) không được nhận nhầm thành đáp án.
+    private static readonly Regex AnswerRx = new($@"^\s*[-*•]\s+\*{{0,2}}\s*問\s*({Digit})\s*[:：]?\s*\*{{0,2}}\s*[:：]?\s*({Digit})\s*\*{{0,2}}\s*[—–\-:：]*\s*(.*)$", RegexOptions.Compiled);
     private static readonly Regex OptionRx = new($@"^\s*({Digit})\s*[.．、)）]\s*(.+)$", RegexOptions.Compiled);
     private static readonly Regex NoCellRx = new($@"^\[?\s*({Digit}+)\s*\]?$", RegexOptions.Compiled);
     private static readonly Regex GroupNumRx = new($@"Nhóm\s*({Digit})", RegexOptions.Compiled);

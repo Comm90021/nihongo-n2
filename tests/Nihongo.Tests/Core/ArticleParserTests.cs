@@ -104,6 +104,17 @@ public class ArticleParserTests
     }
 
     [Fact]
+    public void QuestionStartingWithDigits_IsNotTakenAsAnswer()
+    {
+        // Lỗi thật ở N2-167: "**問1** 1955年から…" bị AnswerRx nhận thành đáp án "問1: 1".
+        var md = Sample.Replace("**問1** 質問一", "**問1** 1955年から1993年まで、なぜか。");
+        var errors = new List<string>();
+        var a = Assert.Single(ArticleParser.ParseDocHieu(md, errors));
+        Assert.StartsWith("1955年", a.Questions[0].Text);
+        Assert.Equal(3, a.Questions[0].Answer);
+    }
+
+    [Fact]
     public void AnswerOutOfRange_IsRejected()
     {
         var md = Sample.Replace("**問1: 3**", "**問1: 5**");
