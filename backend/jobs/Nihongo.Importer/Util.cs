@@ -7,8 +7,17 @@ namespace Nihongo.Importer;
 /// <summary>Đường dẫn gốc và các hàm dùng chung của mọi nguồn (chuyển nguyên từ Program.cs cũ).</summary>
 public static class Util
 {
-    /// <summary>Thư mục gốc "JLPT n2 ôn thi". Program đặt một lần khi khởi động.</summary>
-    public static string Root { get; set; } = @"D:\JLPT n2 ôn thi";
+    /// <summary>Thư mục gốc chứa repo (thư mục cha của NihongoApp). Program đặt một lần khi khởi động.</summary>
+    public static string Root { get; set; } = FindRepoParent() ?? Directory.GetCurrentDirectory();
+
+    /// <summary>Thư mục cha của repo (chứa thư mục NihongoApp.sln), tính từ vị trí file chạy; null nếu không tìm thấy.</summary>
+    public static string? FindRepoParent()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+            if (File.Exists(Path.Combine(dir.FullName, "NihongoApp.sln")))
+                return dir.Parent?.FullName;
+        return null;
+    }
     public static string Web => P("japan_n2_quiz");
 
     /// <summary>
@@ -91,25 +100,40 @@ public static class Util
         return changed;
     }
 
-    const string Core6000Fallback = @"D:\Tài liệu Tiếng Nhật\Japanese Core 6000 Vocab+.txt";
+    /// <summary>Đường dẫn Japanese Core 6000 (khóa "core6000" trong config/paths.local.json); không có thì null (bỏ qua nguồn này).</summary>
+    public static string? Core6000Path() => ConfigPath("core6000");
 
-    /// <summary>Đường dẫn Japanese Core 6000 từ config/paths.json (key "core6000"); không có config thì dùng đường dẫn cũ.</summary>
-    public static string Core6000Path() => ConfigPath("core6000") ?? Core6000Fallback;
-
-    /// <summary>Tìm config/paths.json: thư mục chạy, rồi đi ngược lên các thư mục cha (tới gốc repo).</summary>
+    /// <summary>Giá trị chuỗi của một khóa config; null nếu không có.</summary>
     public static string? ConfigPath(string key) => ConfigNode(key) is JsonValue v && v.ToString() is { Length: > 0 } s ? s : null;
 
-    /// <summary>Một khóa của config/paths.json (tìm ở thư mục chạy, thư mục exe rồi đi ngược lên các thư mục cha).</summary>
+    /// <summary>
+    /// Một khóa của config. Đọc config/paths.local.json trước (cấu hình riêng của máy, không commit), không có khóa thì đọc config/paths.json.
+    /// Tìm thư mục config ở thư mục chạy rồi đi ngược lên các thư mục cha.
+    /// </summary>
     public static JsonNode? ConfigNode(string key)
+    {
+        var dir = FindConfigDir();
+        if (dir is null) return null;
+        foreach (var name in new[] { "paths.local.json", "paths.json" })
+        {
+            var file = Path.Combine(dir, name);
+            if (!File.Exists(file)) continue;
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(file))?[key] is { } node) return node;
+            }
+            catch (Exception ex) { Console.WriteLine($"  config/{name} lỗi: {ex.Message}"); }
+        }
+        return null;
+    }
+
+    static string? FindConfigDir()
     {
         foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory, Path.Combine(Root, "NihongoApp") })
             for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
             {
-                var file = Path.Combine(dir.FullName, "config", "paths.json");
-                if (!File.Exists(file)) continue;
-                try { return JsonNode.Parse(File.ReadAllText(file))?[key]; }
-                catch (Exception ex) { Console.WriteLine($"  config/paths.json lỗi: {ex.Message}"); }
-                return null;
+                var cfg = Path.Combine(dir.FullName, "config");
+                if (File.Exists(Path.Combine(cfg, "paths.local.json")) || File.Exists(Path.Combine(cfg, "paths.json"))) return cfg;
             }
         return null;
     }

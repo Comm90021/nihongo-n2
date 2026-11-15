@@ -4,3 +4,5 @@ obj/
 /data/
 *.user
 .vs/
+/config/paths.local.json
+/CLAUDE.md

@@ -12,10 +12,9 @@ App Windows gốc để ôn JLPT N2 (và tiếp N1): từ vựng, ngữ pháp, �
 - **Báo & Video**: Đọc báo tiếng Nhật song song bản dịch Nhật–Việt và xem video YouTube ngay trong ứng dụng với lời thoại tiếng Nhật chạy theo video, hỗ trợ lặp câu và điều chỉnh tốc độ phát.
 - **Kênh và phụ đề**: Tìm kiếm các video có sẵn phụ đề, theo dõi các kênh YouTube phù hợp và đánh dấu trạng thái video đã học.
 - **Tra cứu và sổ tay**: Bôi đen từ vựng trong bài đọc hoặc phụ đề để tra nhanh trong kho từ của ứng dụng và lưu vào sổ tay cá nhân để tự động đưa vào lịch ôn tập.
-- **Thi thử bấm giờ**: Đề thật, đề thi thử Hàn Quốc, 非凡 và đề dự đoán; chấm 言語知識/読解 theo thang ước lượng.
+- **Thi thử bấm giờ**: Đề thi thử bấm giờ theo cấu trúc đề thật; chấm 言語知識/読解 theo thang ước lượng.
 - **Thư viện**: Truyện 青空文庫 (đã hết bản quyền) đọc song ngữ, kênh anime YouTube chính thức, các trang người dùng tự thêm; trang quản lý nguồn web (thêm, đổi tên miền, ẩn, kiểm trạng thái).
 - **Hội thoại**: Trả lời câu hỏi theo chủ đề rồi nhờ Gemini sửa, thẻ mẫu câu nơi làm việc (報連相, điện thoại…), luyện phỏng vấn 面接 có câu trả lời mẫu.
-- **電験 1・2・3種**: Câu đề năm theo chủ đề và theo năm, che lời giải tới khi trả lời, thi thử bấm giờ, sổ câu sai, thống kê.
 - **Tab Gemini**: Tích hợp trang web gemini.google.com ngay trong ứng dụng thông qua WebView2 và chỉ cần đăng nhập tài khoản Google một lần.
 - **Tùy biến giao diện**: Cài đặt cỡ chữ, phông chữ tiếng Nhật, chuyển đổi giao diện sáng/tối, thu gọn thanh bên bằng phím tắt Ctrl+B và chuyển chế độ toàn màn hình bằng phím F11.
 - **Tự động sao lưu**: Tự động tạo bản sao lưu dữ liệu tiến độ học tập mỗi ngày khi khởi động ứng dụng để phòng ngừa mất dữ liệu.
@@ -36,15 +35,11 @@ App Windows gốc để ôn JLPT N2 (và tiếp N1): từ vựng, ngữ pháp, �
 
 ## QUAN TRỌNG — Dữ liệu
 
-Kho lưu trữ này KHÔNG chứa đề thi, sách hay bất kỳ tệp dữ liệu có bản quyền nào. Công cụ Importer sẽ quét và tổng hợp dữ liệu từ các tài liệu do người dùng tự sở hữu, đặt ở thư mục cha của kho lưu trữ, để tạo ra tệp cơ sở dữ liệu `data/noi_dung.db`.
+Kho lưu trữ này KHÔNG chứa đề thi, sách hay bất kỳ tệp dữ liệu có bản quyền nào. App đọc dữ liệu học tập cá nhân đặt ở thư mục cha của kho lưu trữ (không kèm trong repo vì có bản quyền). Công cụ Importer quét các tài liệu đó để tạo tệp cơ sở dữ liệu `data/noi_dung.db`.
 
-Các loại nguồn dữ liệu Importer hỗ trợ:
-- Câu hỏi trắc nghiệm: Các đề thi Mondai 1–8 trong `../japan_n2_quiz/data/jlpt`, 480 câu ngữ pháp trong `data/gramma` và tệp giải thích ngữ pháp `data/explanations/m7.json`.
-- Từ vựng: Các tập dữ liệu V3 (Mimikara N2, Từ vựng N2, GunGun, 600 tiền hậu tố), V2 (4 bộ sách N1), thẻ sắc thái của app web, bảng Hán Việt theo từng chữ (V4) và tệp dữ liệu Core 6000 bổ sung nghĩa tiếng Việt.
-- Đọc hiểu đề thật: Dữ liệu V7 gồm 32 đề thi thật (trang bài đọc và đáp án Mondai 9–14) và 34 đề luyện trong `40 ĐỀ N2.pdf`.
-- Đọc hiểu luyện tập: Dữ liệu V6 (60 bài Thaolejp gồm 174 câu hỏi nạp vào Mondai 10 kèm toàn văn bài đọc).
-- Nghe hiểu đề thật: 32 kỳ thi trong thư mục `../N2_ĐỀ CÁC NĂM/<kỳ>/` (mỗi kỳ gồm 1 file MP3, 1 PDF script và file PDF đề), đáp án phần Nghe ở `../antigravity_out/C03_dap_an_nghe/listening_answers.json`.
-- Nguồn mở được phép sử dụng: Dữ liệu OpenJLPT (cung cấp cấp độ chuẩn, nghĩa tiếng Anh và ví dụ) và kho dữ liệu jlpt-freq (chỉ sử dụng để đếm tần suất xuất hiện của từ).
+Các loại nguồn Importer hỗ trợ (nếu có trên máy của bạn): đề trắc nghiệm và giải thích ngữ pháp, từ vựng, đề đọc hiểu và nghe hiểu thật (PDF, MP3), bài đọc luyện tập, và các nguồn mở được phép sử dụng.
+
+Đường dẫn tới tài liệu tùy chọn (ví dụ bộ từ vựng Core 6000) đặt trong `config/paths.local.json`; mẫu ở `config/paths.local.example.json`. File này không được commit.
 
 ## Build và chạy
 
