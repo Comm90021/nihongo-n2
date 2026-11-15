@@ -75,7 +75,7 @@ public static class Exams
                         ("$op", JsonSerializer.Serialize(options)), ("$ov", JsonSerializer.Serialize(options.Select(_ => "").ToArray())), ("$a", answer + 1),
                         ("$fs", ""), ("$tp", ""), ("$pt", ""), ("$why", it["explain_vi"]?.ToString() ?? ""));
                     if (it["pdf"]?.ToString() is { Length: > 0 } pdf && it["page"]?.GetValue<int>() is int page and > 0)
-                        pages[qid] = new { pdf, page };
+                        pages[qid] = new { pdf = Fix(pdf), page };
                     added++;
                 }
                 if (added == 0) continue;

@@ -17,9 +17,25 @@ public static class Util
     /// </summary>
     public static string P(params string[] parts)
     {
-        if (parts.Length > 0 && Folders.TryGetValue(parts[0], out var moved) && !Directory.Exists(Path.Combine(Root, parts[0])))
-            parts = [.. moved.Split('/', '\\'), .. parts[1..]];
-        return Path.Combine([Root, .. parts]);
+        // Ghép trước rồi đổi chỗ: phần đầu có thể là tên thư mục cũ, một đường dẫn tương đối "N2_ĐỀ CÁC NĂM\1. N2…" (reading_real.json)
+        // hoặc đường dẫn tuyệt đối. Path.Combine bỏ Root khi phần sau là tuyệt đối.
+        return Fix(Path.Combine([Root, .. parts]));
+    }
+
+    /// <summary>Đường dẫn tuyệt đối ghi trong file nguồn theo chỗ cũ ("d:\JLPT n2 ôn thi\N2_ĐỀ CÁC NĂM\…") → chỗ mới nếu thư mục đã dời.</summary>
+    public static string Fix(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return path;
+        // File nguồn có thể ghi chữ có dấu dạng tổ hợp (NFD) hoặc dựng sẵn (NFC): đưa về NFC trước khi so.
+        path = path.Normalize(System.Text.NormalizationForm.FormC);
+        var root = Root.Normalize(System.Text.NormalizationForm.FormC).TrimEnd('\\') + "\\";
+        if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return path;
+        var rest = path[root.Length..];
+        foreach (var (oldName, rel) in Folders)
+            if ((rest.Equals(oldName, StringComparison.OrdinalIgnoreCase) || rest.StartsWith(oldName + "\\", StringComparison.OrdinalIgnoreCase))
+                && !Directory.Exists(Path.Combine(Root, oldName)))
+                return Path.Combine([Root, .. rel.Split('/', '\\')]) + rest[oldName.Length..];
+        return path;
     }
 
     static Dictionary<string, string>? _folders;
@@ -31,7 +47,7 @@ public static class Util
         var map = new Dictionary<string, string>();
         if (ConfigNode("folders") is JsonObject o)
             foreach (var (k, v) in o)
-                if (v?.ToString() is { Length: > 0 } s) map[k] = s;
+                if (v?.ToString() is { Length: > 0 } s) map[k.Normalize(System.Text.NormalizationForm.FormC)] = s;
         return map;
     }
 

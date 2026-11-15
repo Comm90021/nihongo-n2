@@ -93,7 +93,7 @@ public static class Listening
                         lineRows.Add((s["mondai"]!.GetValue<int>(), it["no"]!.ToString(), it["choices"]?.GetValue<int>() ?? 4, it["answer"]!.GetValue<int>(), text));
                     }
 
-                string audio = n["audio"]?.ToString() ?? "", script = "", examPdf = "", title;
+                string audio = Fix(n["audio"]?.ToString() ?? ""), script = "", examPdf = "", title;
                 if (id.StartsWith("real-n1-"))
                 {
                     // real-n1-2021-07 → thư mục "N1 7-2021"
@@ -120,7 +120,7 @@ public static class Listening
                 var page = 1;
                 if (File.Exists(examJson))
                     foreach (var it in JsonNode.Parse(File.ReadAllText(examJson))!["items"]!.AsArray())
-                        if (it!["pdf"]?.ToString() is { Length: > 0 } pdf && it["page"]?.GetValue<int>() is int pg && pg >= page) { examPdf = pdf; page = pg + 1; }
+                        if (it!["pdf"]?.ToString() is { Length: > 0 } pdf && it["page"]?.GetValue<int>() is int pg && pg >= page) { examPdf = Fix(pdf); page = pg + 1; }
                 // J.TEST A-C in theo khuôn 41 trang: phần đọc có hình nằm giữa đề, phần Nghe (写真問題) luôn bắt đầu ở trang 32
                 // (kiểm 08/11/2026: kỳ 187 có lớp chữ, kỳ 188 xem ảnh).
                 if (id.StartsWith("jtest") && examPdf != "") page = 32;
