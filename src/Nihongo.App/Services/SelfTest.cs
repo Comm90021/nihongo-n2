@@ -1,4 +1,4 @@
-using Nihongo.Core;
+﻿using Nihongo.Core;
 using Nihongo.Core.Stats;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -17,7 +17,7 @@ namespace Nihongo.App.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "ui" or "extra" or "sizes" or "review" or "keys" or "stats" or "denken" or "read" or "session" or "progress";
+    public static bool Enabled => Mode is "ui" or "extra" or "sizes" or "review" or "keys" or "stats" or "denken" or "read" or "session" or "progress" or "font";
 
     public static async void Run(MainWindow w)
     {
@@ -35,6 +35,7 @@ static class SelfTest
             else if (Mode == "read") await ReadMode(w, dir, log);
             else if (Mode == "session") await Session(w, dir, log);
             else if (Mode == "progress") await ProgressMode(w, dir, log);
+            else if (Mode == "font") await FontMode(w, dir, log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -390,7 +391,17 @@ static class SelfTest
         Shot(w, dir, "p4_sau_back");
         App.Progress.SetSetting("progress_open_group", "");
     }
-    static void Shot(MainWindow w, string dir, string name)
+    // ---------------------------------------------------------------- thử phông chữ Việt (dấu không được vỡ)
+    static async Task FontMode(MainWindow w, string dir, List<string> log)
+    {
+        await Task.Delay(1000);
+        const string vi = "Đồ gốm cổ nhất thế giới · Lịch sử · Chính trị · Xã hội · Văn hóa · Đọc · Hôm nay · Tiến độ · ứng dụng ữ ặ ỡ ợ";
+        var col = new Avalonia.Controls.StackPanel { Spacing = 2, Margin = new Avalonia.Thickness(16) };
+        foreach (var f in (Environment.GetEnvironmentVariable("NIHONGO_FONTS") ?? "Georgia|Cambria|Times New Roman|Palatino Linotype|Sitka Text|Constantia|Segoe UI|Segoe UI Variable Text|Yu Gothic UI").Split('|'))
+            col.Children.Add(new Avalonia.Controls.TextBlock { Text = f + ": " + vi, FontFamily = new Avalonia.Media.FontFamily(f), FontSize = 24 });
+        w.Show(new Avalonia.Controls.ScrollViewer { Content = col });
+        await Task.Delay(800); Shot(w, dir, "font_test");
+    }    static void Shot(MainWindow w, string dir, string name)
     {
         // Chụp ở tỉ lệ 1:1 (96 dpi). Chụp theo hệ số phóng màn hình (150%) thì danh sách ảo hóa bị vẽ lệch trong ảnh.
         using var rtb = new RenderTargetBitmap(new PixelSize((int)w.ClientSize.Width, (int)w.ClientSize.Height), new Vector(96, 96));

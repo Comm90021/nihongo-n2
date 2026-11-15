@@ -84,34 +84,30 @@ sealed class ReadPage : UserControl, IRefreshable
     static void Open(Article a) => App.Shell.Show(new ArticleReaderView(a));
 
     // ------------------------------------------------------------------ kệ
+    const int ShelfCollapsed = 8;
+
     static Control Shelf(string group, List<Article> items, HashSet<string> read)
     {
         var color = ArticleShelf.Color(group);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
-        foreach (var a in items) row.Children.Add(BookCard(a, read.Contains(a.Id), color));
-        var sv = new ScrollViewer
+        var wrap = new WrapPanel();
+        var expanded = false;
+        var more = new Button { Focusable = false, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 0) };
+        more.Classes.Add("ghost");
+        void Fill()
         {
-            Content = row,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            Padding = new Thickness(0, 0, 0, 10),
-        };
+            wrap.Children.Clear();
+            foreach (var a in expanded ? items : items.Take(ShelfCollapsed))
+                wrap.Children.Add(BookCard(a, read.Contains(a.Id), color).Also(c => c.Margin = new Thickness(0, 0, 12, 12)));
+            more.IsVisible = items.Count > ShelfCollapsed;
+            more.Content = expanded ? "Thu gọn" : $"Xem thêm {items.Count - ShelfCollapsed} bài";
+        }
+        more.Click += (_, _) => { expanded = !expanded; Fill(); };
+        Fill();
         var n = items.Count(a => read.Contains(a.Id));
-        var bar = new Border { Width = 5, Height = 20, CornerRadius = new CornerRadius(2), Background = color };
-        var left = Arrow("‹", () => sv.Offset = new Vector(Math.Max(0, sv.Offset.X - 540), 0));
-        var right = Arrow("›", () => sv.Offset = new Vector(sv.Offset.X + 540, 0));
-        var head = Line(Row(10, bar, Text(group, 18, bold: true).Also(t => t.FontFamily = Serif), Text($"{n}/{items.Count}", 14, muted: true)), Row(4, left, right));
-        return Col(6, head, sv).Also(c => c.Margin = new Thickness(0, 10, 0, 0));
+        var bar = new Border { Width = 5, Height = 22, CornerRadius = new CornerRadius(2), Background = color };
+        var head = Row(10, bar, Text(group, 18, bold: true).Also(t => t.FontFamily = Serif), Text($"{n}/{items.Count}", 14, muted: true));
+        return Col(8, head, wrap, more).Also(c => c.Margin = new Thickness(0, 14, 0, 0));
     }
-
-    static Button Arrow(string glyph, Action click)
-    {
-        var b = new Button { Content = glyph, Focusable = false, Padding = new Thickness(12, 2) };
-        b.Classes.Add("ghost");
-        b.Click += (_, _) => click();
-        return b;
-    }
-
     static Control BookCard(Article a, bool isRead, IBrush color)
     {
         var title = Text(a.Title, 15, bold: true).Also(t => { t.MaxLines = 2; t.TextTrimming = TextTrimming.CharacterEllipsis; t.Height = 42; });

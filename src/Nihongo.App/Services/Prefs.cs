@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -14,8 +14,8 @@ static class Prefs
 {
     public static readonly string[] Themes = ["Theo Windows", "Sáng", "Tối"];
 
-    public static double ReadSize { get; private set; } = 19;
-    public static double ViSize { get; private set; } = 15;
+    public static double ReadSize { get; private set; } = 21;
+    public static double ViSize { get; private set; } = 16;
     public static string ReadFont { get; private set; } = DefaultFont;
     public static int Theme { get; private set; }
     public static bool NavCompact { get; private set; }
@@ -35,8 +35,8 @@ static class Prefs
 
     public static void Load()
     {
-        ReadSize = Math.Clamp(Num("read_size", 19), 12, 36);
-        ViSize = Math.Clamp(Num("vi_size", 15), 11, 28);
+        ReadSize = Math.Clamp(Num("read_size", 21), 12, 36);
+        ViSize = Math.Clamp(Num("vi_size", 16), 11, 28);
         ReadFont = App.Progress.Setting("read_font", DefaultFont);
         Theme = (int)Math.Clamp(Num("theme", 0), 0, 2);
         NavCompact = App.Progress.Setting("nav_compact") == "1";
@@ -53,7 +53,7 @@ static class Prefs
         var res = Application.Current!.Resources;
         res["ReadFont"] = new FontFamily($"{ReadFont}, Yu Gothic UI, Meiryo, Segoe UI");
         res["ReadSize"] = ReadSize;
-        res["ReadLine"] = Math.Round(ReadSize * 1.6);
+        res["ReadLine"] = Math.Round(ReadSize * 1.75);
         res["ReadViSize"] = ViSize;
         Application.Current.RequestedThemeVariant = Theme switch { 1 => ThemeVariant.Light, 2 => ThemeVariant.Dark, _ => ThemeVariant.Default };
     }
