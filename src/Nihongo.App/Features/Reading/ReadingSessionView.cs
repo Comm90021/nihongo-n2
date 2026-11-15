@@ -142,7 +142,7 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
         var correct = Enumerable.Range(_from, total).Count(n => _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
         // Mỗi câu ghi một lần trả lời (bỏ trống tính sai) cho thống kê; đọc hiểu N2 nên cấp N2.
         for (var n = _from; n <= _to; n++)
-            App.Progress.LogAttempt($"rd:{_set.Id}:{n}", _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
+            Services.Study.Log($"rd:{_set.Id}:{n}", _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
         var detail = $"lvl=N2;read={correct}/{total}";
         App.Progress.SaveResult(new ExamResult($"{_set.Id}:{(_m9 ? "m9" : "reading")}", _set.Title, "reading", DateTime.Now, correct, total, (int)(DateTime.Now - _started).TotalSeconds, detail));
         BuildSheet();

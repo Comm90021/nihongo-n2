@@ -124,7 +124,7 @@ sealed class VocabQuizView : UserControl, IKeyTarget
         var q = _qs[_index];
         var ok = n == q.Answer;
         if (ok) _correct++; else _wrong.Add(q.Item);
-        App.Progress.Review(q.Item.CardId, SrsKind.Card, ok);
+        Services.Study.Answer(q.Item.CardId, SrsKind.Card, ok);
         _auto.Schedule(ok, Next);
         Render(animate: false);
         // Tự đọc từ vừa hỏi (nếu bật "Tự phát âm thanh"): nghe cách đọc ngay lúc thấy đáp án.

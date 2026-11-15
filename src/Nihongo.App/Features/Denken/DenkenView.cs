@@ -364,7 +364,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
     {
         if (S.Recorded) return;
         S.Recorded = true;
-        App.Progress.Review(Q.SrsId, SrsKind.Question, correct);
+        Services.Study.Answer(Q.SrsId, SrsKind.Question, correct);
     }
 
     void Render()
@@ -462,7 +462,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         for (var i = 0; i < _qs.Count; i++)
         {
             var s = _state[i];
-            if (_qs[i].Choice > 0 && s.Picked > 0 && !s.Recorded) { s.Recorded = true; App.Progress.Review(_qs[i].SrsId, SrsKind.Question, s.Picked == _qs[i].Choice); }
+            if (_qs[i].Choice > 0 && s.Picked > 0 && !s.Recorded) { s.Recorded = true; Services.Study.Answer(_qs[i].SrsId, SrsKind.Question, s.Picked == _qs[i].Choice); }
         }
         var auto = _qs.Select((q, i) => (q, s: _state[i])).Where(x => x.q.Choice > 0).ToList();
         if (_resultId != "")

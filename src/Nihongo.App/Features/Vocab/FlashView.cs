@@ -71,7 +71,7 @@ sealed class FlashView : UserControl, IKeyTarget
     void Answer(bool known)
     {
         var v = _queue.Dequeue();
-        App.Progress.Review(v.CardId, SrsKind.Card, known);
+        Services.Study.Answer(v.CardId, SrsKind.Card, known);
         if (known) _known++; else { _forgot++; _queue.Enqueue(v); }
         _revealed = false;
         Render();

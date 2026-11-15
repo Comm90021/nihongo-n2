@@ -122,7 +122,7 @@ sealed class QuizView : UserControl, IKeyTarget
             _wrong.Add((Current, n));
             App.Progress.LogWrong(Current.Id, n, _session);
         }
-        App.Progress.Review(Current.Id, SrsKind.Question, ok);
+        Services.Study.Answer(Current.Id, SrsKind.Question, ok);
         _auto.Schedule(ok, Next); // trước Render để thanh dưới hiện "Tự chuyển sau…"
         Render(animate: false);
     }

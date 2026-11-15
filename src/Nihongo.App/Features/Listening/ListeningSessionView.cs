@@ -223,7 +223,7 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         if (_submitted) return;
         _submitted = true;
         var correct = _set.Items.Count(i => _picked.GetValueOrDefault(i.Key) == i.Answer);
-        foreach (var item in _set.Items) App.Progress.LogAttempt($"ls:{_set.Id}:{item.Key}", _picked.GetValueOrDefault(item.Key) == item.Answer);
+        foreach (var item in _set.Items) Services.Study.Log($"ls:{_set.Id}:{item.Key}", _picked.GetValueOrDefault(item.Key) == item.Answer);
         var level = _set.Id.Contains("jtest") ? "JTEST" : _set.Id.Contains("-n1-") ? "N1" : "N2";
         App.Progress.SaveResult(new ExamResult(_set.Id, _set.Title, "listening", DateTime.Now, correct, _set.Items.Count, (int)_audio.Position.TotalSeconds,
             $"lvl={level};listen={correct}/{_set.Items.Count}"));
