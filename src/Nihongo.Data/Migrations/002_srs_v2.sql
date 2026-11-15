@@ -1,0 +1,2 @@
+-- Lịch ôn kiểu SM-2: hai cột ease, interval_days do Migrator thêm trước (ADD COLUMN có kiểm tra). Ở đây điền số ngày từ hộp cũ.
+UPDATE srs SET interval_days = CASE box WHEN 0 THEN 1 WHEN 1 THEN 3 WHEN 2 THEN 7 WHEN 3 THEN 14 ELSE 30 END WHERE interval_days IS NULL;

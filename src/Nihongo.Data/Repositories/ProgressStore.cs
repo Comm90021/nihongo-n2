@@ -35,29 +35,9 @@ public sealed class ProgressStore
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         ApplyPendingRestore(path);
         _connection = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
+        // Tạo/nâng cấp bảng bằng Migrations/*.sql (sao lưu trước nếu có việc phải làm).
+        Migrator.Apply(path);
         using var c = Open();
-        Exec(c, """
-            CREATE TABLE IF NOT EXISTS srs(item_id TEXT PRIMARY KEY, kind INTEGER, box INTEGER, due TEXT, lapses INTEGER, reason INTEGER, reviewed_at TEXT);
-            CREATE TABLE IF NOT EXISTS attempt(item_id TEXT, correct INTEGER, at TEXT);
-            CREATE TABLE IF NOT EXISTS seen(item_id TEXT PRIMARY KEY);
-            CREATE TABLE IF NOT EXISTS result(set_id TEXT, title TEXT, kind TEXT, at TEXT, correct INTEGER, total INTEGER, used_seconds INTEGER);
-            CREATE TABLE IF NOT EXISTS notebook(word TEXT PRIMARY KEY, reading TEXT, meaning TEXT, sentence TEXT, sentence_vi TEXT, source TEXT, added_at TEXT);
-            CREATE TABLE IF NOT EXISTS translation(src TEXT PRIMARY KEY, vi TEXT);
-            CREATE TABLE IF NOT EXISTS media(url TEXT PRIMARY KEY, kind TEXT, title TEXT, lines TEXT, opened_at TEXT);
-            CREATE TABLE IF NOT EXISTS setting(key TEXT PRIMARY KEY, value TEXT);
-            CREATE TABLE IF NOT EXISTS watch(video_id TEXT PRIMARY KEY, position REAL, duration REAL, done INTEGER, updated_at TEXT);
-            CREATE TABLE IF NOT EXISTS follow(channel_id TEXT PRIMARY KEY, name TEXT, added_at TEXT);
-            CREATE TABLE IF NOT EXISTS wrong(item_id TEXT, picked INTEGER, session TEXT, at TEXT);
-            CREATE TABLE IF NOT EXISTS explain(item_id TEXT PRIMARY KEY, text TEXT, source TEXT, at TEXT);
-            CREATE INDEX IF NOT EXISTS attempt_at ON attempt(at);
-            PRAGMA journal_mode=WAL;
-            """);
-        // Cột detail của result thêm sau (12/11/2026): bản cũ chưa có thì thêm, dữ liệu cũ giữ nguyên.
-        using (var chk = c.CreateCommand())
-        {
-            chk.CommandText = "SELECT COUNT(*) FROM pragma_table_info('result') WHERE name='detail'";
-            if (Convert.ToInt32(chk.ExecuteScalar()) == 0) Exec(c, "ALTER TABLE result ADD COLUMN detail TEXT DEFAULT ''");
-        }
         using var cmd = c.CreateCommand();
         cmd.CommandText = "SELECT item_id,kind,box,due,lapses,reason FROM srs";
         using var r = cmd.ExecuteReader();
@@ -109,13 +89,18 @@ public sealed class ProgressStore
         e = e with { Reason = reason };
         _srs[id] = e;
         using var c = Open();
-        Save(c, e);
+        // Chỉ đổi lý do: không đụng ease/interval_days của lịch v2.
+        Exec(c, "UPDATE srs SET reason=$r, reviewed_at=$t WHERE item_id=$i", ("$i", id), ("$r", (int)reason), ("$t", DateTime.Now.ToString("s")));
     }
 
+    /// <summary>Lưu lịch kiểu hộp cũ: interval_days theo hộp, ease giữ nguyên (mặc định 2.5 cho dòng mới).</summary>
     static void Save(SqliteConnection c, SrsEntry e) =>
-        Exec(c, "INSERT OR REPLACE INTO srs VALUES($i,$k,$b,$d,$l,$r,$t)",
+        Exec(c, """
+            INSERT INTO srs(item_id,kind,box,due,lapses,reason,reviewed_at,interval_days) VALUES($i,$k,$b,$d,$l,$r,$t,$iv)
+            ON CONFLICT(item_id) DO UPDATE SET kind=$k, box=$b, due=$d, lapses=$l, reason=$r, reviewed_at=$t, interval_days=$iv
+            """,
             ("$i", e.ItemId), ("$k", (int)e.Kind), ("$b", e.Box), ("$d", e.Due.ToString("yyyy-MM-dd")),
-            ("$l", e.Lapses), ("$r", (int)e.Reason), ("$t", DateTime.Now.ToString("s")));
+            ("$l", e.Lapses), ("$r", (int)e.Reason), ("$t", DateTime.Now.ToString("s")), ("$iv", Intervals[Math.Clamp(e.Box, 0, Intervals.Length - 1)]));
 
     public IReadOnlyList<string> DueIds(SrsKind kind) =>
         _srs.Values.Where(e => e.Kind == kind && e.Due <= Today)
@@ -332,6 +317,96 @@ public sealed class ProgressStore
         return r.Read() ? new SavedExplain(itemId, r.GetString(0), r.GetString(1), DateTime.Parse(r.GetString(2))) : null;
     }
 
+    // ---------------------------------------------------------------- v2: lịch SM-2, bài đọc, buổi học, XP
+    /// <summary>Trạng thái lịch v2 của một mã; null nếu chưa vào lịch. Bản cũ chưa có ease/interval_days thì suy từ hộp.</summary>
+    public SrsState? SrsStateOf(string id)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT box,ease,interval_days,due,lapses FROM srs WHERE item_id=$i";
+        cmd.Parameters.AddWithValue("$i", id);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return null;
+        var box = r.GetInt32(0);
+        return new SrsState(box, r.IsDBNull(1) ? 2.5 : r.GetDouble(1),
+            r.IsDBNull(2) ? Intervals[Math.Clamp(box, 0, Intervals.Length - 1)] : r.GetInt32(2), DateOnly.Parse(r.GetString(3)), r.GetInt32(4));
+    }
+
+    /// <summary>
+    /// Như <see cref="Review"/> nhưng lịch do <paramref name="next"/> tính (SrsScheduler): (trạng thái cũ hoặc null, đúng/sai, hôm nay) → trạng thái mới.
+    /// Câu hỏi làm đúng lần đầu vẫn không vào lịch; ghi attempt/seen y như Review.
+    /// </summary>
+    public SrsEntry? ReviewV2(string id, SrsKind kind, bool correct, Func<SrsState?, bool, DateOnly, SrsState> next)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO attempt VALUES($i,$c,$a)", ("$i", id), ("$c", correct ? 1 : 0), ("$a", DateTime.Now.ToString("s")));
+        if (kind == SrsKind.Question) Exec(c, "INSERT OR IGNORE INTO seen VALUES($i)", ("$i", id));
+
+        var old = Get(id);
+        if (old is null && correct && kind == SrsKind.Question) return null;
+        var state = next(SrsStateOf(id), correct, Today);
+        var entry = new SrsEntry(id, kind, state.Box, state.Due, state.Lapses, old?.Reason ?? WrongReason.None);
+        _srs[id] = entry;
+        Exec(c, """
+            INSERT INTO srs(item_id,kind,box,due,lapses,reason,reviewed_at,ease,interval_days) VALUES($i,$k,$b,$d,$l,$r,$t,$e,$iv)
+            ON CONFLICT(item_id) DO UPDATE SET kind=$k, box=$b, due=$d, lapses=$l, reason=$r, reviewed_at=$t, ease=$e, interval_days=$iv
+            """,
+            ("$i", id), ("$k", (int)kind), ("$b", state.Box), ("$d", state.Due.ToString("yyyy-MM-dd")), ("$l", state.Lapses),
+            ("$r", (int)entry.Reason), ("$t", DateTime.Now.ToString("s")), ("$e", state.Ease), ("$iv", state.IntervalDays));
+        return entry;
+    }
+
+    /// <summary>Ghi một lần đọc xong bài (mã Article.Id) kèm số câu hỏi đúng/tổng.</summary>
+    public void MarkArticleRead(string id, int correct, int total)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO article_read VALUES($i,$a,$c,$t)", ("$i", id), ("$a", DateTime.Now.ToString("s")), ("$c", correct), ("$t", total));
+    }
+
+    public HashSet<string> ReadArticleIds()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT DISTINCT article_id FROM article_read";
+        using var r = cmd.ExecuteReader();
+        var set = new HashSet<string>();
+        while (r.Read()) set.Add(r.GetString(0));
+        return set;
+    }
+
+    public void SaveSession(SessionSummary s)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO session VALUES($s,$e,$p,$a,$c,$n,$ar,$x)", ("$s", s.Started.ToString("s")), ("$e", s.Ended.ToString("s")), ("$p", s.PlannedMinutes),
+            ("$a", s.Answered), ("$c", s.Correct), ("$n", s.NewCards), ("$ar", System.Text.Json.JsonSerializer.Serialize(s.ArticlesRead.ToArray(), CoreJson.Default.StringArray)), ("$x", s.Xp));
+    }
+
+    public void AddXp(int amount, string reason)
+    {
+        using var c = Open();
+        Exec(c, "INSERT INTO xp_log VALUES($a,$m,$r)", ("$a", DateTime.Now.ToString("s")), ("$m", amount), ("$r", reason));
+    }
+
+    public int TotalXp()
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(SUM(amount),0) FROM xp_log";
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    /// <summary>XP từng ngày (theo giờ máy) từ ngày <paramref name="from"/> trở đi. Ngày không có XP thì không có khóa.</summary>
+    public Dictionary<DateOnly, int> XpByDay(DateOnly from)
+    {
+        using var c = Open();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT substr(at,1,10), SUM(amount) FROM xp_log WHERE at >= $f GROUP BY 1";
+        cmd.Parameters.AddWithValue("$f", from.ToString("yyyy-MM-dd"));
+        using var r = cmd.ExecuteReader();
+        var d = new Dictionary<DateOnly, int>();
+        while (r.Read()) d[DateOnly.ParseExact(r.GetString(0), "yyyy-MM-dd")] = r.GetInt32(1);
+        return d;
+    }
     // ---------------------------------------------------------------- sao lưu
     /// <summary>Chép tien_do.db bằng API sao lưu của SQLite (an toàn cả khi app đang ghi), giữ <paramref name="keep"/> bản mới nhất.</summary>
     public string Backup(string dir, int keep = 20)
