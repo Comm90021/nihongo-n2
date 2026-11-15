@@ -20,7 +20,9 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
     readonly Image _page = new() { Stretch = Stretch.Uniform };
     readonly TextBlock _pageLabel = Text("", muted: true, wrap: false);
     readonly TextBlock _clock = Text("", 22, bold: true, wrap: false);
-    readonly StackPanel _sheet = Col(4);
+    readonly WrapPanel _sheet = new();
+    Control _viewer = new Control();
+    double _cellW = 52;
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly DateTime _started = DateTime.Now;
     int _current, _left, _zoom = 100;
@@ -40,28 +42,19 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
         _timer.Start();
         DetachedFromVisualTree += (_, _) => _timer.Stop();
 
-        var nav = Row(8,
+        var nav = Wrap(
             Btn("◀ Trang trước", () => Go(-1)), _pageLabel, Btn("Trang sau ▶", () => Go(1)),
             Btn("−", () => Zoom(-15)), Btn("+", () => Zoom(15)), Btn("Về danh sách", App.Shell.BackToSection));
+        _pageLabel.VerticalAlignment = VerticalAlignment.Center;
         var viewer = new DockPanel { Children = { nav.Also(n => DockPanel.SetDock(n, Dock.Top)), new ScrollViewer { Content = _page, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto } } };
+        _viewer = viewer;
 
-        var side = new Border
-        {
-            Width = 300,
-            Margin = new Thickness(16, 0, 0, 0),
-            Classes = { "card" },
-            Child = new DockPanel
-            {
-                Children =
-                {
-                    Col(4, Text($"{set.Title} · {(m9 ? "Mondai 9" : "Đọc hiểu")}", 15, bold: true), _clock).Also(c => DockPanel.SetDock(c, Dock.Top)),
-                    Btn("Nộp bài", Submit, primary: true).Also(b => { DockPanel.SetDock(b, Dock.Bottom); b.HorizontalAlignment = HorizontalAlignment.Stretch; }),
-                    new ScrollViewer { Content = _sheet, Margin = new Thickness(0, 10) },
-                },
-            },
-        };
-        DockPanel.SetDock(side, Dock.Right);
-        Content = new DockPanel { Children = { side, viewer } };
+        var title = Text($"{set.Title} · {(m9 ? "Mondai 9" : "Đọc hiểu")}", 15, bold: true);
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        var side = new SideCard(Col(4, title, _clock), Btn("Nộp bài", Submit, primary: true),
+            new ScrollViewer { Content = _sheet, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
+        Content = Responsive.SideSplit(viewer, side, 330, 200, changed: narrow => { _cellW = narrow ? 42 : 52; BuildSheet(); });
+        Responsive.OnResized(viewer, () => { if (_page.Source is not null) _ = LoadPage(); });
         BuildSheet();
         UpdateClock();
         _ = LoadPage();
@@ -79,7 +72,7 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
             for (var opt = 1; opt <= 4; opt++)
             {
                 var o = opt;
-                var b = new Button { Content = $"{o}", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center, Focusable = false };
+                var b = new Button { Content = $"{o}", Width = _cellW, HorizontalContentAlignment = HorizontalAlignment.Center, Focusable = false };
                 if (_submitted)
                 {
                     if (o == key) { b.Background = Good; b.Foreground = Brushes.White; }
@@ -92,8 +85,9 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
                 }
                 row.Children.Add(b);
             }
-            if (isCursor) _sheet.Children.Add(new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 2), Child = row }.Themed(Border.BackgroundProperty, "AccentSoft"));
-            else _sheet.Children.Add(row);
+            Control cell = isCursor ? new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 2), Child = row }.Themed(Border.BackgroundProperty, "AccentSoft") : row;
+            cell.Margin = new Thickness(0, 0, 10, 4);
+            _sheet.Children.Add(cell);
         }
     }
 
@@ -169,7 +163,7 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
         _pageLabel.Text = $"Trang {_current - _first + 1}/{_last - _first + 1}";
         try
         {
-            var width = (int)(Math.Max(Bounds.Width - 340, 700) * _zoom / 100.0 * (VisualRoot?.RenderScaling ?? 1));
+            var width = (int)(Math.Max(_viewer.Bounds.Width - 30, 320) * _zoom / 100.0 * (VisualRoot?.RenderScaling ?? 1));
             var bitmap = await PdfPages.RenderAsync(_set.PdfPath, _current, width);
             var old = _page.Source as IDisposable;
             _page.Source = bitmap;

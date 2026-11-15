@@ -55,8 +55,9 @@ sealed class QuizView : UserControl, IKeyTarget
             QuizNav.Show(_card, Card(Col(10,
                 Text($"Xong: đúng {_correct}/{_questions.Count}", 22, bold: true),
                 Text("Câu sai đã vào lịch ôn, sẽ quay lại ở trang Hôm nay.", muted: true),
-                Row(8,
+                Ui.Wrap(
                     _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry, primary: true) : null,
+                    AskGemini.Button("Hỏi Gemini các câu sai", _wrong.Count, () => AskGemini.Prompts(_title, "N2", _wrong.Select(w => AskGemini.From(w.Q, w.Picked)))).Also(b => b.Classes.Add("strong")),
                     Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))), animate);
             return;
         }
@@ -68,16 +69,17 @@ sealed class QuizView : UserControl, IKeyTarget
         stem.Inlines = JpText.Build(q.Word != "" ? q.Word : q.Text, answered ? JpText.Plain(answerText) : null, answered ? Good : null);
 
         var body = Col(12, Text($"{q.SourceTitle} · Mondai {q.Mondai} · câu {q.Number}", 13, muted: true));
-        if (q.Context != "") body.Children.Add(Card(new ScrollViewer { MaxHeight = q.Mondai >= 10 ? 420 : 260, Content = new SelectableTextBlock { Text = q.Context, FontSize = 17, LineHeight = 30, TextWrapping = TextWrapping.Wrap } }));
+        if (q.Context != "") body.Children.Add(Card(new ScrollViewer { MaxHeight = Math.Clamp((TopLevel.GetTopLevel(this)?.ClientSize.Height ?? 700) * (q.Mondai >= 10 ? 0.48 : 0.3), 140, q.Mondai >= 10 ? 420 : 260), Content = new SelectableTextBlock { Text = q.Context, FontSize = 17, LineHeight = 30, TextWrapping = TextWrapping.Wrap } }));
         body.Children.Add(stem);
 
         var options = new UniformGrid { Columns = q.Word != "" ? 1 : 2 };
+        if (q.Word == "") Responsive.Watch(options, 560, narrow => options.Columns = narrow ? 1 : 2);
         for (var i = 0; i < 4; i++)
         {
             var n = i + 1;
             var text = JpText.Plain(q.Options.ElementAtOrDefault(i) ?? "");
             if (text == "") continue;
-            var label = Col(2, Text($"{n}.  {text}", 18));
+            var label = Col(2, Ui.Numbered(Text($"{n}", 14, bold: true, wrap: false).Tint("Muted").Also(t => t.Margin = new Thickness(0, 4, 0, 0)), Text(text, 18), 10));
             if (answered && q.OptionsVi.ElementAtOrDefault(i) is { Length: > 0 } vi) label.Children.Add(Text(vi, 13, muted: true));
             var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 10, 10), Classes = { "option" } };
             if (answered)
@@ -106,6 +108,11 @@ sealed class QuizView : UserControl, IKeyTarget
                 foreach (var r in new[] { WrongReason.Meaning, WrongReason.Connection, WrongReason.Nuance, WrongReason.Unknown })
                     reasons.Children.Add(Btn(TodayView.Label(r), () => { _auto.Cancel(); App.Progress.SetReason(q.Id, r); RefreshBar(); }));
                 body.Children.Add(reasons);
+                var picked = _picked ?? 0;
+                var ask = AskGemini.Button("Hỏi Gemini câu này", 1, () => AskGemini.Prompts(_title, "N2", [AskGemini.From(q, picked)]), link: true);
+                ask.Click += (_, _) => { _auto.Cancel(); RefreshBar(); };
+                ask.HorizontalAlignment = HorizontalAlignment.Left;
+                body.Children.Add(ask);
             }
             body.Children.Add(Row(8, Btn("Nghe câu", () => { _auto.Cancel(); RefreshBar(); Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText)); })));
         }
@@ -145,6 +152,7 @@ sealed class QuizView : UserControl, IKeyTarget
     internal int TestIndex => _index;
     internal bool TestAnswered => _picked is not null;
     internal Question TestCurrent => Current;
+    internal void TestPickAny() => Pick(Current.Answer % 4 + 1);
 
     public bool HandleKey(KeyEventArgs e)
     {

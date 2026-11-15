@@ -27,7 +27,9 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
     readonly TextBlock _time = Text("00:00 / 00:00", 15, bold: true, wrap: false);
     readonly Slider _seek = new() { Minimum = 0, Maximum = 1, MinWidth = 120 };
     readonly Button _play;
-    readonly StackPanel _sheet = Col(4);
+    readonly WrapPanel _sheet = new();
+    Control _viewer = new Control();
+    double _cellW = 52;
     readonly TextBlock _score = Text("", 18, bold: true);
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     string _pdf;
@@ -55,36 +57,38 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         var speed = new ComboBox { ItemsSource = new[] { "0.8x", "0.9x", "1.0x", "1.1x", "1.2x" }, SelectedIndex = 2 };
         speed.SelectionChanged += (_, _) => _audio.Rate = 0.8 + speed.SelectedIndex * 0.1;
         // Thanh tua chiếm phần còn lại để hàng không tràn sang phiếu trả lời.
-        var player = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto"), ColumnSpacing = 8 };
+        var player = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 8 };
         Control[] parts = [_play, Btn("−10s", () => _audio.Seek(_audio.Position - TimeSpan.FromSeconds(10))),
             Btn("+10s", () => _audio.Seek(_audio.Position + TimeSpan.FromSeconds(10))), _seek, _time, speed];
         for (var i = 0; i < parts.Length; i++) { Grid.SetColumn(parts[i], i); parts[i].VerticalAlignment = VerticalAlignment.Center; player.Children.Add(parts[i]); }
-        var nav = Row(8, Btn("◀ Trang trước", () => Go(-1)), _pageLabel, Btn("Trang sau ▶", () => Go(1)), _scriptBtn, Btn("Về danh sách", App.Shell.BackToSection));
+        // Viewer hẹp: thanh tua xuống dòng riêng, chiếm cả bề ngang.
         var hint = Text("Phím: Space phát/dừng · ←/→ lùi/tới 5 giây · 1–4 chọn đáp án câu đang trỏ rồi sang câu sau · ↑/↓ đổi câu · S script", 12, muted: true);
+        Responsive.Watch(player, 640, narrow =>
+        {
+            Grid.SetRow(_seek, narrow ? 1 : 0);
+            Grid.SetColumn(_seek, narrow ? 0 : 3);
+            Grid.SetColumnSpan(_seek, narrow ? 6 : 1);
+            player.RowSpacing = narrow ? 6 : 0;
+        });
+        Responsive.Watch(player, 780, narrow => hint.IsVisible = !narrow); // hẹp: bỏ dòng gợi ý phím để trang đề có chỗ
+        _time.TextTrimming = TextTrimming.CharacterEllipsis;
+        var nav = Wrap(Btn("◀ Trang trước", () => Go(-1)), _pageLabel, Btn("Trang sau ▶", () => Go(1)), _scriptBtn, Btn("Về danh sách", App.Shell.BackToSection));
+        _pageLabel.VerticalAlignment = VerticalAlignment.Center;
         var top = Col(8, player, nav, hint);
         DockPanel.SetDock(top, Dock.Top);
         _pdfScroll = new ScrollViewer { Content = _page, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, Margin = new Thickness(0, 8, 0, 0) };
         _viewerHost.Content = _pdfScroll;
         var viewer = new DockPanel { Children = { top, _viewerHost } };
 
-        var side = new Border
-        {
-            Width = 330,
-            Margin = new Thickness(16, 0, 0, 0),
-            Classes = { "card" },
-            Child = new DockPanel
-            {
-                Children =
-                {
-                    Col(4, Text($"{set.Title} · Nghe hiểu", 15, bold: true), _score).Also(c => DockPanel.SetDock(c, Dock.Top)),
-                    Btn("Nộp bài", Submit, primary: true).Also(b => { DockPanel.SetDock(b, Dock.Bottom); b.HorizontalAlignment = HorizontalAlignment.Stretch; }),
-                    new ScrollViewer { Content = _sheet, Margin = new Thickness(0, 10) },
-                },
-            },
-        };
-        DockPanel.SetDock(side, Dock.Right);
-        Content = new DockPanel { Children = { side, viewer } };
+        var title = Text($"{set.Title} · Nghe hiểu", 15, bold: true);
+        title.TextTrimming = TextTrimming.CharacterEllipsis;
+        var side = new SideCard(Col(4, title, _score), Btn("Nộp bài", Submit, primary: true),
+            new ScrollViewer { Content = _sheet, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
+        // Rộng: phiếu trả lời bên phải. Hẹp: phiếu xuống dưới trang đề, các nhóm Mondai xếp nhiều cột.
+        _viewer = viewer;
+        Content = Responsive.SideSplit(viewer, side, 330, 200, changed: narrow => { _cellW = narrow ? 42 : 52; BuildSheet(); });
         BuildSheet();
+        Responsive.OnResized(viewer, () => { if (_page.Source is not null) _ = LoadPage(); });
         _ = OpenPdf(set.ExamPdf, set.PageFrom);
         if (Prefs.AutoPlay) TogglePlay(); // chế độ tự nghe: mở đề là bài nghe chạy luôn (tắt ở Cài đặt)
     }
@@ -185,7 +189,10 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         _sheet.Children.Clear();
         foreach (var group in _set.Items.GroupBy(i => i.Mondai))
         {
-            _sheet.Children.Add(Text($"Mondai {group.Key}", 14, bold: true).Also(t => t.Margin = new Thickness(0, 8, 0, 2)));
+            var box = Col(4);
+            box.Margin = new Thickness(0, 0, 16, 8);
+            _sheet.Children.Add(box);
+            box.Children.Add(Text($"Mondai {group.Key}", 14, bold: true).Also(t => t.Margin = new Thickness(0, 4, 0, 2)));
             foreach (var item in group)
             {
                 var isCursor = !_submitted && IndexOfItem(item) == _cursor;
@@ -193,7 +200,7 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
                 for (var opt = 1; opt <= item.Choices; opt++)
                 {
                     var o = opt;
-                    var b = new Button { Content = $"{o}", Width = 52, HorizontalContentAlignment = HorizontalAlignment.Center, Focusable = false };
+                    var b = new Button { Content = $"{o}", Width = _cellW, HorizontalContentAlignment = HorizontalAlignment.Center, Focusable = false };
                     var chosen = _picked.GetValueOrDefault(item.Key) == o;
                     if (_submitted)
                     {
@@ -207,14 +214,14 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
                     }
                     row.Children.Add(b);
                 }
-                if (isCursor) _sheet.Children.Add(new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 2), Child = row }.Themed(Border.BackgroundProperty, "AccentSoft"));
-                else _sheet.Children.Add(row);
+                if (isCursor) box.Children.Add(new Border { CornerRadius = new CornerRadius(8), Padding = new Thickness(4, 2), Child = row }.Themed(Border.BackgroundProperty, "AccentSoft"));
+                else box.Children.Add(row);
             }
         }
         if (_submitted)
         {
-            if (_scripts.Count > 0) _sheet.Children.Add(Btn(_showScript ? "Về đề" : "Xem script (chữ)", ToggleScript, primary: true).Also(b => b.Margin = new Thickness(0, 12, 0, 0)));
-            if (_set.ScriptPdf != "") _sheet.Children.Add(Btn("Xem script bài nghe (PDF)", () => { _showScript = false; _scriptBtn.Content = "Script"; _viewerHost.Content = _pdfScroll; _ = OpenPdf(_set.ScriptPdf, 1); }).Also(b => b.Margin = new Thickness(0, 6, 0, 0)));
+            if (_scripts.Count > 0) _sheet.Children.Add(Btn(_showScript ? "Về đề" : "Xem script (chữ)", ToggleScript, primary: true).Also(b => b.Margin = new Thickness(0, 4, 8, 4)));
+            if (_set.ScriptPdf != "") _sheet.Children.Add(Btn("Xem script bài nghe (PDF)", () => { _showScript = false; _scriptBtn.Content = "Script"; _viewerHost.Content = _pdfScroll; _ = OpenPdf(_set.ScriptPdf, 1); }).Also(b => b.Margin = new Thickness(0, 4, 8, 4)));
         }
     }
 
@@ -231,7 +238,7 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         var byMondai = _set.Items.GroupBy(i => i.Mondai).Select(g => $"M{g.Key}: {g.Count(i => _picked.GetValueOrDefault(i.Key) == i.Answer)}/{g.Count()}");
         _sheet.Children.Clear();
         BuildSheet();
-        _sheet.Children.Insert(0, Text(string.Join("  ", byMondai), 13, muted: true));
+        _sheet.Children.Insert(0, Text(string.Join("  ", byMondai), 13, muted: true).Also(t => { t.MaxWidth = 300; t.Margin = new Thickness(0, 0, 12, 4); }));
         if (_showScript) _viewerHost.Content = ScriptPanel(); // đang mở script: vẽ lại để hiện đúng/sai từng câu
     }
 
@@ -262,7 +269,7 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
     {
         _pageLabel.Text = $"Trang {_current - _first + 1}/{_last - _first + 1}";
         var scale = VisualRoot?.RenderScaling ?? 1;
-        var bitmap = await PdfPages.RenderAsync(_pdf, _current, (int)(Math.Max(Bounds.Width - 370, 700) * scale));
+        var bitmap = await PdfPages.RenderAsync(_pdf, _current, (int)(Math.Max(_viewer.Bounds.Width - 30, 320) * scale));
         var old = _page.Source as IDisposable;
         _page.Source = bitmap;
         _page.Width = bitmap.Size.Width / scale;

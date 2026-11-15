@@ -15,15 +15,24 @@ static partial class Ui
     /// </summary>
     public static Grid TopBar(string title, TextBlock subtitle, Action? back, params Control?[] actions)
     {
-        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 14, MinHeight = 48, Margin = new Thickness(0, 0, 0, 14) };
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 14, MinHeight = 48, Margin = new Thickness(0, 0, 0, 14) };
         var titleBlock = Text(title, 17, bold: true, wrap: false).Also(t => { t.FontFamily = Serif; t.FontSize = 18; t.TextTrimming = TextTrimming.CharacterEllipsis; });
         subtitle.TextTrimming = TextTrimming.CharacterEllipsis;
         subtitle.TextWrapping = TextWrapping.NoWrap;
         var mid = Col(1, titleBlock, subtitle);
         mid.VerticalAlignment = VerticalAlignment.Center;
-        var right = Row(8, actions);
+        // Các nút phải xuống được dòng: WrapPanel, hẹp thì cả cụm tụt xuống dòng dưới, căn phải.
+        var right = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var a in actions) if (a is not null) { a.VerticalAlignment = VerticalAlignment.Center; a.Margin = new Thickness(4, 2, 4, 2); right.Children.Add(a); }
         Control[] cells = [back is null ? new Control() : IconBtn(Glyph.Back, "Quay lại", back), mid, right];
         for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
+        Responsive.Watch(g, Responsive.Compact, narrow =>
+        {
+            Grid.SetRow(right, narrow ? 1 : 0);
+            Grid.SetColumn(right, narrow ? 1 : 2);
+            Grid.SetColumnSpan(right, narrow ? 2 : 1);
+            g.RowSpacing = narrow && right.Children.Count > 0 ? 6 : 0;
+        });
         return g;
     }
 

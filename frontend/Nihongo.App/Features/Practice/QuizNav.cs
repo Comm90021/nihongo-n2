@@ -105,11 +105,19 @@ static class QuizNav
     /// <summary>Thanh dưới: gợi ý phím + nút Câu sau luôn hiện (mờ cho tới khi trả lời).</summary>
     public static Control Bar(string hint, string nextText, Action next, bool enabled, Action? autoChanged = null)
     {
-        var nextBtn = new Button { Content = nextText, IsEnabled = enabled, Focusable = false, MinWidth = 150, HorizontalContentAlignment = HorizontalAlignment.Center };
+        var nextBtn = new Button { Content = nextText, IsEnabled = enabled, Focusable = false, MinWidth = 130, HorizontalContentAlignment = HorizontalAlignment.Center };
         nextBtn.Classes.Add("primary");
         nextBtn.Click += (_, _) => next();
-        var left = Row(10, AutoToggle(autoChanged), Text(hint, 13, muted: true));
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        // Gợi ý phím cắt bằng dấu … khi hẹp, nút Câu sau luôn còn đủ chỗ.
+        var hintText = Text(hint, 13, muted: true, wrap: false);
+        hintText.TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis;
+        var toggle = AutoToggle(autoChanged);
+        var left = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 10 };
+        Grid.SetColumn(hintText, 1);
+        hintText.VerticalAlignment = VerticalAlignment.Center;
+        left.Children.Add(toggle);
+        left.Children.Add(hintText);
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
         Grid.SetColumn(nextBtn, 1);
         grid.Children.Add(left);
         grid.Children.Add(nextBtn);

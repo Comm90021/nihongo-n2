@@ -151,11 +151,11 @@ public partial class MainWindow : Window
         if (full) ShowToast("Toàn màn hình · Esc để thoát · nút góc trên phải để thu nhỏ hoặc đóng");
     }
 
-    async void ShowToast(string text)
+    public async void ShowToast(string text, int ms = 3500)
     {
         ToastText.Text = text;
         Toast.IsVisible = true;
-        await Task.Delay(3500);
+        await Task.Delay(ms);
         if (ToastText.Text == text) Toast.IsVisible = false;
     }
 

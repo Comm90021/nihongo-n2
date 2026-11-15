@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Nihongo.Core;
 using Nihongo.Core.Stats;
 using Nihongo.App.Services;
@@ -24,6 +25,7 @@ sealed class ExamView : UserControl, IKeyTarget
     readonly ExamDef _exam;
     readonly IReadOnlyList<ExamItem> _items;
     readonly Dictionary<int, int> _picked = new();     // vị trí câu → phương án đã chọn (1-based)
+    readonly List<WrongItem> _wrongItems = [];
     readonly HashSet<int> _flags = new();
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly TextBlock _clock = Text("", 15, bold: true, wrap: false);
@@ -39,7 +41,7 @@ sealed class ExamView : UserControl, IKeyTarget
     string _pdfPath = "";
     int _pdfPage, _pdfFirst, _pdfLast, _zoom = 100;
     int _current, _remain, _usedBefore;
-    bool _submitted, _confirming;
+    bool _submitted, _confirming, _narrow, _two, _leftPdf;
 
     string DraftKey => $"exam_draft:{_exam.Id}";
 
@@ -62,16 +64,25 @@ sealed class ExamView : UserControl, IKeyTarget
         _stripHost.Margin = new Thickness(0, 12, 0, 0);
         DockPanel.SetDock(_stripHost, Dock.Bottom);
 
-        // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột.
-        _body = new Grid { ColumnDefinitions = new ColumnDefinitions("1.15*,12,*") };
-        _splitter = new GridSplitter { Width = 12, Background = Brushes.Transparent, ResizeDirection = GridResizeDirection.Columns };
-        ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
-        Grid.SetColumn(_splitter, 1);
-        Grid.SetColumn(_right, 2);
+        // Thanh chia giữa bài đọc và câu hỏi: kéo để đổi tỉ lệ hai cột (hẹp: hai hàng xếp chồng).
+        _body = new Grid();
+        _splitter = new GridSplitter { Background = Brushes.Transparent };
+        _splitter.DragCompleted += (_, _) => SaveSplit();
         _body.Children.Add(_left);
         _body.Children.Add(_splitter);
         _body.Children.Add(_right);
-        Content = new DockPanel { Children = { bar, _stripHost, _body } };
+        ApplyBody();
+        Responsive.Watch(_body, Responsive.Stack, narrow => { _narrow = narrow; if (_submitted) { ApplyBody(); _stripHost.Content = Strip(); } else Render(); });
+        // Trang PDF vẽ lại cho vừa bề rộng mới sau khi kéo cửa sổ.
+        Responsive.OnResized(_left, () => { if (_leftPdf) _ = LoadPage(); });
+        // Dải phiếu trả lời nằm dưới cùng (hàng riêng), không đè lên nội dung.
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+        Grid.SetRow(_body, 1);
+        Grid.SetRow(_stripHost, 2);
+        root.Children.Add(bar);
+        root.Children.Add(_body);
+        root.Children.Add(_stripHost);
+        Content = root;
 
         _timer.Tick += (_, _) =>
         {
@@ -127,6 +138,7 @@ sealed class ExamView : UserControl, IKeyTarget
         var question = QuestionCard(item);
         if (item.HasPdf || item.Passage != "")
         {
+            _leftPdf = item.HasPdf;
             Layout(two: true);
             _left.Content = item.HasPdf ? PdfCard(item) : IsListening(item) ? ListeningCard(item) : PassageCard(item);
             _right.Content = Scroll(question);
@@ -134,6 +146,7 @@ sealed class ExamView : UserControl, IKeyTarget
         else
         {
             // Câu không có bài đọc: câu hỏi đứng giữa, rộng vừa phải, không chừa nửa phải trống.
+            _leftPdf = false;
             Layout(two: false);
             _left.Content = Scroll(new Border { MaxWidth = 900, HorizontalAlignment = HorizontalAlignment.Center, Child = question });
             _right.Content = null;
@@ -145,8 +158,68 @@ sealed class ExamView : UserControl, IKeyTarget
     /// <summary>Hai nửa (bài đọc | câu hỏi) hoặc một nửa chiếm cả chiều ngang (câu không có bài đọc).</summary>
     void Layout(bool two)
     {
-        Grid.SetColumnSpan(_left, two ? 1 : 3);
-        _splitter.IsVisible = _right.IsVisible = two;
+        _two = two;
+        ApplyBody();
+    }
+
+    /// <summary>
+    /// Rộng: hai cột (bài đọc | câu hỏi) có thanh kéo. Hẹp (&lt; <see cref="Responsive.Stack"/>): bài đọc ở trên, câu hỏi ở dưới,
+    /// thanh kéo ngang chia chiều cao; mỗi nửa tự cuộn. Câu không có bài đọc: một nửa duy nhất.
+    /// </summary>
+    void ApplyBody()
+    {
+        _body.ColumnDefinitions.Clear();
+        _body.RowDefinitions.Clear();
+        _splitter.IsVisible = _right.IsVisible = _two;
+        Grid.SetRow(_left, 0); Grid.SetColumn(_left, 0);
+        Grid.SetRowSpan(_left, 1); Grid.SetColumnSpan(_left, 1);
+        if (!_two)
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            return;
+        }
+        var r = SplitRatio(_narrow);
+        if (_narrow)
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            // Trang PDF cần nhiều chỗ hơn (câu hỏi chỉ là bốn nút); bài đọc chữ thì chia gần đều.
+            _body.RowDefinitions.Add(new RowDefinition(r, GridUnitType.Star) { MinHeight = 110 });
+            _body.RowDefinitions.Add(new RowDefinition(10, GridUnitType.Pixel));
+            _body.RowDefinitions.Add(new RowDefinition(1 - r, GridUnitType.Star) { MinHeight = 150 });
+            Grid.SetRow(_splitter, 1); Grid.SetColumn(_splitter, 0);
+            Grid.SetRow(_right, 2); Grid.SetColumn(_right, 0);
+            _splitter.ResizeDirection = GridResizeDirection.Rows;
+            _splitter.Width = double.NaN; _splitter.Height = 10;
+            ToolTip.SetTip(_splitter, "Kéo để đổi chiều cao bài đọc / câu hỏi");
+        }
+        else
+        {
+            _body.ColumnDefinitions.Add(new ColumnDefinition(r, GridUnitType.Star) { MinWidth = 280 });
+            _body.ColumnDefinitions.Add(new ColumnDefinition(12, GridUnitType.Pixel));
+            _body.ColumnDefinitions.Add(new ColumnDefinition(1 - r, GridUnitType.Star) { MinWidth = 280 });
+            Grid.SetRow(_splitter, 0); Grid.SetColumn(_splitter, 1);
+            Grid.SetRow(_right, 0); Grid.SetColumn(_right, 2);
+            _splitter.ResizeDirection = GridResizeDirection.Columns;
+            _splitter.Height = double.NaN; _splitter.Width = 12;
+            ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
+        }
+    }
+
+    /// <summary>Tỉ lệ phần bài đọc/PDF so với tổng hai nửa, nhớ theo thanh kéo (setting exam_split_v / exam_split_h). Mặc định: bài đọc chữ chia đôi, PDF 60%.</summary>
+    double SplitRatio(bool vertical)
+    {
+        var saved = App.Progress.Setting(vertical ? "exam_split_v" : "exam_split_h", "");
+        if (double.TryParse(saved, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v is > 0.2 and < 0.8) return v;
+        return vertical ? (_leftPdf ? 0.6 : 0.5) : 0.535;
+    }
+
+    void SaveSplit()
+    {
+        var vertical = _narrow;
+        var a = vertical ? _body.RowDefinitions[0].ActualHeight : _body.ColumnDefinitions[0].ActualWidth;
+        var b = vertical ? _body.RowDefinitions[2].ActualHeight : _body.ColumnDefinitions[2].ActualWidth;
+        if (a + b <= 0) return;
+        App.Progress.SetSetting(vertical ? "exam_split_v" : "exam_split_h", (a / (a + b)).ToString("0.###", CultureInfo.InvariantCulture));
     }
 
     static string MondaiLabel(ExamItem it) => it.Q is null && it.Mondai == 10 ? "問題10–14 · 読解"
@@ -168,7 +241,7 @@ sealed class ExamView : UserControl, IKeyTarget
                 Col(10, head, instruction).Also(c => { DockPanel.SetDock(c, Dock.Top); c.Margin = new Thickness(0, 0, 0, 12); }),
                 new ScrollViewer { Content = text, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
             },
-        }, 0).Also(b => b.Padding = new Thickness(24, 20));
+        }, 0).Also(b => b.Padding = _narrow ? new Thickness(16, 12) : new Thickness(24, 20));
     }
 
     /// <summary>
@@ -227,10 +300,13 @@ sealed class ExamView : UserControl, IKeyTarget
             _pdfPage = item.PageFrom;
             _ = LoadPage();
         }
-        var nav = Row(6, Badge(MondaiLabel(item)), IconBtn(Glyph.Back, "Trang trước", () => GoPage(-1)), _pdfLabel, IconBtn(Glyph.Forward, "Trang sau", () => GoPage(1)),
-            IconBtn(Glyph.ZoomOut, "Thu nhỏ", () => Zoom(-15)), IconBtn(Glyph.ZoomIn, "Phóng to", () => Zoom(15)));
+        (_pdfLabel.Parent as Panel)?.Children.Remove(_pdfLabel); // Render lại (đổi cỡ cửa sổ) dựng thanh mới, nhãn trang dùng chung
+        var nav = new WrapPanel();
+        foreach (var c in new Control[] { Badge(MondaiLabel(item)), IconBtn(Glyph.Back, "Trang trước", () => GoPage(-1)), _pdfLabel, IconBtn(Glyph.Forward, "Trang sau", () => GoPage(1)),
+            IconBtn(Glyph.ZoomOut, "Thu nhỏ", () => Zoom(-15)), IconBtn(Glyph.ZoomIn, "Phóng to", () => Zoom(15)) })
+        { c.VerticalAlignment = VerticalAlignment.Center; c.Margin = new Thickness(0, 0, 6, 4); nav.Children.Add(c); }
         DockPanel.SetDock(nav, Dock.Top);
-        nav.Margin = new Thickness(0, 0, 0, 10);
+        nav.Margin = new Thickness(0, 0, 0, 6);
         if (_pdf.Parent is ScrollViewer old) old.Content = null;
         return Card(new DockPanel { Children = { nav, new ScrollViewer { Content = _pdf, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto } } }, 0).Also(b => b.Padding = new Thickness(16));
     }
@@ -251,7 +327,7 @@ sealed class ExamView : UserControl, IKeyTarget
         try
         {
             var scale = VisualRoot?.RenderScaling ?? 1;
-            var width = (int)(Math.Max(_left.Bounds.Width - 40, 600) * _zoom / 100.0 * scale);
+            var width = (int)(Math.Max(_left.Bounds.Width - 56, 320) * _zoom / 100.0 * scale);
             var bitmap = await PdfPages.RenderAsync(_pdfPath, _pdfPage, width);
             var old = _pdf.Source as IDisposable;
             _pdf.Source = bitmap;
@@ -313,11 +389,12 @@ sealed class ExamView : UserControl, IKeyTarget
                 if (q2.Why != "") body.Children.Add(Text(q2.Why, 14));
                 if (q2.FullSentence != "") body.Children.Add(Text($"Câu hoàn chỉnh: {q2.FullSentence}", 13, muted: true));
             }
+            if (AskOne(item) is { } ask) { ask.HorizontalAlignment = HorizontalAlignment.Left; body.Children.Add(ask); }
         }
 
         body.Children.Add(Line(Btn("← Câu trước", () => Go(_current - 1), enabled: _current > 0),
             Btn(_current < _items.Count - 1 ? "Câu sau →" : "Hết đề", () => Go(_current + 1), enabled: _current < _items.Count - 1).Also(b => b.Classes.Add("strong"))));
-        return Card(body, 0).Also(c => c.Padding = new Thickness(24));
+        return Card(body, 0).Also(c => c.Padding = _narrow ? new Thickness(16, 14) : new Thickness(24));
     }
 
     /// <summary>
@@ -326,7 +403,8 @@ sealed class ExamView : UserControl, IKeyTarget
     /// </summary>
     Control Strip()
     {
-        var wrap = new WrapPanel();
+        // Rộng: các nhóm xuống dòng. Hẹp: một hàng duy nhất, cuộn ngang (khỏi chiếm chiều cao của câu hỏi).
+        Panel wrap = _narrow ? new StackPanel { Orientation = Orientation.Horizontal } : new WrapPanel();
         foreach (var g in _items.Select((it, i) => (it, i)).GroupBy(p => MondaiLabel(p.it)))
         {
             var cells = new WrapPanel();
@@ -346,7 +424,17 @@ sealed class ExamView : UserControl, IKeyTarget
             var label = Text(g.Key.StartsWith("聴解") ? g.Key.Replace(" 問題", " ") : g.Key.Split(' ')[0], 12, muted: true, wrap: false).Also(t => t.FontFamily = new FontFamily("Yu Mincho, Yu Gothic UI"));
             wrap.Children.Add(Col(3, label, cells).Also(c => c.Margin = new Thickness(0, 0, 14, 4)));
         }
-        return new Border { Classes = { "card" }, Padding = new Thickness(16, 8, 16, 4), CornerRadius = new CornerRadius(14), Child = wrap };
+        Control inner = wrap;
+        if (_narrow)
+        {
+            // Không vẽ thanh cuộn (hết vạch xấu): lăn chuột/vuốt để cuộn ngang, ô câu hiện tại tự cuộn vào tầm nhìn.
+            var sv = new ScrollViewer { Content = wrap, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
+            sv.PointerWheelChanged += (_, e) => { sv.Offset = new Vector(Math.Max(0, sv.Offset.X - e.Delta.Y * 60), 0); e.Handled = true; };
+            sv.Loaded += (_, _) => Dispatcher.UIThread.Post(() => wrap.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("current"))?.BringIntoView());
+            inner = sv;
+        }
+        else inner = new ScrollViewer { Content = wrap, MaxHeight = 150, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        return new Border { Classes = { "card" }, Padding = new Thickness(16, 8, 16, 4), CornerRadius = new CornerRadius(14), Child = inner };
     }
 
     // ---------------------------------------------------------------- thao tác
@@ -400,6 +488,7 @@ sealed class ExamView : UserControl, IKeyTarget
         }
         _submitted = true;
         _timer.Stop();
+        ApplyBody();
         App.Progress.SetSetting(DraftKey, "");
 
         var results = _items.Select((it, i) => (it.Mondai, Correct: _picked.GetValueOrDefault(i) == it.Answer)).ToList();
@@ -416,6 +505,7 @@ sealed class ExamView : UserControl, IKeyTarget
 
         _submit.Content = "Về danh sách đề";
         _clock.Text = $"Đúng {score.Correct}/{_items.Count}";
+        _leftPdf = false;
         Layout(two: true);
         _left.Content = Scroll(ResultCard(score, used));
         _right.Content = Scroll(QuestionCard(Cur));
@@ -437,7 +527,21 @@ sealed class ExamView : UserControl, IKeyTarget
             if (picked == 0 || picked == it.Answer) continue;
             var id = it.Q?.Id ?? $"{_exam.Id}:m{it.Mondai}:q{it.No}";
             App.Progress.LogWrong(id, picked, session);
+            if (it.Q is { } q) _wrongItems.Add(AskGemini.From(q, picked, _exam.Level) with { Label = $"{_exam.Title} · {MondaiLabel(it)} · câu {it.No}" });
         }
+    }
+
+    /// <summary>"Hỏi Gemini các câu sai": chép lời nhắc + mở Gemini. Khóa khi không có câu sai nào có phương án.</summary>
+    Button AskButton() => AskGemini.Button("Hỏi Gemini các câu sai", _wrongItems.Count, () => AskGemini.Prompts(_exam.Title, _exam.Level, _wrongItems))
+        .Also(b => b.Classes.Add("strong"));
+
+    /// <summary>Lời nhắc riêng cho một câu sai (kèm đáp án đúng và phương án đã chọn).</summary>
+    Control? AskOne(ExamItem item)
+    {
+        var picked = _picked.GetValueOrDefault(_current);
+        if (item.Q is not { } q || picked == 0 || picked == item.Answer) return null;
+        var w = AskGemini.From(q, picked, _exam.Level) with { Label = $"{_exam.Title} · {MondaiLabel(item)} · câu {item.No}" };
+        return AskGemini.Button("Hỏi Gemini câu này", 1, () => AskGemini.Prompts(_exam.Title, _exam.Level, [w]), link: true);
     }
 
 
@@ -463,7 +567,7 @@ sealed class ExamView : UserControl, IKeyTarget
                     Row(10, Text($"{right}/{_items.Count}", 40, bold: true).Also(t => t.FontWeight = FontWeight.Bold), Text($"câu đúng ({100.0 * right / Math.Max(1, _items.Count):0}%)", 14, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Bottom)),
                     Badge($"Thời gian {used / 60} phút", "plain"),
                     Text("J.TEST chấm theo thang riêng; app chỉ đếm câu đúng của phần trắc nghiệm đọc (phần tự viết 記述 không có trong đề).", 12, muted: true),
-                    Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                    Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), AskButton(), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
                 Panel("Theo từng phần", byMondai));
         }
         var hasLang = langTotal > 0;
@@ -483,7 +587,7 @@ sealed class ExamView : UserControl, IKeyTarget
                     ? s.ListenTotal > 0 ? "Trên điểm sàn 19/60 mỗi phần; kỳ thi thật cần tổng từ 90/180 (N2) hoặc 100/180 (N1)." : "Trên điểm sàn 19/60 mỗi phần. Kỳ thi thật còn phần Nghe (60 điểm); tổng cần từ 90/180 để đỗ."
                     : "Có phần dưới điểm sàn 19/60: kỳ thi thật sẽ trượt dù tổng điểm cao. Xem lại các câu sai bên phải.", 13.5, muted: true),
                 Text("Điểm quy đổi theo tỉ lệ câu đúng, chỉ để tham khảo; JLPT dùng thang điểm riêng không công bố.", 12, muted: true),
-                Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
+                Ui.Wrap(Btn("Xem lại từ câu đầu", () => { _current = 0; Render(); }, primary: true), AskButton(), Btn("Về danh sách đề", App.Shell.BackToSection))), 0),
             Panel("Theo từng phần", byMondai));
     }
 
@@ -491,6 +595,8 @@ sealed class ExamView : UserControl, IKeyTarget
     internal void TestPick(int n) => Pick(n);
     internal void TestGo(int i) => Go(i);
     internal void TestSubmit() => Submit(force: true);
+    internal IReadOnlyList<string> TestPrompts() => AskGemini.Prompts(_exam.Title, _exam.Level, _wrongItems);
+    internal int TestFirstWrong() => _items.Select((it, i) => (it, i)).Where(p => p.it.Q is not null && _picked.GetValueOrDefault(p.i) != 0 && _picked.GetValueOrDefault(p.i) != p.it.Answer).Select(p => p.i).DefaultIfEmpty(-1).First();
     internal int TestFirstPdf() => _items.ToList().FindIndex(i => i.HasPdf);
     internal int TestFirstPassage() => _items.ToList().FindIndex(i => i.Passage != "");
 
