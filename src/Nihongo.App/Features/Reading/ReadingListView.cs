@@ -51,7 +51,7 @@ sealed class ReadingListView : UserControl
                     Btn(ExamView.HasDraft(e.Id) ? "Làm tiếp" : "Làm", () => App.Shell.Show(new ExamView(e)), primary: true)), 3));
             }
         }
-        if (Count(level) == 0) list.Children.Add(Card(Text($"Chưa có đề đọc hiểu {level}. Gemini đang bóc thêm đề; dựng lại dữ liệu khi có.", muted: true)));
+        if (Count(level) == 0) list.Children.Add(Card(Text($"Chưa có đề đọc hiểu {level}. Dựng lại dữ liệu khi có đề mới.", muted: true)));
         Content = Scroll(list);
     }
 }

@@ -20,16 +20,12 @@ static class Prefs
     public static int Theme { get; private set; }
     public static bool NavCompact { get; private set; }
     public static bool ShowVi { get; private set; } = true;
-    /// <summary>Bôi đen mà bảng Tra từ đang đóng thì tự mở lại (mặc định bật). Mày tự đóng bảng thì không bật lại dù tùy chọn này bật.</summary>
-    public static bool AutoLookup { get; private set; } = true;
     public static string BackupDir { get; private set; } = DefaultBackupDir;
     /// <summary>Tự chuyển câu sau khi trả lời: 0 tắt, 1 chỉ khi đúng (câu sai đứng lại để đọc giải thích), 2 luôn.</summary>
     public static int AutoNext { get; private set; } = 1;
     public static int AutoNextMs { get; private set; } = 1000;
     /// <summary>Tự phát âm thanh: bài nghe khi mở, câu nghe trong thi thử khi sang câu, đọc từ sau khi trả lời từ vựng.</summary>
     public static bool AutoPlay { get; private set; } = true;
-    /// <summary>"auto": thử bộ nhận giọng mới (trực tuyến, chính xác hơn), chưa bật được thì dùng bộ cũ; "old": chỉ bộ cũ (offline).</summary>
-    public static string SpeechEngine { get; private set; } = "auto";
 
     public const string DefaultFont = "Yu Gothic UI";
     public static string DefaultBackupDir => Path.Combine(AppPaths.DataDir, "sao_luu");
@@ -45,12 +41,10 @@ static class Prefs
         Theme = (int)Math.Clamp(Num("theme", 0), 0, 2);
         NavCompact = App.Progress.Setting("nav_compact") == "1";
         ShowVi = App.Progress.Setting("show_vi", "1") == "1";
-        AutoLookup = App.Progress.Setting("auto_lookup", "1") == "1";
         BackupDir = App.Progress.Setting("backup_dir", DefaultBackupDir);
         AutoNext = (int)Math.Clamp(Num("auto_next", 1), 0, 2);
         AutoNextMs = (int)Math.Clamp(Num("auto_next_ms", 1000), 300, 5000);
         AutoPlay = App.Progress.Setting("auto_play", "1") == "1";
-        SpeechEngine = App.Progress.Setting("speech_engine", "auto") == "old" ? "old" : "auto";
         Apply();
     }
 
@@ -69,12 +63,10 @@ static class Prefs
     public static void SetFont(string f) { ReadFont = f; App.Progress.SetSetting("read_font", f); Apply(); }
     public static void SetTheme(int t) { Theme = t; Save("theme", t); }
     public static void SetNavCompact(bool v) { NavCompact = v; App.Progress.SetSetting("nav_compact", v ? "1" : "0"); }
-    public static void SetAutoLookup(bool v) { AutoLookup = v; App.Progress.SetSetting("auto_lookup", v ? "1" : "0"); }
     public static void SetShowVi(bool v) { ShowVi = v; App.Progress.SetSetting("show_vi", v ? "1" : "0"); }
     public static void SetBackupDir(string d) { BackupDir = d; App.Progress.SetSetting("backup_dir", d); }
     public static void SetAutoNext(int v) { AutoNext = Math.Clamp(v, 0, 2); App.Progress.SetSetting("auto_next", AutoNext.ToString()); }
     public static void SetAutoNextMs(int v) { AutoNextMs = Math.Clamp(v, 300, 5000); App.Progress.SetSetting("auto_next_ms", AutoNextMs.ToString()); }
-    public static void SetSpeechEngine(string v) { SpeechEngine = v == "old" ? "old" : "auto"; App.Progress.SetSetting("speech_engine", SpeechEngine); }
     public static void SetAutoPlay(bool v) { AutoPlay = v; App.Progress.SetSetting("auto_play", v ? "1" : "0"); }
 
     static void Save(string key, double v)

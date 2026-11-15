@@ -52,8 +52,7 @@ sealed class QuizView : UserControl, IKeyTarget
                 Text($"Xong: đúng {_correct}/{_questions.Count}", 22, bold: true),
                 Text("Câu sai đã vào lịch ôn, sẽ quay lại ở trang Hôm nay.", muted: true),
                 Row(8,
-                    _wrong.Count > 0 ? Btn($"Chữa bài ({_wrong.Count} câu sai)", OpenReview, primary: true) : null,
-                    _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry) : null,
+                    _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry, primary: true) : null,
                     Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))), animate);
             return;
         }
@@ -95,7 +94,7 @@ sealed class QuizView : UserControl, IKeyTarget
             body.Children.Add(Text(ok ? "Chính xác" : $"Chưa đúng. Đáp án là {q.Answer}.", 16, bold: true));
             if (q.Point != "") body.Children.Add(Card(Col(4, Text(q.Point, 15, bold: true), Text(q.Why))));
             else if (App.Progress.Explain(q.Id) is { } saved)
-                body.Children.Add(Card(Col(4, Text($"Lời giải của Gemini · lưu {saved.At:dd/MM}", 12, bold: true).Tint("AccentInk"), new SelectableTextBlock { Text = saved.Text, TextWrapping = TextWrapping.Wrap, FontSize = 14.5 })));
+                body.Children.Add(Card(Col(4, Text($"Lời giải đã lưu {saved.At:dd/MM}", 12, bold: true).Tint("AccentInk"), new SelectableTextBlock { Text = saved.Text, TextWrapping = TextWrapping.Wrap, FontSize = 14.5 })));
             if (q.FullSentence != "") body.Children.Add(Text($"Câu hoàn chỉnh: {q.FullSentence}", muted: true));
             if (!ok)
             {
@@ -127,10 +126,6 @@ sealed class QuizView : UserControl, IKeyTarget
         _auto.Schedule(ok, Next); // trước Render để thanh dưới hiện "Tự chuyển sau…"
         Render(animate: false);
     }
-
-    void OpenReview() =>
-        App.Shell.Show(new ReviewView(_title, "N2", _wrong.Select(w => ReviewView.From(w.Q, w.Picked)).ToList(), () => App.Shell.Show(this), Retry));
-
     void Retry() => App.Shell.Show(new QuizView(_wrong.Select(w => w.Q).ToList(), "Làm lại câu sai"));
 
     void Next()

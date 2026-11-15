@@ -8,8 +8,8 @@ using Nihongo.Core;
 namespace Nihongo.App.Services;
 
 /// <summary>
-/// Khung web nhỏ (WebView2 có sẵn trên Windows 11) gắn vào cửa sổ app. Chỉ dùng cho trình phát video
-/// và tab Gemini; phần còn lại của app vẫn là giao diện gốc.
+/// Khung web nhỏ (WebView2 có sẵn trên Windows 11) gắn vào cửa sổ app. Chỉ dùng cho trang đề/lời giải
+/// của 電験; phần còn lại của app vẫn là giao diện gốc.
 /// </summary>
 sealed class WebHost : NativeControlHost
 {
@@ -36,8 +36,7 @@ sealed class WebHost : NativeControlHost
     static Task<CoreWebView2Environment>? _env;
 
     /// <summary>
-    /// Một môi trường cho cả app: khung video và tab Gemini dùng chung hồ sơ trong data/webview,
-    /// nên đăng nhập Google một lần là cả YouTube lẫn Gemini đều nhận.
+    /// Một môi trường cho cả app, hồ sơ trong data/webview (giữ từ v1 nên đăng nhập cũ vẫn còn).
     /// </summary>
     public static Task<CoreWebView2Environment> Environment => _env ??= CoreWebView2Environment.CreateAsync(null,
         Path.Combine(AppPaths.DataDir, "webview"),

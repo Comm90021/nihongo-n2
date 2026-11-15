@@ -13,26 +13,16 @@ public partial class MainWindow : Window
     static readonly (string Tag, string Label, string Glyph)[] Sections =
     [
         ("today", "Hôm nay", Views.Glyph.Home),
-        ("stats", "Thống kê", Views.Glyph.Chart),
-        ("vocab", "Từ vựng", Views.Glyph.Library),
-        ("practice", "Luyện đề", Views.Glyph.Education),
+        ("read", "Đọc", Views.Glyph.Reading),
+        ("practice", "Luyện", Views.Glyph.Education),
         ("exam", "Thi thử", Views.Glyph.Timer),
-        ("reading", "Đọc hiểu", Views.Glyph.Reading),
-        ("listening", "Nghe", Views.Glyph.Headphone),
-        ("knowledge", "Kiến thức", Views.Glyph.Lightbulb),
-        ("-", "", ""), // vạch ngăn: trên là ôn thi, dưới là phần mở rộng
-        ("media", "Báo & Video", Views.Glyph.News),
-        ("library", "Thư viện", Views.Glyph.Book),
-        ("kaiwa", "Hội thoại", Views.Glyph.People),
+        ("progress", "Tiến độ", Views.Glyph.Chart),
+        ("-", "", ""), // vạch ngăn: trên là ôn JLPT, dưới là 電験
         ("denken", "電験", Views.Glyph.Lightning),
-        ("-", "", ""),
-        ("gemini", "Gemini", Views.Glyph.Chat),
-        ("settings", "Cài đặt", Views.Glyph.Settings),
     ];
 
     readonly List<TextBlock> _labels = [];
-    GeminiView? _gemini;
-
+    readonly Router _router = new();
     public MainWindow()
     {
         InitializeComponent();
@@ -55,6 +45,7 @@ public partial class MainWindow : Window
                 Tag = tag,
                 Content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, Children = { Ui.Icon(glyph, 20).Also(i => i.HorizontalAlignment = HorizontalAlignment.Center), text } },
             };
+            item.Tapped += (_, _) => { if (Nav.SelectedItem == item) ShowPage(tag); }; // bấm lại mục đang sáng: về trang chính của mục
             AutomationProperties.SetName(item, label);
             ToolTip.SetTip(item, label);
             Nav.Items.Add(item);
@@ -140,10 +131,10 @@ public partial class MainWindow : Window
         Main.Margin = narrow ? new Avalonia.Thickness(20, 14, 20, 12) : new Avalonia.Thickness(40, 28, 40, 24);
         if (narrow == _narrow) return;
         _narrow = narrow;
-        if (_navBeforeDock is null) SetCompact(narrow || Prefs.NavCompact, save: false);
+        SetCompact(narrow || Prefs.NavCompact, save: false);
     }
 
-    /// <summary>Cửa sổ thấp: mục thanh bên sát hơn (bỏ khoảng đệm) để đủ chỗ cho 12 mục.</summary>
+    /// <summary>Cửa sổ thấp: mục thanh bên sát hơn (bỏ khoảng đệm) để đủ chỗ cho các mục.</summary>
     void ApplyHeight(double height)
     {
         _height = height;
@@ -177,156 +168,66 @@ public partial class MainWindow : Window
     /// <summary>Dải biểu tượng: 84px có chữ dưới biểu tượng, thu gọn còn 64px chỉ biểu tượng.</summary>
     public void SetCompact(bool compact, bool save = true)
     {
-        if (save) { Prefs.SetNavCompact(compact); _navBeforeDock = null; }
+        if (save) Prefs.SetNavCompact(compact);
         NavPane.Width = compact ? 64 : 84;
         foreach (var l in _labels) l.IsVisible = !compact;
         QuitLabel.IsVisible = !compact;
-        QuitLabel.IsVisible = !compact;
+        SettingsLabel.IsVisible = !compact;
     }
     /// <summary>Ẩn dải biểu tượng khi đang thi thử để tập trung; rời màn thi thì hiện lại.</summary>
     public void SetRailVisible(bool visible) => NavPane.IsVisible = visible;
 
-    /// <summary>Thay nội dung chính. Màn hình con (thẻ học, quiz) gọi lại hàm này khi xong.</summary>
+    /// <summary>Thay nội dung chính bằng một màn con (thẻ học, quiz...). Màn con gọi <see cref="BackToSection"/> khi xong.</summary>
     public void Show(Control view, bool fade = false)
     {
-        GeminiSlot.IsVisible = false;
-        Host.IsVisible = true;
-        // Hiện dần khi chuyển tab. Chỉ làm cho màn không có khung web: cửa sổ con WebView2 không mờ được và
-        // phải được gỡ/gắn ngay trong một lượt (xem BorrowGemini).
+        if (!_router.IsPage(view)) _router.MarkStale();
+        Present(view, fade);
+    }
+
+    void Present(Control view, bool fade)
+    {
+        // Hiện dần khi chuyển mục. Không làm cho 電験: cửa sổ con WebView2 không mờ được.
         if (fade) Host.Opacity = 0;
         Host.Content = view;
         if (fade) Avalonia.Threading.Dispatcher.UIThread.Post(() => Host.Opacity = 1, Avalonia.Threading.DispatcherPriority.Background);
         else Host.Opacity = 1;
     }
 
-    static readonly HashSet<string> FadeTags = ["today", "stats", "vocab", "practice", "exam", "reading", "listening", "knowledge", "settings"];
+    bool _suppressNav;
+    string _lastTag = "today";
 
-    public void ShowSection(string tag)
+    /// <summary>Hiện trang của một mục (trang giữ trong bộ nhớ, xem Navigation/Router) và nhấn sáng mục thanh bên tương ứng.</summary>
+    void ShowPage(string tag)
     {
-        if (tag == "gemini") { ShowGemini(); return; }
-        Show(tag switch
-        {
-            "vocab" => new VocabView(),
-            "practice" => new PracticeView(),
-            "reading" => new ReadingListView(),
-            "listening" => new ListeningListView(),
-            "media" => new MediaView(),
-            "settings" => new SettingsView(),
-            "exam" => new ExamListView(),
-            "library" => new LibraryView(),
-            "kaiwa" => new KaiwaView(),
-            "knowledge" => new KnowledgeView(),
-            "denken" => new DenkenView(),
-            "stats" => new StatsView(),
-            _ => new TodayView(),
-        }, FadeTags.Contains(tag) || !Sections.Any(s => s.Tag == tag));
-    }
-
-    // ---------------------------------------------------------------- Gemini
-    // Chỉ có một GeminiView. Bình thường nằm trong GeminiSlot (tab toàn trang); màn video/báo có thể mượn
-    // để đặt ở cột bên phải. Chuyển chỗ trong cùng một lượt nên khung web không bị hủy, không tải lại.
-    Action? _onGeminiTaken;
-    bool? _navBeforeDock;
-
-    GeminiView Gemini => _gemini ??= new GeminiView();
-
-    static void Detach(Control c)
-    {
-        switch (c.Parent)
-        {
-            case ContentControl cc: cc.Content = null; break;
-            case Decorator d: d.Child = null; break;
-        }
-    }
-
-    /// <summary>Cho màn đang mở mượn GeminiView. <paramref name="onTaken"/> được gọi khi cửa sổ chính lấy lại.</summary>
-    internal GeminiView BorrowGemini(Action onTaken)
-    {
-        var g = Gemini;
-        ReturnGemini();
-        Detach(g);
-        g.Compact = true;
-        _onGeminiTaken = onTaken;
-        // Cột Gemini cần chỗ: tạm thu gọn thanh bên, đóng cột thì trả lại như cũ.
-        _navBeforeDock = Prefs.NavCompact;
-        SetCompact(true, save: false);
-        return g;
-    }
-
-    /// <summary>Lấy GeminiView về tab toàn trang (vẫn ẩn nếu đang ở mục khác) và khôi phục bố cục của màn đã mượn.</summary>
-    public void ReturnGemini()
-    {
-        var g = Gemini;
-        if (g.Parent != GeminiSlot)
-        {
-            Detach(g);
-            GeminiSlot.Content = g;
-        }
-        g.Compact = false;
-        if (_navBeforeDock is { } nav) { SetCompact(nav, save: false); _navBeforeDock = null; }
-        var taken = _onGeminiTaken;
-        _onGeminiTaken = null;
-        taken?.Invoke();
-    }
-
-    /// <summary>Tab Gemini toàn trang. Màn đang đọc vẫn còn, bấm lại mục cũ là quay về.</summary>
-    GeminiView ShowGemini()
-    {
-        ReturnGemini();
-        Host.IsVisible = false;
-        GeminiSlot.IsVisible = true;
+        tag = Router.Canon(tag);
+        if (!_router.Has(tag)) tag = "today";
+        _lastTag = tag;
+        var nav = _router.NavOf(tag);
         _suppressNav = true;
-        Nav.SelectedItem = Nav.Items.OfType<ListBoxItem>().First(i => (string?)i.Tag == "gemini");
+        Nav.SelectedItem = nav == "" ? null : Nav.Items.OfType<ListBoxItem>().FirstOrDefault(i => (string?)i.Tag == nav);
         _suppressNav = false;
-        return Gemini;
+        var page = _router.Get(tag);
+        if (Host.Content != page) Present(page, fade: tag != "denken");
     }
-
-    public void ShowGeminiTab() => ShowGemini();
 
     // Dùng cho Services/SelfTest.
     internal Control? CurrentView => Host.Content as Control;
-    internal string TestGeminiStatus() => Gemini.StatusText;
-    /// <summary>Chuyển sang một mục của thanh bên (nhấn sáng mục đó).</summary>
-    public void GoTo(string tag) => TestSelectNav(tag);
-    internal void TestSelectNav(string tag) => Nav.SelectedItem = Nav.Items.OfType<ListBoxItem>().First(i => (string?)i.Tag == tag);
 
     /// <summary>
-    /// Hỏi Gemini. Đang ở màn video/báo thì mở Gemini ở cột bên phải (video và script vẫn dùng được);
-    /// ở màn khác thì mở tab Gemini toàn trang.
+    /// Chuyển tới một mục: tag thanh bên (today, read, practice, exam, progress, denken), Cài đặt (settings),
+    /// mục con của Luyện (vocab, drill, listening, knowledge) hoặc tên cũ của v1 (stats, reading).
     /// </summary>
-    public async Task AskGemini(string prompt)
-    {
-        GeminiView view;
-        if (Host.IsVisible && Host.Content is IGeminiDock dock && prompt != "")
-        {
-            dock.OpenGemini();
-            view = Gemini;
-        }
-        else view = ShowGemini();
-        if (prompt != "") await view.Ask(prompt);
-    }
+    public void GoTo(string tag) => ShowPage(tag);
+    internal void TestSelectNav(string tag) => ShowPage(tag);
 
-    /// <summary>Câu trả lời mới nhất của Gemini (rỗng nếu không đọc được). Dùng khi lưu lời giải chữa bài.</summary>
-    internal Task<string> GeminiLastAnswer() => Gemini.LastAnswerAsync();
-
-    public async Task SignOutGoogle() => await ShowGemini().SignOutAsync();
-
-    bool _suppressNav;
-    string _lastTag = "today";
+    void OnSettings(object? sender, RoutedEventArgs e) => ShowPage("settings");
 
     void OnNav(object? sender, SelectionChangedEventArgs e)
     {
         if (_suppressNav || Nav.SelectedItem is not ListBoxItem { Tag: string tag }) return;
-        // Từ Gemini bấm lại đúng mục vừa đọc thì quay về màn đang đọc dở thay vì mở lại từ đầu.
-        if (tag != "gemini" && tag == _lastTag && GeminiSlot.IsVisible && Host.Content is not null)
-        {
-            GeminiSlot.IsVisible = false;
-            Host.IsVisible = true;
-            return;
-        }
-        if (tag != "gemini") _lastTag = tag;
-        ShowSection(tag);
+        ShowPage(tag);
     }
 
-    public void BackToSection() => ShowSection(_lastTag);
+    /// <summary>Về trang của mục vừa mở màn con (ví dụ làm xong quiz từ vựng thì về Từ vựng).</summary>
+    public void BackToSection() => ShowPage(_lastTag);
 }

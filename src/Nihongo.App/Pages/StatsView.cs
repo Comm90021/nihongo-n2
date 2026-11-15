@@ -143,22 +143,8 @@ sealed class StatsView : UserControl
         var nav = Row(6,
             Btn("◀", () => { _weekOffset--; Refresh(); }),
             Btn("Tuần này", () => { _weekOffset = 0; Refresh(); }, enabled: _weekOffset != 0),
-            Btn("▶", () => { _weekOffset++; Refresh(); }, enabled: _weekOffset < 0),
-            Btn("Gửi tuần này cho Gemini", () => _ = App.Shell.AskGemini(WeekPrompt(title, start, days, mine, mondaiOf)), primary: true));
+            Btn("▶", () => { _weekOffset++; Refresh(); }, enabled: _weekOffset < 0));
         return Col(14, strip, Panel($"{title} · số câu mỗi ngày", Col(10, cols, nav)));
-    }
-
-    string WeekPrompt(string title, DateOnly start, IReadOnlyList<DayStat> days, List<AttemptRow> mine, Func<string, int?> mondaiOf)
-    {
-        var end = start.AddDays(7);
-        var inWeek = mine.Where(a => DateOnly.FromDateTime(a.At) >= start && DateOnly.FromDateTime(a.At) < end).ToList();
-        var by = StudyStats.BySection(inWeek, mondaiOf);
-        var lines = by.OrderBy(kv => kv.Key).Select(kv => $"- {StudySection.Label(kv.Key)}: {kv.Value.Correct}/{kv.Value.Total} ({100.0 * kv.Value.Correct / kv.Value.Total:0}%)");
-        var daily = days.Select(d => $"{d.Day:dd/MM}: {d.Answered} câu, đúng {d.Correct}");
-        return $"Tôi đang ôn thi JLPT {Level}, ngày thi {ExamDay():dd/MM/yyyy}. Đây là số liệu {title.ToLowerInvariant()} của tôi:\n\n" +
-               $"Theo ngày:\n{string.Join("\n", daily)}\n\nTheo phần:\n{string.Join("\n", lines)}\n\n" +
-               "Hãy nhận xét bằng tiếng Việt: (1) tôi học đều không, (2) phần nào yếu nhất và vì sao có thể như vậy, (3) kế hoạch cụ thể cho 7 ngày tới (mỗi ngày làm gì, bao nhiêu phút) để tăng khả năng đỗ. " +
-               "Nói thẳng, không động viên suông.";
     }
 
     // ---------------------------------------------------------------- độ chính xác theo phần
@@ -167,7 +153,7 @@ sealed class StatsView : UserControl
         var recent = attempts.Where(a => (_now - a.At).TotalDays <= 30).ToList();
         var by = StudyStats.BySection(recent, mondaiOf);
         var rows = Col(10);
-        string[] order = [StudySection.Kanji, StudySection.Vocab, StudySection.Grammar, StudySection.Reading, StudySection.Listening, StudySection.Word, StudySection.Kaiwa];
+        string[] order = [StudySection.Kanji, StudySection.Vocab, StudySection.Grammar, StudySection.Reading, StudySection.Listening, StudySection.Word];
         foreach (var s in order)
         {
             if (!by.TryGetValue(s, out var v) || v.Total == 0)
