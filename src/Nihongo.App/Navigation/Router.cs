@@ -12,8 +12,10 @@ interface IRefreshable
 /// Bọc một màn cũ dựng toàn bộ trong hàm tạo: giữ một vỏ duy nhất, khi <see cref="Refresh"/> thì dựng lại ruột.
 /// Dùng tạm cho các màn v1 chưa tách được phần dữ liệu khỏi phần vẽ.
 /// </summary>
-sealed class RefreshHost(Func<Control> build) : UserControl, IRefreshable
+sealed class RefreshHost(Func<Control> build) : UserControl, IRefreshable, IKeyTarget
 {
+    /// <summary>Chuyển phím xuống trang bên trong (vd Enter ở Hôm nay bắt đầu buổi học).</summary>
+    public bool HandleKey(Avalonia.Input.KeyEventArgs e) => Inner is IKeyTarget t && t.HandleKey(e);
     public Control Inner { get; private set; } = null!;
     public void Refresh() => Content = Inner = build();
     public RefreshHost Init() { Refresh(); return this; }

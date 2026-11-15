@@ -23,11 +23,14 @@ sealed class QuizView : UserControl, IKeyTarget
     readonly AutoAdvance _auto = new();
     int _index, _correct;
     int? _picked;
+    /// <summary>Chạy trong Buổi học: không có nút quay lại, hết câu thì gọi (đúng, tổng) thay cho màn kết quả.</summary>
+    readonly Action<int, int>? _onDone;
 
-    public QuizView(IEnumerable<Question> questions, string title)
+    public QuizView(IEnumerable<Question> questions, string title, Action<int, int>? onDone = null)
     {
         _questions = questions.ToList();
         _title = title;
+        _onDone = onDone;
         DetachedFromVisualTree += (_, _) => _auto.Cancel();
         Content = QuizNav.Layout(_header, _card, _bar);
         Render(animate: false);
@@ -43,8 +46,9 @@ sealed class QuizView : UserControl, IKeyTarget
 
     void Render(bool animate = true)
     {
-        _header.Content = Col(0, TopBar(_title, Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", 13, muted: true), App.Shell.BackToSection),
+        _header.Content = Col(0, TopBar(_title, Text($"Câu {Math.Min(_index + 1, _questions.Count)}/{_questions.Count} · đúng {_correct}", 13, muted: true), _onDone is null ? App.Shell.BackToSection : null),
             Bar(_index, Math.Max(1, _questions.Count), 4).Also(b => b.Margin = new Thickness(0, 0, 0, 0)));
+        if (_index >= _questions.Count && _onDone is not null) { _onDone(_correct, _questions.Count); return; }
         if (_index >= _questions.Count)
         {
             _bar.Content = null;

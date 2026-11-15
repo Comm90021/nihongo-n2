@@ -1,174 +1,198 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Nihongo.Core;
-using Nihongo.Core.Stats;
+using Nihongo.Core.Services;
 using Nihongo.App.Services;
 using static Nihongo.App.Views.Ui;
 
 namespace Nihongo.App.Views;
 
 /// <summary>
-/// Trang Hôm nay theo bản mẫu đã duyệt: đếm ngược tới kỳ thi, 3 ô số liệu, kế hoạch trong ngày,
-/// biểu đồ các lần thi thử, và tỉ lệ đúng theo phần (tính từ lịch sử làm bài thật, không phải số mẫu).
+/// Trang Hôm nay v2: một nút "Bắt đầu" mở Buổi học có dẫn dắt (SessionView). Trên cùng: ngày, đếm ngược, chuỗi ngày, cấp.
+/// Thẻ chính: chọn 15/30/45 phút, xem trước các bước. Bên dưới: vòng mục tiêu ngày, bản đồ 12 tuần, bài đọc hôm nay.
+/// Không đưa số việc tồn làm tiêu đề; số liệu chi tiết ở trang Tiến độ.
 /// </summary>
-sealed class TodayView : UserControl
+sealed class TodayView : UserControl, IKeyTarget
 {
     /// <summary>Ngày thi và cấp thi chỉnh ở Cài đặt (setting exam_day dạng yyyy-MM-dd, exam_level); mặc định N2 06/12/2026.</summary>
     public static DateOnly ExamDay => DateOnly.TryParseExact(App.Progress.Setting("exam_day"), "yyyy-MM-dd", out var d) ? d : new DateOnly(2026, 12, 6);
     public static string ExamLevel => App.Progress.Setting("exam_level", "N2");
-    const int NewWords = 20, NewGrammar = 15;
     static readonly string[] WeekDays = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
+    static readonly int[] MinuteOptions = [15, 30, 45];
+
+    readonly PlannerInput _input = PlannerInputBuilder.Build();
+    readonly Dictionary<int, SessionPlan> _plans = [];
+    readonly ContentControl _preview = new();
+    readonly ContentControl _readingCard = new();
+    int _minutes = PlannerInputBuilder.Minutes;
+
+    SessionPlan Plan => _plans.TryGetValue(_minutes, out var p) ? p : _plans[_minutes] = new SessionPlanner().Plan(_minutes, _input);
 
     public TodayView()
     {
-        var p = App.Progress;
-        var content = App.Content;
         var now = DateTime.Now;
         var today = DateOnly.FromDateTime(now);
         var days = Math.Max(0, ExamDay.DayNumber - today.DayNumber);
+        var (level, into, need) = XpRules.LevelOf(App.Progress.TotalXp());
 
-        var questionsById = content.Questions.ToDictionary(q => q.Id);
-        var notes = p.Notes();
-        var vocabById = content.Vocab.Concat(notes.Select(n => n.ToCard())).GroupBy(v => v.CardId).ToDictionary(g => g.Key, g => g.First());
-        var dueQuestions = p.DueIds(SrsKind.Question).Select(id => questionsById.GetValueOrDefault(id)).OfType<Question>().ToList();
-        var dueCards = p.DueIds(SrsKind.Card).Select(id => vocabById.GetValueOrDefault(id)).OfType<VocabItem>().ToList();
-        var dueTotal = dueCards.Count + dueQuestions.Count;
-
-        var n2 = content.Vocab.Where(v => v.Level == "N2").ToList();
-        var mastered = n2.Count(v => p.Get(v.CardId) is { Box: >= ProgressStore.MasteredBox });
-        var newWords = n2.Where(v => !p.Known(v.CardId) && v.MeaningVi != "" && VocabQuiz.Usable(v))
-            .OrderByDescending(v => v.FreqExam).ThenByDescending(v => v.Kind != VocabKind.Normal).Take(NewWords * 2).ToList();
-        var seen = p.SeenQuestions();
-        var newGrammar = content.Questions.Where(q => q.IsExam && q.Mondai == 7 && !seen.Contains(q.Id))
-            .OrderByDescending(q => q.Id[..14]).ThenBy(q => q.Number).Take(NewGrammar).ToList();
-        var results = p.Results();
-        var done = results.Select(r => r.SetId).ToHashSet();
-        var nextRead = content.LoadReadingSets().FirstOrDefault(s => !done.Contains($"{s.Id}:reading"));
-        var nextExam = ExamCatalog.All.Where(e => e.Level == "N2").FirstOrDefault(e => !done.Contains($"exam:{e.Id}"));
-        var lastExam = results.FirstOrDefault(r => r.Kind == "exam");
-
-        // ---- đầu trang
-        var countdown = Row(16,
-            BigNumber($"{days}", 52).Tint("AccentInk"),
-            Col(2, Text("ngày tới kỳ thi", 15, bold: true), Text($"JLPT {ExamLevel} · {WeekDays[(int)ExamDay.DayOfWeek]} {ExamDay:dd/MM/yyyy}", 13, muted: true)));
+        Control Block(Control value, string label) => Col(2, value, Text(label, 12, muted: true, wrap: false));
+        var levelBlock = Col(4,
+            Row(8, Badge($"Cấp {level}"), Text($"{into}/{need} XP", 12, muted: true, wrap: false).Also(t => t.VerticalAlignment = VerticalAlignment.Center)),
+            Bar(into, need, 4).Also(b => b.Width = 140));
+        var right = Row(28,
+            Block(Text($"{days}", 30, bold: true, wrap: false).Tint("AccentInk").Also(t => t.FontFamily = Serif), $"ngày tới JLPT {ExamLevel} ({ExamDay:dd/MM})"),
+            Block(Text($"🔥 {Study.Streak()}", 30, bold: true, wrap: false).Also(t => t.FontFamily = Serif), "ngày liên tiếp"),
+            levelBlock.Also(c => c.VerticalAlignment = VerticalAlignment.Center));
         var header = Line(
-            Col(6, Text($"{WeekDays[(int)now.DayOfWeek]} · {now:dd/MM/yyyy}".ToUpperInvariant(), 12, bold: true, muted: true).Also(t => t.LetterSpacing = 1.4), Title("Hôm nay")),
-            new Border { BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(24, 0, 0, 0), Child = countdown }.Themed(Border.BorderBrushProperty, "CardBorder"));
+            Col(4, Text($"{WeekDays[(int)now.DayOfWeek]} · {now:dd/MM/yyyy}".ToUpperInvariant(), 12, bold: true, muted: true).Also(t => t.LetterSpacing = 1.4), Title("Hôm nay")),
+            right);
 
-        // ---- dải số liệu (một thẻ, ba ô chia bằng đường kẻ mảnh)
-        var last60 = p.Attempts(now.AddDays(-60));
-        var pred = PassPredictor.Jlpt(ExamLevel, now, results, J2Stats.ForLevel(last60, ExamLevel), J2Stats.MondaiOf);
-        var streak = StudyStats.Streak(last60, today);
-        var stats = Strip(
-            StatCell("Khả năng đỗ", pred.Probability is { } pr ? $"{Math.Round(pr * 100):0}%" : "—",
-                pred.Probability is null ? "chưa đủ dữ liệu" : $"chuỗi {streak} ngày",
-                Btn("Xem thống kê", () => App.Shell.GoTo("stats")).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left)),
-            StatCell("Việc ôn đến hạn", $"{dueTotal}", dueTotal == 0 ? "đã xong hết" : $"khoảng {Math.Max(1, dueTotal / 3)} phút",
-                Btn("Ôn ngay", () => StartReview(dueCards, dueQuestions), primary: true, enabled: dueTotal > 0).Also(b => b.HorizontalAlignment = HorizontalAlignment.Left)),
-            StatCell("Từ N2 đã chắc", $"{mastered:N0}", $"/ {n2.Count:N0} từ", Bar(mastered, n2.Count, 4)),
-            StatCell("Thi thử gần nhất", lastExam is null ? "—" : $"{lastExam.Correct}/{lastExam.Total}",
-                lastExam is null ? "chưa làm đề nào" : lastExam.Title,
-                lastExam is null ? null : Badge(lastExam.Correct * 2 >= lastExam.Total ? "Trên 50% số câu" : "Dưới 50% số câu", lastExam.Correct * 2 >= lastExam.Total ? "good" : "bad")));
-
-        // ---- kế hoạch hôm nay
-        var plan = Col(0);
-        var doneCount = 0;
-        var stepNo = 0;
-        void Step(bool isDone, string title, string meta, string time, string action, Action go, bool enabled = true)
+        var sel = Array.IndexOf(MinuteOptions, _minutes);
+        var seg = Segmented(MinuteOptions.Select(m => $"{m} phút").ToArray(), sel >= 0 ? sel : 1, idx =>
         {
-            if (isDone) doneCount++;
-            stepNo++;
-            // Số thứ tự kiểu có chân (✓ khi xong) thay cho vòng tròn.
-            var mark = isDone ? Text("✓", 15, bold: true, wrap: false).Tint("AccentInk") : Text($"{stepNo:00}", 15, wrap: false).Tint("Muted");
-            mark.FontFamily = Serif;
-            mark.Width = 30;
-            var titleText = Text(title, 15).Also(t => { t.FontWeight = FontWeight.Medium; if (isDone) { t.TextDecorations = TextDecorations.Strikethrough; t.Tint("Muted"); } });
-            var g = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 14, Margin = new Thickness(0, 12) };
-            Control[] cells = [mark, Col(3, titleText, Text(meta, 12.5, muted: true)), Badge(time, "plain"), Btn(action, go, enabled: enabled).Also(b => b.Classes.Add("link"))];
-            for (var i = 0; i < cells.Length; i++) { Grid.SetColumn(cells[i], i); cells[i].VerticalAlignment = VerticalAlignment.Center; g.Children.Add(cells[i]); }
-            if (plan.Children.Count > 0) plan.Children.Add(Divider());
-            plan.Children.Add(g);
-        }
-        Step(dueCards.Count == 0, "Ôn từ đến hạn", $"{dueCards.Count} từ, gồm cả từ trong sổ tay", $"{Math.Max(1, dueCards.Count / 4)} phút", "Ôn", () => StartReview(dueCards, []), dueCards.Count > 0);
-        Step(dueQuestions.Count == 0, "Làm lại câu sai đến hạn", $"{dueQuestions.Count} câu", $"{Math.Max(1, dueQuestions.Count / 2)} phút", "Làm",
-            () => App.Shell.Show(new QuizView(dueQuestions, "Câu sai đến hạn")), dueQuestions.Count > 0);
-        Step(false, $"Từ mới N2 hay ra đề", "4 đáp án: cách đọc, chữ Hán, nghĩa, điền từ", "10 phút", "Làm",
-            () => App.Shell.Show(new VocabQuizView(VocabQuiz.Build(newWords, null, NewWords), "Từ mới hôm nay")), newWords.Count > 0);
-        Step(newGrammar.Count == 0, "Ngữ pháp 問題7 đề thật", $"{newGrammar.Count} câu chưa làm, có giải thích", "15 phút", "Làm",
-            () => App.Shell.Show(new QuizView(newGrammar, "Ngữ pháp hôm nay")), newGrammar.Count > 0);
-        Step(nextRead is null, "Đọc hiểu đề thật", nextRead?.Title ?? "Đã làm hết", "60 phút", "Làm",
-            () => App.Shell.Show(new ReadingSessionView(nextRead!, m9: false)), nextRead is not null);
-        Step(nextExam is null, "Thi thử cả đề (nên làm 1–2 đề mỗi tuần)", nextExam?.Title ?? "Đã làm hết", $"{nextExam?.Minutes ?? 105} phút", "Bắt đầu",
-            () => App.Shell.Show(new ExamView(nextExam!)), nextExam is not null);
-        var steps = 6;
-        var planCard = Panel("Kế hoạch hôm nay", plan, Text($"{doneCount} / {steps} xong", 13, muted: true));
+            _minutes = MinuteOptions[idx];
+            PlannerInputBuilder.Minutes = _minutes;
+            RenderPreview();
+        });
+        var heroLeft = Col(14,
+            Line(Text("Buổi học hôm nay", 24, bold: true).Also(t => t.FontFamily = Serif), seg),
+            _preview);
+        var heroGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 28 };
+        var ring = GoalRing(Study.TodayXp(), Study.DailyGoal);
+        Grid.SetColumn(ring, 1);
+        heroGrid.Children.Add(heroLeft);
+        heroGrid.Children.Add(ring);
+        var hero = Card(heroGrid, 0).Also(c => c.Padding = new Thickness(26, 20));
 
-        // ---- biểu đồ thi thử
-        var recent = results.Where(r => r.Kind == "exam").Take(6).Reverse().ToList();
-        Control chart;
-        if (recent.Count == 0) chart = Text("Chưa có lần thi thử nào. Làm một đề ở mục Thi thử để bắt đầu theo dõi.", 13.5, muted: true);
-        else
-        {
-            var bars = new Grid { Height = 150 };
-            var labels = new Grid();
-            for (var i = 0; i < recent.Count; i++)
-            {
-                bars.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-                labels.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-                var r = recent[i];
-                var pct = r.Total == 0 ? 0 : (double)r.Correct / r.Total;
-                var bar = new Border { Width = 28, Height = Math.Max(4, pct * 118), CornerRadius = new CornerRadius(6, 6, 2, 2) };
-                if (pct >= 0.5) bar.Themed(Border.BackgroundProperty, "Strong"); else bar.Background = Accent;
-                var col = Col(6, Text($"{pct:P0}", 12, bold: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center), bar);
-                col.VerticalAlignment = VerticalAlignment.Bottom;
-                Grid.SetColumn(col, i);
-                bars.Children.Add(col);
-                var lab = Text(r.At.ToString("dd/MM"), 11, muted: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center);
-                Grid.SetColumn(lab, i);
-                labels.Children.Add(lab);
-            }
-            chart = Col(8, bars, Divider(), labels);
-        }
-        var chartCard = Panel("Thi thử", chart, Text("tỉ lệ câu đúng · nên trên 50%", 12, muted: true));
+        var lower = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 16 };
+        var heat = Panel("12 tuần gần đây", Heatmap(today, Study.DailyGoal));
+        Grid.SetColumn(heat, 1);
+        lower.Children.Add(_readingCard);
+        lower.Children.Add(heat);
 
-        // ---- tỉ lệ đúng theo phần
-        var stats2 = p.AttemptStats();
-        var parts = new (string Name, Func<Question, bool> Has)[]
-        {
-            ("Kanji (問題1–2)", q => q.Mondai <= 2),
-            ("Từ vựng (問題3–6)", q => q.Mondai is >= 3 and <= 6),
-            ("Ngữ pháp (問題7–9)", q => q.Mondai is >= 7 and <= 9),
-            ("Đọc hiểu (問題10+)", q => q.Mondai >= 10),
-        };
-        var weak = Col(12);
-        foreach (var (name, has) in parts)
-        {
-            var (ok, total) = stats2.Where(kv => questionsById.TryGetValue(kv.Key, out var q) && has(q)).Aggregate((0, 0), (a, kv) => (a.Item1 + kv.Value.Correct, a.Item2 + kv.Value.Total));
-            var pct = total == 0 ? -1 : (double)ok / total;
-            weak.Children.Add(Col(5, Line(Text(name, 13.5), Text(pct < 0 ? "chưa làm" : $"{pct:P0} · {total} lần", 12.5, muted: true)),
-                Bar(Math.Max(0, pct) * 100, 100, 4).Also(b => { if (pct is >= 0 and < 0.6) b.Foreground = Accent; })));
-        }
-        var weakCard = Panel("Tỉ lệ đúng theo phần", weak);
-
-        var lower = new Grid { ColumnDefinitions = new ColumnDefinitions("1.6*,*"), ColumnSpacing = 16 };
-        var right = Col(16, chartCard, weakCard);
-        Grid.SetColumn(right, 1);
-        lower.Children.Add(planCard);
-        lower.Children.Add(right);
-
-        Content = Scroll(Col(20, header, Artwork.Banner(), stats, lower).Also(c => { c.MaxWidth = 1200; c.Margin = new Thickness(0, 0, 14, 0); }));
+        RenderPreview();
+        var page = Col(16, header, Artwork.Banner(null, 64), hero, lower);
+        page.MaxWidth = 1200;
+        page.Margin = new Thickness(0, 0, 14, 0);
+        Content = Scroll(page);
     }
 
-    /// <summary>Ôn: từ đến hạn làm 4 đáp án (từ trong sổ tay không đủ dữ liệu thì dùng thẻ lật), câu sai làm lại.</summary>
-    static void StartReview(List<VocabItem> cards, List<Question> questions)
+    void RenderPreview()
     {
-        var quiz = VocabQuiz.Build(cards, null, cards.Count);
-        var leftover = cards.Where(c => quiz.All(q => q.Item.CardId != c.CardId)).ToList();
-        if (quiz.Count > 0) App.Shell.Show(new VocabQuizView(quiz, "Ôn từ đến hạn"));
-        else if (leftover.Count > 0) App.Shell.Show(new FlashView(leftover, "Ôn thẻ đến hạn"));
-        else if (questions.Count > 0) App.Shell.Show(new QuizView(questions, "Ôn câu sai đến hạn"));
+        var plan = Plan;
+        var chips = new WrapPanel();
+        foreach (var s in plan.Steps)
+            chips.Children.Add(Chip(StepChip(s)).Also(c => c.Margin = new Thickness(0, 0, 8, 8)));
+        var start = new Button { Content = "Bắt đầu", Classes = { "primary" }, MinWidth = 200, MinHeight = 46, FontSize = 18, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, IsEnabled = plan.Steps.Count > 0 };
+        start.Click += (_, _) => Start();
+        var est = plan.Steps.Sum(s => s.EstMinutes);
+        var col = Col(12,
+            plan.Steps.Count == 0 ? Text("Hôm nay không còn gì để lên kế hoạch. Ghé trang Luyện nếu muốn làm thêm.", 14, muted: true) : chips,
+            Row(14, start, Text($"Enter để bắt đầu · khoảng {Math.Max(est, 1)} phút", 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Center)));
+        var dueTotal = _input.DueCards.Count + _input.DueQuestions.Count;
+        var inReview = plan.Steps.Where(s => s.Kind == StepKind.Review).Sum(s => s.ItemIds.Count);
+        if (dueTotal - inReview > 0)
+            col.Children.Add(Text($"Còn {dueTotal - inReview} thẻ đến hạn, sẽ chia dần qua các buổi sau.", 12.5, muted: true));
+        _preview.Content = col;
+        _readingCard.Content = ReadingCard(plan);
+    }
+
+    static string StepChip(SessionStep s) => s.Kind switch
+    {
+        StepKind.Review => $"Ôn {s.ItemIds.Count} thẻ",
+        StepKind.Reading => $"1 bài đọc: {PlannerInputBuilder.Articles.FirstOrDefault(a => a.Id == s.ItemIds.FirstOrDefault())?.Title ?? s.Title}",
+        StepKind.Weakness => $"{s.ItemIds.Count} câu {FocusName(s.Focus)}",
+        _ => "1 câu nghe",
+    };
+
+    static string FocusName(Weakness? w) => w switch
+    {
+        Weakness.Grammar => "ngữ pháp",
+        Weakness.Affix => "tiền tố/hậu tố",
+        Weakness.KanaWord => "từ viết hiragana",
+        Weakness.Nuance => "từ sắc thái",
+        Weakness.Adverb => "trạng từ",
+        _ => "điểm yếu",
+    };
+
+    static Control ReadingCard(SessionPlan plan)
+    {
+        var id = plan.Steps.FirstOrDefault(s => s.Kind == StepKind.Reading)?.ItemIds.FirstOrDefault();
+        var a = id is null ? null : PlannerInputBuilder.Articles.FirstOrDefault(x => x.Id == id);
+        if (a is null)
+            return Panel("Bài đọc hôm nay", Text("Buổi này không có bài đọc (chọn 30 phút để có), hoặc đã đọc hết bài cấp này. Kệ sách ở mục Đọc.", 13.5, muted: true));
+        var plain = Nihongo.Core.Text.ArticleText.Plain(a.BodyJa).Trim();
+        var cut = plain.IndexOf('。');
+        var hook = cut > 0 && cut < 90 ? plain[..(cut + 1)] : plain.Length > 80 ? plain[..80] + "…" : plain;
+        var body = Col(10,
+            Row(8, Chip(a.Group), Chip(a.Level)),
+            Text(a.Title, 19, bold: true).Also(t => t.FontFamily = Serif),
+            Text(hook, 15).Also(t => { t.FontFamily = new FontFamily("Yu Mincho, Yu Gothic UI, Meiryo"); t.MaxLines = 2; t.TextTrimming = TextTrimming.CharacterEllipsis; }),
+            Btn("Đọc bài này", () => App.Shell.Show(new ArticleReaderView(a, null, false))).Also(b => { b.Classes.Add("link"); b.HorizontalAlignment = HorizontalAlignment.Left; }));
+        return Panel("Bài đọc hôm nay", body);
+    }
+
+    /// <summary>Vòng mục tiêu XP trong ngày.</summary>
+    static Control GoalRing(int xp, int goal)
+    {
+        const double size = 124, stroke = 11;
+        var frac = Math.Clamp(xp / (double)Math.Max(1, goal), 0, 1);
+        var track = new Ellipse { Width = size, Height = size, StrokeThickness = stroke }.Themed(Shape.StrokeProperty, "Track");
+        var arc = new Arc { Width = size, Height = size, StrokeThickness = stroke, StartAngle = -90, SweepAngle = 360 * frac, Stroke = Accent, StrokeLineCap = PenLineCap.Round, IsVisible = frac > 0 };
+        var center = Col(0,
+            Text($"{xp}", 26, bold: true, wrap: false).Also(t => { t.HorizontalAlignment = HorizontalAlignment.Center; t.FontFamily = Serif; }),
+            Text($"/ {goal} XP", 12, muted: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center));
+        center.HorizontalAlignment = HorizontalAlignment.Center;
+        center.VerticalAlignment = VerticalAlignment.Center;
+        var ring = new Panel { Width = size, Height = size, Children = { track, arc, center } };
+        var caption = Text(xp >= goal ? "Đã đạt mục tiêu ngày" : "Mục tiêu hôm nay", 12.5, muted: true, wrap: false).Also(t => t.HorizontalAlignment = HorizontalAlignment.Center);
+        return Col(8, ring, caption).Also(c => c.VerticalAlignment = VerticalAlignment.Center);
+    }
+
+    /// <summary>12 tuần × 7 ngày, ô đậm dần theo XP (so với mục tiêu ngày).</summary>
+    static Control Heatmap(DateOnly today, int goal)
+    {
+        const double cell = 13, gap = 3;
+        var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        var start = monday.AddDays(-7 * 11);
+        var xp = App.Progress.XpByDay(start);
+        var cols = Row(gap);
+        var active = 0;
+        for (var w = 0; w < 12; w++)
+        {
+            var col = Col(gap);
+            for (var d = 0; d < 7; d++)
+            {
+                var day = start.AddDays(w * 7 + d);
+                var v = xp.GetValueOrDefault(day);
+                var sq = new Border { Width = cell, Height = cell, CornerRadius = new CornerRadius(3) };
+                if (day > today) sq.Opacity = 0;
+                else if (v <= 0) sq.Themed(Border.BackgroundProperty, "Track");
+                else { active++; sq.Background = Accent; sq.Opacity = 0.3 + 0.7 * Math.Min(1, v / (double)Math.Max(1, goal)); }
+                if (day == today) { sq.BorderThickness = new Thickness(1.5); sq.Themed(Border.BorderBrushProperty, "Ink"); }
+                ToolTip.SetTip(sq, $"{day:dd/MM}: {v} XP");
+                col.Children.Add(sq);
+            }
+            cols.Children.Add(col);
+        }
+        return Col(10, cols, Text($"{active} ngày có học", 12.5, muted: true));
+    }
+
+    void Start()
+    {
+        if (Plan.Steps.Count == 0) return;
+        App.Shell.Show(new SessionView(Plan));
+    }
+
+    public bool HandleKey(KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return false;
+        Start();
+        return true;
     }
 
     public static string Label(WrongReason r) => r switch
