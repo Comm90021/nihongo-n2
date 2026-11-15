@@ -1,4 +1,4 @@
-# NihongoApp: app Windows ôn N2
+﻿# NihongoApp: app Windows ôn N2
 
 C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Giao diện gốc; WebView2 chỉ dùng cho khung video YouTube và tab Gemini.
 
@@ -7,13 +7,15 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 ## Cấu trúc
 | Thư mục | Vai trò |
 |---|---|
-| `src/Nihongo.Core` | Model, `ContentStore` (đọc `noi_dung.db`, chỉ đọc), `ProgressStore` (lịch ôn trong `tien_do.db`), `AppPaths` |
-| `src/Nihongo.Core/Quiz` | Logic thuần, có test: `VocabQuiz` (sinh câu 4 đáp án; nguồn từ qua `VocabQuiz.Source`), `ExamScore` (chấm 言語知識/読解, N1 ranh giới 問題7, N2 問題9), `ExamFile` (kiểm file đề JSON) |
-| `src/Nihongo.Core/Text` | `GrammarIndex` (dò mẫu ngữ pháp V12 trong câu), `LinkPicker` (lấy link bài từ trang danh sách theo list_selector) |
-| `src/Nihongo.Tests` | xUnit. `build.ps1` chạy `dotnet test` trước khi đóng gói, đỏ thì dừng. Test dữ liệu đề đọc `../antigravity_out/*/exams` nếu máy có |
+| `frontend/Nihongo.App` | Giao diện Avalonia (Pages, Features, Components, Layouts, Navigation, Services, Styles, Assets). PDF vẽ bằng `Windows.Data.Pdf`, giọng đọc bằng `System.Speech` |
+| `backend/Nihongo.Core` | Logic thuần, có test: `Quiz/` (`VocabQuiz`, `ExamScore`, `ExamFile`), `Text/` (`GrammarIndex`, `LinkPicker`), `Services/`, `Stats/`, `AppPaths` |
+| `backend/Nihongo.Data` | `ContentStore` (đọc `noi_dung.db`, chỉ đọc), `ProgressStore` (`tien_do.db`), `Migrator` |
+| `backend/jobs/Nihongo.Importer` | Dựng `data/noi_dung.db` từ mọi nguồn ở thư mục cha. Chạy lại lúc nào cũng được, khoảng 10 giây |
+| `shared/Nihongo.Shared` | Model dùng chung (`Models/*.cs`), vẫn giữ namespace `Nihongo.Core` |
+| `database/migrations` | `NNN_*.sql` nâng cấp `tien_do.db`, nhúng vào Nihongo.Data. `database/schema/` là bản dump để đọc |
+| `tests/Nihongo.Tests` | xUnit. `build.ps1` chạy `dotnet test` trước khi đóng gói, đỏ thì dừng. Test dữ liệu đề đọc `../antigravity_out/*/exams` nếu máy có |
 | `scripts/nen_audio.ps1` | Nén file nghe thành .m4a mono 24kHz 32kbps (bộ chuyển mã Windows), kiểm thời lượng rồi mới xóa gốc, bỏ nếu không nhỏ hơn 80%, ghi `../../XOA_LOG.md`. File gốc hay bị khóa ngay sau khi nén: script GC + thử xóa lại 15 lần; vẫn khóa thì giữ cả hai (bản cũ từng xóa nhầm bản nén tốt) |
-| `src/Nihongo.Importer` | Dựng `data/noi_dung.db` từ mọi nguồn ở thư mục cha. Chạy lại lúc nào cũng được, mất khoảng 5 giây |
-| `src/Nihongo.Desktop` | Giao diện. View viết bằng C# trong `Views/`, dùng hàm dựng chung `Views/Ui.cs`. PDF vẽ bằng `Windows.Data.Pdf` (`Services/PdfPages.cs`), giọng đọc bằng `System.Speech` |
+| `storage/` | Chỉ có README: dữ liệu chạy ở `data/`, tài liệu học ở thư mục cha |
 | `data/` | `noi_dung.db` (dựng lại được) và `tien_do.db` (**tiến độ của user, không được xóa hay ghi đè**) |
 | `dist/` | File `NihongoN2.exe` đóng gói tự chứa, chạy không cần cài .NET |
 
@@ -21,7 +23,7 @@ C# .NET 10, Avalonia 11.3.22 (cố ý dùng bản 11, chưa lên 12), SQLite. Gi
 - Dựng dữ liệu và đóng gói: `powershell -ExecutionPolicy Bypass -File build.ps1` (`-SkipData`, `-SkipApp` làm một nửa; `-Clean` xóa bin/obj ~600MB sau khi xong).
 - `scripts\backup.ps1` (zip tien_do.db), `scripts\restore.ps1 <zip|db>` (giữ bản cũ thành `tien_do.truoc_khoi_phuc_*.db`), `scripts\update.ps1` (sao lưu, git pull, build lại).
 - Công cụ ở `D:\tools` (dotnet, git, bộ đệm NuGet). Shell mới phải đặt `PATH`, `DOTNET_ROOT`, và **`NUGET_PACKAGES=D:\tools\nuget\packages`** (đặt nhầm `D:\tools\nuget` thì tải lại toàn bộ gói thành bản thừa 800MB, đã dính một lần).
-- Bản Debug (`src\Nihongo.Desktop\bin\Debug\...\NihongoN2.exe`) phụ thuộc runtime: phải đặt `DOTNET_ROOT=D:\tools\dotnet` trước khi chạy, nếu không hiện hộp thoại đòi cài .NET.
+- Bản Debug (`frontend\Nihongo.App\bin\Debug\...\NihongoN2.exe`) phụ thuộc runtime: phải đặt `DOTNET_ROOT=D:\tools\dotnet` trước khi chạy, nếu không hiện hộp thoại đòi cài .NET.
 - App tìm thư mục `data` bằng cách đi ngược lên từ thư mục exe, hoặc theo biến `NIHONGO_DATA`.
 
 ## Nguồn dữ liệu và thứ tự ưu tiên (trong `Importer/Program.cs`)
@@ -182,5 +184,5 @@ Dữ liệu nạp bằng `ImportExtra` (Importer), đọc bằng `ContentStore.E
 Mở cửa sổ khoảng 1,0–1,1 giây. RAM khoảng 135MB, khi xem PDF khoảng 230MB. File exe 76MB. Bản nén chỉ 23MB nhưng mở mất 3,3 giây nên không dùng.
 
 ## Kiểm thử
-Test tự động: src/Nihongo.Tests (xUnit, 56 test). Tự kiểm trong app: NIHONGO_SELFTEST=ui|video|extra. Cách cũ: script PowerShell dùng UI Automation, chọn mục menu theo `AutomationProperties.Name`, bấm nút theo tên, rồi chụp màn hình. Bôi đen chữ thì giả lập kéo chuột bằng `SetCursorPos` + `mouse_event` (UIA không bôi đen được). Script .ps1 có tiếng Việt phải lưu UTF-8 có BOM. Test chạy trên tien_do.db thật: dọn những gì test thêm vào (kênh theo dõi, video đã mở) sau khi xong.
+Test tự động: tests/Nihongo.Tests (xUnit, 56 test). Tự kiểm trong app: NIHONGO_SELFTEST=ui|video|extra. Cách cũ: script PowerShell dùng UI Automation, chọn mục menu theo `AutomationProperties.Name`, bấm nút theo tên, rồi chụp màn hình. Bôi đen chữ thì giả lập kéo chuột bằng `SetCursorPos` + `mouse_event` (UIA không bôi đen được). Script .ps1 có tiếng Việt phải lưu UTF-8 có BOM. Test chạy trên tien_do.db thật: dọn những gì test thêm vào (kênh theo dõi, video đã mở) sau khi xong.
 - **Màn có khung WebView2 thì UI Automation không đọc được cây control.** Đừng bấm chuột theo tọa độ: user hay đang dùng máy, app không lên được phía trước, và bấm sẽ trúng cửa sổ khác (suýt bấm vào Zalo của user). Dùng tự kiểm trong app: `NIHONGO_SELFTEST=video` + `NIHONGO_SELFTEST_OUT=<thư mục>` (`Services/SelfTest.cs`). App tự mở video đã lưu (tắt tiếng, không giành focus, không ghi tiến độ xem), đo vị trí câu đang phát, kiểm đồng bộ, kiểm chồng lấn, chụp ảnh bản vẽ ở tỉ lệ 1:1 (chụp theo 150% thì danh sách ảo hóa vẽ lệch trong ảnh), rồi tự đóng.

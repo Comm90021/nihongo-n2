@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -17,8 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Nihongo.Core\Nihongo.Core.csproj" />
-    <ProjectReference Include="..\..\src\Nihongo.Data\Nihongo.Data.csproj" />
+    <ProjectReference Include="..\..\backend\Nihongo.Core\Nihongo.Core.csproj" />
+    <ProjectReference Include="..\..\backend\Nihongo.Data\Nihongo.Data.csproj" />
   </ItemGroup>
 
 </Project>

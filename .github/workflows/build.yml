@@ -1,0 +1,19 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - name: Build
+        run: dotnet build NihongoApp.sln -c Release
+      # Test dữ liệu đề tự bỏ qua khi không có thư mục dữ liệu (CI không có).
+      - name: Test
+        run: dotnet test tests/Nihongo.Tests -c Release --no-build

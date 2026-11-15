@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -25,8 +25,8 @@
     <AvaloniaResource Include="Assets\app.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Nihongo.Core\Nihongo.Core.csproj" />
-    <ProjectReference Include="..\Nihongo.Data\Nihongo.Data.csproj" />
+    <ProjectReference Include="..\..\backend\Nihongo.Core\Nihongo.Core.csproj" />
+    <ProjectReference Include="..\..\backend\Nihongo.Data\Nihongo.Data.csproj" />
     <Using Include="Nihongo.Data" />
   </ItemGroup>
 </Project>

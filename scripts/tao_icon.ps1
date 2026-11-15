@@ -1,7 +1,7 @@
 ﻿# Vẽ icon app: chữ 日 (Yu Mincho đậm) trắng trên ô vuông bo góc màu son (đỏ cờ Nhật), xuất .ico nhiều cỡ.
 # Chạy lại khi muốn đổi icon: powershell -ExecutionPolicy Bypass -File scripts\tao_icon.ps1
 Add-Type -AssemblyName System.Drawing
-$out = Join-Path $PSScriptRoot '..\src\Nihongo.App\Assets\app.ico'
+$out = Join-Path $PSScriptRoot '..\frontend\Nihongo.App\Assets\app.ico'
 $sizes = 16, 24, 32, 48, 64, 128, 256
 $pngs = foreach ($s in $sizes) {
   $bmp = New-Object Drawing.Bitmap $s, $s

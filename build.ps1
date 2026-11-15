@@ -17,9 +17,9 @@ $env:DOTNET_NOLOGO = '1'
 Set-Location $PSScriptRoot
 
 if (-not $SkipData) {
-  dotnet build src\Nihongo.Importer -c Release -v q
+  dotnet build backend\jobs\Nihongo.Importer -c Release -v q
   # Importer đọc tài liệu ở thư mục cha của repo. Không bao giờ đụng tới data\tien_do.db.
-  dotnet src\Nihongo.Importer\bin\Release\net10.0\Nihongo.Importer.dll (Resolve-Path ..).Path
+  dotnet backend\jobs\Nihongo.Importer\bin\Release\net10.0\Nihongo.Importer.dll (Resolve-Path ..).Path
 }
 
 if (-not $SkipApp) {
@@ -28,13 +28,13 @@ if (-not $SkipApp) {
   dotnet test tests\Nihongo.Tests -v q
   if ($LASTEXITCODE -ne 0) { throw 'Có test không đạt. Sửa xong mới đóng gói.' }
   # Không nén và có biên dịch sẵn: file to hơn (~80MB) nhưng mở nhanh gấp 3 so với bản nén.
-  dotnet publish src\Nihongo.App -c Release -r win-x64 --self-contained true `
+  dotnet publish frontend\Nihongo.App -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true `
     -p:PublishTrimmed=true -p:TrimMode=partial -p:DebugType=none -o dist -v q
   "App: $((Resolve-Path dist\NihongoN2.exe).Path)"
 }
 
 if ($Clean) {
-  Get-ChildItem src -Recurse -Directory | Where-Object { $_.Name -in 'bin', 'obj' } | Remove-Item -Recurse -Force
+  Get-ChildItem frontend, backend, shared, tests -Recurse -Directory | Where-Object { $_.Name -in 'bin', 'obj' } | Remove-Item -Recurse -Force
   'Đã xóa bin\ và obj\.'
 }

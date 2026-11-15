@@ -1,6 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!-- Nghiệp vụ thuần (không giao diện, không SQL): model, chấm điểm, lịch ôn, thống kê, lập buổi học. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\Nihongo.Shared\Nihongo.Shared.csproj" />
+  </ItemGroup>
 </Project>

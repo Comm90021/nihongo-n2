@@ -1,18 +1,36 @@
-# Kiến trúc v2
+﻿# Kiến trúc v2
 
-Ánh xạ từ mẫu web (`Cau truc cua app.md`) sang app chạy trên một máy. Không có backend, docker hay nginx.
+Repo theo mẫu web (`Cau truc cua app.md`), nhưng là app chạy trên một máy: không có server, docker hay nginx.
+
+```
+NihongoApp/
+├── frontend/Nihongo.App/          Avalonia 11 (exe NihongoN2)
+├── backend/Nihongo.Core/          logic thuần, có test
+├── backend/Nihongo.Data/          ContentStore, ProgressStore, Migrator
+├── backend/jobs/Nihongo.Importer/ dựng noi_dung.db
+├── shared/Nihongo.Shared/         model dùng chung
+├── database/migrations/           NNN_*.sql cho tien_do.db
+├── database/schema/               dump cấu trúc để đọc
+├── storage/                       README (dữ liệu thật ở data/ và thư mục cha)
+├── tests/Nihongo.Tests/
+├── docs/  scripts/  .github/workflows/
+├── build.ps1  NihongoApp.sln
+└── data/  dist/                   không commit
+```
 
 | Mẫu web | v2 | Ghi chú |
 |---|---|---|
-| frontend/ | `src/Nihongo.App` | Avalonia 11. Chỉ chứa giao diện và dịch vụ của Windows (âm thanh, PDF, WebView2 cho 電験) |
-| backend/services, shared/ | `src/Nihongo.Core` | Logic thuần, có test. Không có SQL, không có giao diện |
-| backend/repositories, database/ | `src/Nihongo.Data` | `ContentStore` đọc `noi_dung.db` (chỉ đọc), `ProgressStore` đọc ghi `tien_do.db`, `Migrations/*.sql` |
-| backend/jobs | `src/Nihongo.Importer` | Dựng lại `noi_dung.db` từ thư mục cha. Mỗi nguồn một file trong `Sources/` |
+| frontend/ | `frontend/Nihongo.App` | Chỉ chứa giao diện và dịch vụ của Windows (âm thanh, PDF, WebView2 cho 電験) |
+| backend/services | `backend/Nihongo.Core` | Logic thuần. Không có SQL, không có giao diện |
+| backend/repositories | `backend/Nihongo.Data` | `ContentStore` đọc `noi_dung.db` (chỉ đọc), `ProgressStore` đọc ghi `tien_do.db` |
+| backend/jobs | `backend/jobs/Nihongo.Importer` | Dựng lại `noi_dung.db` từ thư mục cha. Mỗi nguồn một file trong `Sources/` |
+| shared/ | `shared/Nihongo.Shared` | `Models/*.cs`. Giữ namespace `Nihongo.Core` để chỗ gọi không đổi |
+| database/ | `database/migrations`, `database/schema` | `.sql` nhúng vào Nihongo.Data với tên tài nguyên `Nihongo.Data.Migrations.NNN_*.sql` |
+| storage/ | `storage/README.md` | DB chạy ở `data/`; tài liệu học ở thư mục cha |
 | tests/ | `tests/Nihongo.Tests` | Chia `Core/`, `Data/` và các test cũ ở gốc |
-| docs/, scripts/, .github/ | giữ tên | |
+| docs/, scripts/, .github/ | giữ tên | CI: `.github/workflows/build.yml` |
 
-Hướng phụ thuộc: `App → Data → Core`, `Importer → Data → Core`. Core không tham chiếu dự án nào.
-
+Hướng phụ thuộc: `App → Data → Core → Shared`, `Importer → Data → Core`. Shared không tham chiếu dự án nào.
 ## Nihongo.App
 ```
 Assets/      ảnh, icon
@@ -28,8 +46,8 @@ Services/    Audio, Tts, PdfPages, WebHost, Log, SelfTest
 Thanh bên có 6 mục: **Hôm nay · Đọc · Luyện · Thi thử · Tiến độ**, rồi một vạch ngăn, rồi **電験**. Bánh răng Cài đặt nằm dưới cùng.
 
 ## Hợp đồng giữa các tầng (đợt 1)
-- `Core/Models/Article.cs`: `Article`, `ArticleMark`, `ArticleQuestion`, `MarkKind`.
-- `Core/Models/Session.cs`: `SessionPlan`, `SessionStep`, `PlannerInput`, `ISessionPlanner`, `SrsState`, `SessionSummary`, `Weakness`.
+- `Shared/Models/Article.cs`: `Article`, `ArticleMark`, `ArticleQuestion`, `MarkKind`.
+- `Shared/Models/Session.cs`: `SessionPlan`, `SessionStep`, `PlannerInput`, `ISessionPlanner`, `SrsState`, `SessionSummary`, `Weakness`.
 - `Core/Services/Contracts.cs`: `SrsScheduler` (SM-2), `XpRules`.
 - `Core/Text/ArticleContracts.cs`: `ArticleParser` (đọc Markdown "Các đoạn văn"), `ArticleText` (tách `**từ**[n]`).
 
