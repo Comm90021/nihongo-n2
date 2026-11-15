@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -44,7 +44,7 @@ sealed class SettingsView : UserControl
         var sample = Ui.Reading(new TextBlock { Text = "経済の先行きが不透明な中、企業は慎重な姿勢を崩していない。", TextWrapping = TextWrapping.Wrap });
         var sampleVi = Ui.Reading(new TextBlock { Text = "Trong bối cảnh triển vọng kinh tế không rõ ràng, các doanh nghiệp vẫn giữ thái độ thận trọng.", Opacity = 0.62, TextWrapping = TextWrapping.Wrap }, vi: true);
         return Col(12,
-            Text("Chữ khi đọc báo và xem script", 17, bold: true),
+            Text("Chữ khi đọc bài và xem script", 17, bold: true).Also(t => t.FontFamily = Serif),
             Labeled("Phông chữ tiếng Nhật", font),
             Labeled("Cỡ chữ tiếng Nhật", Slider(12, 36, Prefs.ReadSize, Prefs.SetReadSize)),
             Labeled("Cỡ chữ bản dịch", Slider(11, 28, Prefs.ViSize, Prefs.SetViSize)),
@@ -58,7 +58,7 @@ sealed class SettingsView : UserControl
         var compact = new CheckBox { Content = "Thu gọn thanh bên (chỉ hiện biểu tượng)", IsChecked = Prefs.NavCompact };
         compact.IsCheckedChanged += (_, _) => App.Shell.SetCompact(compact.IsChecked == true);
         return Col(12,
-            Text("Giao diện", 17, bold: true),
+            Text("Giao diện", 17, bold: true).Also(t => t.FontFamily = Serif),
             Labeled("Màu nền", theme),
             compact,
             Text("Phím tắt: Ctrl+B thu gọn/mở thanh bên · F11 toàn màn hình · Esc thoát toàn màn hình.", 13, muted: true));
@@ -75,7 +75,7 @@ sealed class SettingsView : UserControl
         var play = new CheckBox { Content = "Tự phát âm thanh (bài nghe khi mở đề, câu nghe trong thi thử, đọc từ sau khi trả lời)", IsChecked = Prefs.AutoPlay };
         play.IsCheckedChanged += (_, _) => Prefs.SetAutoPlay(play.IsChecked == true);
         return Col(12,
-            Text("Làm bài", 17, bold: true),
+            Text("Làm bài", 17, bold: true).Also(t => t.FontFamily = Serif),
             Labeled("Tự chuyển câu", mode),
             Labeled("Chờ trước khi chuyển", delay),
             play,
@@ -94,7 +94,7 @@ sealed class SettingsView : UserControl
         };
         var level = new ComboBox { ItemsSource = new[] { "N2", "N1" }, SelectedItem = TodayView.ExamLevel };
         level.SelectionChanged += (_, _) => { if (level.SelectedItem is string l) App.Progress.SetSetting("exam_level", l); };
-        return Col(12, Text("Kỳ thi", 17, bold: true), Labeled("Ngày thi", date), Labeled("Cấp", level), info,
+        return Col(12, Text("Kỳ thi", 17, bold: true).Also(t => t.FontFamily = Serif), Labeled("Ngày thi", date), Labeled("Cấp", level), info,
             Text("Mở lại trang Hôm nay để thấy số ngày mới.", 13, muted: true));
     }
 
@@ -104,7 +104,7 @@ sealed class SettingsView : UserControl
         dir.LostFocus += (_, _) => { if (!string.IsNullOrWhiteSpace(dir.Text)) Prefs.SetBackupDir(dir.Text.Trim()); RefreshInfo(); };
         RefreshInfo();
         return Col(12,
-            Text("Sao lưu tiến độ", 17, bold: true),
+            Text("Sao lưu tiến độ", 17, bold: true).Also(t => t.FontFamily = Serif),
             Text("Tiến độ (lịch ôn, kết quả, sổ tay, cài đặt) nằm trong một file tien_do.db. App tự sao lưu mỗi ngày một lần, giữ 20 bản mới nhất. Nên đặt thư mục sao lưu ở ổ khác hoặc thư mục OneDrive/Google Drive.", 13, muted: true),
             Row(8, dir, Btn("Chọn thư mục...", async () =>
             {
@@ -141,7 +141,7 @@ sealed class SettingsView : UserControl
     }
 
     static Control About() => Col(8,
-        Text("Dữ liệu", 17, bold: true),
+        Text("Dữ liệu", 17, bold: true).Also(t => t.FontFamily = Serif),
         Text($"Nội dung: {AppPaths.ContentDb}", 13, muted: true),
         Text($"Tiến độ: {AppPaths.ProgressDb}", 13, muted: true),
         Text($"Dựng dữ liệu lúc {App.Content.Meta("built_at").Replace('T', ' ')}", 13, muted: true),
