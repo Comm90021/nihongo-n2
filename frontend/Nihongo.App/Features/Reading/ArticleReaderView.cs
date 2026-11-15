@@ -138,8 +138,11 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         var sb = new System.Text.StringBuilder(s.Length * 2);
         for (var i = 0; i < s.Length; i++)
         {
+            // \u7981\u5247: d\u1EA5u c\u00E2u \u0111\u00F3ng kh\u00F4ng \u0111\u1EE9ng \u0111\u1EA7u d\u00F2ng. U+2060 (word joiner) c\u1EA5m ng\u1EAFt tr\u01B0\u1EDBc n\u00F3, k\u1EC3 c\u1EA3 khi d\u1EA5u c\u00E2u
+            // m\u1EDF \u0111\u1EA7u m\u1ED9t Run ngay sau m\u1EE5c t\u00F4 m\u00E0u.
+            if (noStart.IndexOf(s[i]) >= 0) sb.Append('\u2060');
             sb.Append(s[i]);
-            var cjk = s[i] >= '\u2E80' && s[i] != '\u200B';
+            var cjk = s[i] >= '\u2E80' && s[i] != '\u200B' && s[i] != '\u2060';
             var openAfter = "「『（【".IndexOf(s[i]) >= 0;
             if (cjk && !openAfter && i + 1 < s.Length && s[i + 1] >= '\u2E80' && noStart.IndexOf(s[i + 1]) < 0) sb.Append('\u200B');
         }
@@ -147,7 +150,8 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
     }
     TextBlock Paragraph(string line)
     {
-        var tb = Reading(new TextBlock { TextWrapping = TextWrapping.Wrap });
+        // WrapWithOverflow: chỉ ngắt ở chỗ được phép (ZWSP giữa các chữ), không "ngắt khẩn cấp" trước dấu câu.
+        var tb = Reading(new TextBlock { TextWrapping = TextWrapping.WrapWithOverflow });
         var ranges = new List<(int Start, int End, ArticleMark Mark)>();
         var pos = 0;
         foreach (var seg in ArticleText.Segments(line))
