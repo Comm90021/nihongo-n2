@@ -65,10 +65,14 @@ sealed class SessionView : UserControl, IKeyTarget
         _ => "Nghe",
     };
 
-    void OnXp() => Dispatcher.UIThread.Post(() => _xp.Text = $"+{App.Progress.TotalXp() - _startXp} XP");
+    void OnXp() => Dispatcher.UIThread.Post(RefreshXp);
+
+    /// <summary>XP kiếm được từ lúc bắt đầu buổi học = tổng xp_log hiện tại trừ tổng lúc bắt đầu. Đọc lại ở mỗi lần đổi bước, không chỉ khi có sự kiện.</summary>
+    void RefreshXp() => _xp.Text = $"+{Math.Max(0, App.Progress.TotalXp() - _startXp)} XP";
 
     void RenderPills()
     {
+        RefreshXp();
         _pills.Children.Clear();
         for (var i = 0; i < _plan.Steps.Count; i++)
         {
@@ -260,6 +264,7 @@ sealed class SessionView : UserControl, IKeyTarget
     // Dùng cho Services/SelfTest (NIHONGO_SELFTEST=session).
     internal StepKind? TestStep => _finished || _step < 0 || _step >= _plan.Steps.Count ? null : _plan.Steps[_step].Kind;
     internal Control? TestChild => _host.Content as Control;
+    internal string TestXp => _xp.Text ?? "";
     internal bool TestFinished => _finished;
     internal void TestSkipStep() { if (!_finished) NextStep(); }
     internal void TestAskExit() => AskExit();

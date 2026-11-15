@@ -1,4 +1,4 @@
-﻿using Nihongo.Core;
+using Nihongo.Core;
 using Nihongo.Core.Stats;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -17,7 +17,7 @@ namespace Nihongo.App.Services;
 static class SelfTest
 {
     static string Mode => Environment.GetEnvironmentVariable("NIHONGO_SELFTEST") ?? "";
-    public static bool Enabled => Mode is "ui" or "extra" or "sizes" or "review" or "keys" or "stats" or "denken" or "read" or "session";
+    public static bool Enabled => Mode is "ui" or "extra" or "sizes" or "review" or "keys" or "stats" or "denken" or "read" or "session" or "progress";
 
     public static async void Run(MainWindow w)
     {
@@ -34,6 +34,7 @@ static class SelfTest
             else if (Mode == "denken") await Denken(w, dir, log);
             else if (Mode == "read") await ReadMode(w, dir, log);
             else if (Mode == "session") await Session(w, dir, log);
+            else if (Mode == "progress") await ProgressMode(w, dir, log);
             else await Ui(w, dir, log);
         }
         catch (Exception ex) { log.Add($"LỖI {ex}"); }
@@ -347,7 +348,7 @@ static class SelfTest
         {
             var step = v.TestStep!.Value;
             var child = v.TestChild;
-            if (shot.Add(step)) { await Task.Delay(500); Shot(w, dir, $"{tag}_{(int)step}_{step}"); }
+            if (shot.Add(step)) { await Task.Delay(500); log.Add($"Bước {step}: thanh trên {v.TestXp}"); Shot(w, dir, $"{tag}_{(int)step}_{step}"); }
             if (child is VocabQuizView vq && guard < 8) { Press(w, Avalonia.Input.Key.D1 + vq.TestAnswer); await Task.Delay(150); Press(w, Avalonia.Input.Key.Enter); }
             else if (child is QuizView q && guard < 14) { Press(w, Avalonia.Input.Key.D1 + (q.TestCurrent.Answer - 1)); await Task.Delay(150); Press(w, Avalonia.Input.Key.Enter); }
             else if (child is FlashView && guard < 10) { Press(w, Avalonia.Input.Key.Space); await Task.Delay(100); Press(w, Avalonia.Input.Key.D2); }
@@ -359,6 +360,36 @@ static class SelfTest
         log.Add($"Buổi {plan.Minutes} phút xong: {v.TestFinished}");
     }
 
+    // ---------------------------------------------------------------- Tiến độ (ghi tien_do.db: chỉ chạy trên bản sao)
+    static async Task ProgressMode(MainWindow w, string dir, List<string> log)
+    {
+        w.Width = 1280; w.Height = 672;
+        await Task.Delay(1500);
+        var read = App.Progress.ReadArticleIds();
+        foreach (var a in ArticleShelf.All.Where(a => !read.Contains(a.Id)).Take(Math.Max(0, 4 - read.Count))) App.Progress.MarkArticleRead(a.Id, 2, 3);
+        read = App.Progress.ReadArticleIds();
+        var g = ArticleShelf.All.First(a => read.Contains(a.Id)).Group;
+        App.Progress.SetSetting("progress_open_group", g);
+        App.Progress.SetSetting("stats_tab", "0");
+        log.Add($"Đã đọc {read.Count} bài; mở nhóm {g}");
+        w.GoTo("progress"); await Task.Delay(1500); Shot(w, dir, "p1_dau_trang");
+        var sv = ((Avalonia.Controls.Control)w.CurrentView!).GetVisualDescendants().OfType<Avalonia.Controls.ScrollViewer>().First();
+        log.Add($"Cuộn: extent {sv.Extent.Height:0} viewport {sv.Viewport.Height:0}");
+        foreach (var off in new[] { 480, 960 })
+        {
+            sv.Offset = new Vector(0, off); await Task.Delay(600); Shot(w, dir, $"p2_cuon_{off}");
+        }
+        // Luyện điểm yếu: mở QuizView ~10 câu rồi quay lại.
+        var pool = App.Content.Questions.Where(q => q.Options.Length > 0 && Nihongo.Core.Services.SessionPlanner.Categorize(q) == Nihongo.Core.Weakness.Grammar).ToList();
+        StatsView.PracticeForTest(pool);
+        await Task.Delay(800); Shot(w, dir, "p3_luyen_diem_yeu");
+        log.Add($"Màn: {w.CurrentView?.GetType().Name}");
+        w.Show(new ArticleReaderView(ArticleShelf.All.First(a => read.Contains(a.Id)))); await Task.Delay(800);
+        w.BackToSection(); await Task.Delay(1200);
+        log.Add($"Sau Back: {w.CurrentView?.GetType().Name}");
+        Shot(w, dir, "p4_sau_back");
+        App.Progress.SetSetting("progress_open_group", "");
+    }
     static void Shot(MainWindow w, string dir, string name)
     {
         // Chụp ở tỉ lệ 1:1 (96 dpi). Chụp theo hệ số phóng màn hình (150%) thì danh sách ảo hóa bị vẽ lệch trong ảnh.
