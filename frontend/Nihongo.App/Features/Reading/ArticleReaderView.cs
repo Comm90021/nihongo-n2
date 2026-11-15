@@ -37,6 +37,9 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
     readonly HashSet<string> _added = [];
     readonly StackPanel _qPanel = new() { Spacing = 12 };
     readonly Border _viCard;
+    readonly List<Control> _viParas = [];
+    readonly StackPanel _col;
+    readonly Grid _root;
     readonly Border _markHost = new() { IsVisible = false };
     readonly Button _viBtn;
     readonly ScrollViewer _scroll;
@@ -56,23 +59,42 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         var sub = Text($"{article.Level} · {article.Group}" + (article.Form != "" ? $" · {article.Form}" : ""), 13, muted: true);
         var top = TopBar(article.Title, sub, inSession ? null : () => App.Shell.BackToSection(), _viBtn);
 
-        var viText = Reading(Text(article.BodyVi != "" ? article.BodyVi : "Chưa có bản dịch cho bài này.", 15, muted: true), vi: true);
+        // Bản dịch hiện dưới từng đoạn Nhật khi số đoạn khớp nhau; không khớp thì gom một thẻ sau bài đọc.
+        var viLines = article.BodyVi.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var jaCount = article.BodyJa.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+        var perPara = viLines.Length == jaCount && jaCount > 0;
+        var viText = Reading(Text(article.BodyVi != "" ? article.BodyVi : "Chưa có bản dịch cho bài này.", 16, muted: true), vi: true);
         _viCard = new Border { Classes = { "card" }, IsVisible = false, Child = viText };
 
-        var col = Col(14, Legend(), BuildBody(), _viCard, MarkChips(), Divider(), _qPanel);
-        col.MaxWidth = 760;
-        col.HorizontalAlignment = HorizontalAlignment.Center;
-        col.Margin = new Thickness(0, 0, 0, 40);
-        _scroll = Scroll(new Border { Padding = new Thickness(16, 0), Child = col });
+        _col = Col(18, Legend(), BuildBody(perPara ? viLines : null), perPara ? null : _viCard, MarkChips(), Divider(), _qPanel);
+        _col.HorizontalAlignment = HorizontalAlignment.Center;
+        _col.Margin = new Thickness(0, 4, 0, 48);
+        _scroll = Scroll(new Border { Padding = new Thickness(20, 0), Child = _col });
 
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 4 };
+        _root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto"), ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowSpacing = 4 };
+        Grid.SetColumnSpan(top, 2);
         Grid.SetRow(_scroll, 1);
         Grid.SetRow(_markHost, 2);
-        root.Children.Add(top);
-        root.Children.Add(_scroll);
-        root.Children.Add(_markHost);
-        Content = root;
+        Grid.SetColumnSpan(_markHost, 2);
+        _root.Children.Add(top);
+        _root.Children.Add(_scroll);
+        _root.Children.Add(_markHost);
+        Content = _root;
+        SizeChanged += (_, e) => Relayout(e.NewSize.Width);
         RenderQuestions();
+    }
+
+    /// <summary>Cột chữ theo cỡ cửa sổ (khoảng 3/4 vùng nội dung, tối đa 980). Cửa sổ rộng thì thẻ ghi chú nằm cột phải, hẹp thì nằm dưới.</summary>
+    void Relayout(double width)
+    {
+        var wide = width >= 1000;
+        Grid.SetRow(_markHost, wide ? 1 : 2);
+        Grid.SetColumn(_markHost, wide ? 1 : 0);
+        Grid.SetColumnSpan(_markHost, wide ? 1 : 2);
+        _markHost.MaxWidth = wide ? 340 : double.PositiveInfinity;
+        _markHost.VerticalAlignment = wide ? VerticalAlignment.Top : VerticalAlignment.Stretch;
+        var avail = wide && _markHost.IsVisible ? width - 360 : width;
+        _col.Width = Math.Clamp(avail * (wide && _markHost.IsVisible ? 0.94 : 0.82), Math.Min(480, avail - 40), 980);
     }
 
     public Article Article { get; }
@@ -93,11 +115,19 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         return Wrap(items.ToArray());
     }
 
-    Control BuildBody()
+    Control BuildBody(string[]? vi)
     {
-        var col = Col(14);
+        var col = Col(18);
         var lines = Article.BodyJa.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var line in lines) col.Children.Add(Paragraph(line));
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (vi is null) { col.Children.Add(Paragraph(lines[i])); continue; }
+            var tr = Reading(Text(vi[i], 16, muted: true), vi: true);
+            tr.IsVisible = false;
+            tr.Margin = new Thickness(0, 6, 0, 0);
+            _viParas.Add(tr);
+            col.Children.Add(Col(0, Paragraph(lines[i]), tr));
+        }
         return col;
     }
 
@@ -151,11 +181,11 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         if (Article.Marks.Count == 0) return new Control { Height = 0 };
         var chips = Article.Marks.Select(m =>
         {
-            var b = new Button { Content = Text(m.Text, 14, wrap: false), Padding = new Thickness(10, 4), Background = KindBrush(m.Kind), Focusable = false };
+            var b = new Button { Content = Text(m.Text, 14, wrap: false), Padding = new Thickness(12, 6), Background = KindBrush(m.Kind), Focusable = false };
             b.Click += (_, _) => ShowMark(m);
             return (Control)b;
         }).ToArray();
-        return Col(6, Text($"Mục đánh dấu ({Article.Marks.Count})", 13, bold: true, muted: true), Wrap(chips));
+        return Col(8, Text($"Mục đánh dấu ({Article.Marks.Count})", 14, bold: true, muted: true), Wrap(chips)).Also(c => c.Margin = new Thickness(0, 8, 0, 0));
     }
 
     void ShowMark(ArticleMark m)
@@ -178,16 +208,18 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         var head = Row(10,
             Reading(Text(m.Text, 20, bold: true, wrap: false)),
             new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(8, 2), Background = KindBrush(m.Kind), Child = Text(KindLabel(m.Kind), 12, wrap: false) });
-        var close = IconBtn(Glyph.Close, "Đóng (Esc)", () => _markHost.IsVisible = false);
+        var close = IconBtn(Glyph.Close, "Đóng (Esc)", () => { _markHost.IsVisible = false; Relayout(Bounds.Width); });
         var body = Col(8, Line(head, Row(8, addBtn, close)), Text(m.Note != "" ? m.Note : "Chưa có ghi chú.", 15));
         _markHost.Child = new Border { Classes = { "card" }, Margin = new Thickness(16, 4, 16, 12), MaxWidth = 760, Child = body };
         _markHost.IsVisible = true;
+        Relayout(Bounds.Width);
     }
 
     void ToggleVi()
     {
         _showVi = !_showVi;
-        _viCard.IsVisible = _showVi;
+        _viCard.IsVisible = _showVi && _viParas.Count == 0;
+        foreach (var c in _viParas) c.IsVisible = _showVi;
         _viBtn.Content = _showVi ? "Ẩn bản dịch (V)" : "Hiện bản dịch (V)";
     }
 

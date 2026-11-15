@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -17,15 +17,15 @@ static partial class Ui
     static IBrush Brush(object? o) => o as IBrush ?? Brushes.Gray;
 
     /// <summary>Kiểu chữ có chân cho tiêu đề và số to (Georgia có sẵn trên Windows, đủ dấu tiếng Việt).</summary>
-    public static readonly FontFamily Serif = new("Georgia, Yu Mincho, serif");
+    public static readonly FontFamily Serif = new("Cambria, Segoe UI, Yu Mincho");
 
     /// <summary>Thang cỡ chữ chung của app (7 bậc). Mọi Text(…, size) tự gom về bậc gần nhất nên các màn đồng đều.</summary>
     public static class Fs
     {
-        public const double Caption = 12, Small = 13, Body = 15, Lead = 17, Heading = 22, Page = 28, Display = 40;
+        public const double Caption = 13, Small = 14, Body = 16, Lead = 18, Heading = 24, Page = 30, Display = 40;
 
         public static double Snap(double size) =>
-            size <= 12.5 ? Caption : size <= 13.5 ? Small : size <= 15 ? Body : size <= 18 ? Lead : size <= 24 ? Heading : size <= 30 ? Page : Display;
+            size <= 12.5 ? Caption : size <= 13.5 ? Small : size <= 16 ? Body : size <= 18 ? Lead : size <= 24 ? Heading : size <= 30 ? Page : Display;
     }
 
     public static TextBlock Text(string text, double size = 15, bool bold = false, bool muted = false, bool wrap = true)
@@ -53,7 +53,7 @@ static partial class Ui
         return c;
     }
 
-    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontFamily = Serif; t.FontSize = 34; t.FontWeight = FontWeight.SemiBold; t.LetterSpacing = -0.3; });
+    public static TextBlock Title(string text) => Text(text, 28, bold: true).Also(t => { t.FontFamily = Serif; t.FontSize = 36; t.FontWeight = FontWeight.SemiBold; t.LetterSpacing = -0.3; });
 
     /// <summary>Số to kiểu có chân (điểm, số ngày, số câu).</summary>
     public static TextBlock BigNumber(string text, double size = 34) =>

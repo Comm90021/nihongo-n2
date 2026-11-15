@@ -1,4 +1,4 @@
-<Application xmlns="https://github.com/avaloniaui"
+﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Nihongo.App.App"
              RequestedThemeVariant="Default">
@@ -63,8 +63,8 @@
       <SolidColorBrush x:Key="Bad">#9E2219</SolidColorBrush>
       <SolidColorBrush x:Key="Warn">#B7791F</SolidColorBrush>
       <SolidColorBrush x:Key="Hero">#B3261E</SolidColorBrush>
-      <!-- Tiêu đề và số to dùng kiểu có chân (Georgia có sẵn trên Windows, có đủ dấu tiếng Việt). -->
-      <FontFamily x:Key="SerifFont">Georgia, Yu Mincho, serif</FontFamily>
+      <!-- Tiêu đề và số to dùng kiểu có chân (Cambria có sẵn trên Windows, có đủ dấu tiếng Việt). -->
+      <FontFamily x:Key="SerifFont">Cambria, Segoe UI, Yu Mincho</FontFamily>
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
