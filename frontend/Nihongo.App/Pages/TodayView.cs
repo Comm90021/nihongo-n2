@@ -19,7 +19,19 @@ namespace Nihongo.App.Views;
 sealed class TodayView : UserControl, IKeyTarget
 {
     /// <summary>Ngày thi và cấp thi chỉnh ở Cài đặt (setting exam_day dạng yyyy-MM-dd, exam_level); mặc định N2 06/12/2026.</summary>
-    public static DateOnly ExamDay => DateOnly.TryParseExact(App.Progress.Setting("exam_day"), "yyyy-MM-dd", out var d) ? d : new DateOnly(2026, 12, 6);
+    /// Ngày đặt tay đã qua thì tự chuyển sang kỳ kế tiếp (Chủ nhật đầu tháng 7 / tháng 12), không đứng ở "0 ngày" mãi.
+    public static DateOnly ExamDay
+    {
+        get
+        {
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            return DateOnly.TryParseExact(App.Progress.Setting("exam_day"), "yyyy-MM-dd", out var d) && d >= today ? d : Nihongo.Core.Stats.StudyStats.NextJlptDay(today);
+        }
+    }
+
+    /// <summary>Các kỳ sau kỳ đang nhắm (năm sau, năm sau nữa), để hiện dưới số ngày đếm ngược.</summary>
+    public static IReadOnlyList<DateOnly> LaterExamDays(int count = 4) =>
+        Nihongo.Core.Stats.StudyStats.UpcomingJlptDays(ExamDay.AddDays(1), count);
     public static string ExamLevel => App.Progress.Setting("exam_level", "N2");
     static readonly string[] WeekDays = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
     static readonly int[] MinuteOptions = [15, 30, 45];
@@ -43,8 +55,15 @@ sealed class TodayView : UserControl, IKeyTarget
         var levelBlock = Col(4,
             Row(8, Badge($"Cấp {level}"), Text($"{into}/{need} XP", 12, muted: true, wrap: false).Also(t => t.VerticalAlignment = VerticalAlignment.Center)),
             Bar(into, need, 4).Also(b => b.Width = 140));
+        // Kỳ đang nhắm + các kỳ sau (Chủ nhật đầu tháng 7 / tháng 12), di chuột để xem số ngày tới từng kỳ.
+        var later = LaterExamDays(4);
+        var countdown = Col(2,
+            Text($"{days}", 30, bold: true, wrap: false).Tint("AccentInk").Also(t => t.FontFamily = Serif),
+            Text($"ngày tới JLPT {ExamLevel} ({ExamDay:dd/MM/yyyy})", 12, muted: true, wrap: false),
+            Text("Kỳ sau: " + string.Join(" · ", later.Take(2).Select(d => $"{d:dd/MM/yyyy}")), 11, muted: true, wrap: false).Also(t => t.Opacity = 0.75));
+        ToolTip.SetTip(countdown, string.Join("\n", new[] { ExamDay }.Concat(later).Select(d => $"JLPT {d:dd/MM/yyyy} ({WeekDays[(int)d.DayOfWeek]}): còn {d.DayNumber - today.DayNumber} ngày")));
         var right = Row(28,
-            Block(Text($"{days}", 30, bold: true, wrap: false).Tint("AccentInk").Also(t => t.FontFamily = Serif), $"ngày tới JLPT {ExamLevel} ({ExamDay:dd/MM})"),
+            countdown,
             Block(Text($"🔥 {Study.Streak()}", 30, bold: true, wrap: false).Also(t => t.FontFamily = Serif), "ngày liên tiếp"),
             levelBlock.Also(c => c.VerticalAlignment = VerticalAlignment.Center));
         var header = Line(

@@ -92,6 +92,9 @@ public class StatsTests
         Assert.Equal(new DateOnly(2026, 12, 6), StudyStats.NextJlptDay(new DateOnly(2026, 12, 6)));
         Assert.Equal(new DateOnly(2027, 7, 4), StudyStats.NextJlptDay(new DateOnly(2026, 12, 7)));
         Assert.Equal(new DateOnly(2026, 7, 5), StudyStats.NextJlptDay(new DateOnly(2026, 1, 15)));
+        // các kỳ năm sau, năm sau nữa: Chủ nhật đầu tháng 7 và tháng 12
+        Assert.Equal(new[] { new DateOnly(2026, 12, 6), new DateOnly(2027, 7, 4), new DateOnly(2027, 12, 5), new DateOnly(2028, 7, 2), new DateOnly(2028, 12, 3) },
+            StudyStats.UpcomingJlptDays(new DateOnly(2026, 11, 16), 5));
     }
 
     [Fact]

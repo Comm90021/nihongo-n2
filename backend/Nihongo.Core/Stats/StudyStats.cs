@@ -60,6 +60,14 @@ public static class StudyStats
         return FirstSunday(from.Year + 1, 7);
     }
 
+    /// <summary><paramref name="count"/> kỳ JLPT liên tiếp từ <paramref name="from"/> (kể cả ngày đó): 06/12/2026, 04/07/2027, 05/12/2027, 02/07/2028…</summary>
+    public static IReadOnlyList<DateOnly> UpcomingJlptDays(DateOnly from, int count)
+    {
+        var list = new List<DateOnly>(count);
+        for (var d = NextJlptDay(from); list.Count < count; d = NextJlptDay(d.AddDays(1))) list.Add(d);
+        return list;
+    }
+
     /// <summary>Số câu và số đúng mỗi ngày trong [from, from+days). Ngày không học vẫn có dòng (0).</summary>
     public static IReadOnlyList<DayStat> Daily(IEnumerable<AttemptRow> attempts, DateOnly from, int days)
     {
