@@ -19,6 +19,7 @@ $env:PATH = 'D:\tools\dotnet;D:\tools\git\cmd;' + $env:PATH
 $env:DOTNET_ROOT = 'D:\tools\dotnet'
 $env:NUGET_PACKAGES = 'D:\tools\nuget\packages'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+$env:AVALONIA_TELEMETRY_OPTOUT = '1'
 
 if ($Model -in @('gpt-6.1-sol')) { throw "Model $Model bị cấm (user không cho dùng model mạnh)." }
 if ($Effort -ne 'medium') { throw 'User chỉ cho dùng mức medium.' }
