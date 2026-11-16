@@ -33,6 +33,25 @@ static class Responsive
         Check();
     }
 
+    /// <summary>
+    /// Chốt chỉ số hàng/cột (và span) của mọi con về trong phạm vi định nghĩa hiện có. Gọi sau khi thay RowDefinitions/ColumnDefinitions
+    /// lúc đổi bố cục hẹp/rộng: con còn giữ chỉ số cũ (vd cột 2 khi chỉ còn 1 cột) làm Grid.MeasureCell văng ArgumentOutOfRangeException.
+    /// </summary>
+    public static void Clamp(Grid g)
+    {
+        var rows = Math.Max(1, g.RowDefinitions.Count);
+        var cols = Math.Max(1, g.ColumnDefinitions.Count);
+        foreach (var c in g.Children)
+        {
+            var r = Math.Clamp(Grid.GetRow(c), 0, rows - 1);
+            var k = Math.Clamp(Grid.GetColumn(c), 0, cols - 1);
+            Grid.SetRow(c, r);
+            Grid.SetColumn(c, k);
+            Grid.SetRowSpan(c, Math.Clamp(Grid.GetRowSpan(c), 1, rows - r));
+            Grid.SetColumnSpan(c, Math.Clamp(Grid.GetColumnSpan(c), 1, cols - k));
+        }
+    }
+
     /// <summary>Chạy <paramref name="action"/> khi <paramref name="c"/> ngừng đổi kích thước (dùng vẽ lại trang PDF cho vừa bề rộng mới).</summary>
     public static void OnResized(Control c, Action action, int ms = 250)
     {
@@ -73,6 +92,7 @@ static class Responsive
                 side.MaxHeight = double.PositiveInfinity;
                 side.Margin = new Thickness(16, 0, 0, 0);
             }
+            Clamp(g);
             side.SetNarrow(narrow);
             changed?.Invoke(narrow);
         }

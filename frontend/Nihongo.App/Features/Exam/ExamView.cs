@@ -175,7 +175,11 @@ sealed class ExamView : UserControl, IKeyTarget
         Grid.SetRowSpan(_left, 1); Grid.SetColumnSpan(_left, 1);
         if (!_two)
         {
+            // Một cột duy nhất: nửa phải và thanh kéo (đang ẩn) phải về ô 0, không được giữ chỉ số cột/hàng cũ (làm Grid.Measure văng ArgumentOutOfRange).
             _body.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            Grid.SetRow(_splitter, 0); Grid.SetColumn(_splitter, 0);
+            Grid.SetRow(_right, 0); Grid.SetColumn(_right, 0);
+            Responsive.Clamp(_body);
             return;
         }
         var r = SplitRatio(_narrow);
@@ -203,6 +207,7 @@ sealed class ExamView : UserControl, IKeyTarget
             _splitter.Height = double.NaN; _splitter.Width = 12;
             ToolTip.SetTip(_splitter, "Kéo để đổi bề rộng hai cột");
         }
+        Responsive.Clamp(_body);
     }
 
     /// <summary>Tỉ lệ phần bài đọc/PDF so với tổng hai nửa, nhớ theo thanh kéo (setting exam_split_v / exam_split_h). Mặc định: bài đọc chữ chia đôi, PDF 60%.</summary>
