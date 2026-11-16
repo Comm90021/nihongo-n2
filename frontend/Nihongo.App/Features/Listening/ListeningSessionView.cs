@@ -220,9 +220,22 @@ sealed class ListeningSessionView : UserControl, IKeyTarget
         }
         if (_submitted)
         {
+            _sheet.Children.Add(AskGemini.PromptButton("Copy để hỏi Gemini kết quả nghe", AskPrompt).Also(b => { b.Classes.Add("strong"); b.Margin = new Thickness(0, 4, 8, 4); }));
             if (_scripts.Count > 0) _sheet.Children.Add(Btn(_showScript ? "Về đề" : "Xem script (chữ)", ToggleScript, primary: true).Also(b => b.Margin = new Thickness(0, 4, 8, 4)));
             if (_set.ScriptPdf != "") _sheet.Children.Add(Btn("Xem script bài nghe (PDF)", () => { _showScript = false; _scriptBtn.Content = "Script"; _viewerHost.Content = _pdfScroll; _ = OpenPdf(_set.ScriptPdf, 1); }).Also(b => b.Margin = new Thickness(0, 4, 8, 4)));
         }
+    }
+
+    /// <summary>Lời nhắc nghe: câu sai kèm script chữ (nếu app có) để Gemini chữa được mà không cần nghe lại.</summary>
+    string AskPrompt()
+    {
+        var wrongItems = _set.Items.Where(i => _picked.GetValueOrDefault(i.Key) != i.Answer).ToList();
+        var lines = wrongItems.Select(i => $"問題{i.Mondai} câu {i.Label}: tôi chọn {(_picked.GetValueOrDefault(i.Key) == 0 ? "(bỏ trống)" : _picked[i.Key].ToString())}, đáp án đúng {i.Answer}");
+        var scripts = string.Join("\n\n", wrongItems.Where(i => _scripts.ContainsKey(i.Key)).Take(12).Select(i => $"【問題{i.Mondai} câu {i.Label}】\n{_scripts[i.Key]}"));
+        var correct = _set.Items.Count - wrongItems.Count;
+        return AskGemini.ResultPrompt(_set.Title, "Nghe hiểu (聴解)", correct, _set.Items.Count, lines,
+            scripts != "" ? "Script (lời thoại) các câu sai:\n\n" + scripts + "\n\nLưu ý: tôi chưa gửi nội dung các phương án (chúng nằm trong đề PDF/âm thanh); cần thì hỏi tôi."
+                : "App chưa có script chữ của kỳ này (chỉ có file nghe và PDF). Cần nội dung câu nào thì hãy bảo tôi dán vào.");
     }
 
     void Submit()

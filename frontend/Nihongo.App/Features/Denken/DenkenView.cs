@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Layout;
 using Nihongo.Core;
 using static Nihongo.App.Views.Ui;
@@ -338,6 +338,7 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         col.Children.Add(Divider());
         col.Children.Add(Ui.Wrap(
             Btn(wrong.Count > 0 ? $"Làm lại {wrong.Count} câu sai" : "Không có câu sai", RetryWrong, primary: true, enabled: wrong.Count > 0),
+            Services.AskGemini.PromptButton("Copy để hỏi Gemini kết quả bài này", () => DenkenPrompt(graded, wrong)).Also(b => b.Classes.Add("strong")),
             Btn("Quay lại làm tiếp", () => { _finished = false; Render(); }),
             Btn("Về danh sách", Exit)));
         if (wrong.Count > 0)
@@ -347,6 +348,27 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
             col.Children.Add(list);
         }
         _panel.Content = col;
+    }
+
+    /// <summary>Một câu 電験: đề là trang web nên gửi đường dẫn + chủ đề + đáp án + cách giải + công thức + lựa chọn của mình.</summary>
+    string DenkenLine(int i)
+    {
+        var q = _qs[i];
+        var sb = new System.Text.StringBuilder($"{q.Title} ({(q.TopicName == "" ? q.TopicCode : q.TopicName)})\n  Đề: {q.Url}");
+        if (q.Answer != "") sb.Append($"\n  Đáp án: {q.Answer}");
+        if (q.Choice > 0) sb.Append($"\n  Tôi chọn: {(_state[i].Picked == 0 ? "(bỏ trống)" : _state[i].Picked.ToString())}");
+        else if (_state[i].Self is { } self) sb.Append($"\n  Tôi tự chấm: {(self ? "đúng" : "sai")}");
+        if (q.Method != "") sb.Append($"\n  Cách giải: {q.Method}");
+        if (q.Formula != "") sb.Append($"\n  Công thức: {q.Formula}");
+        return sb.ToString();
+    }
+
+    string DenkenPrompt(IReadOnlyList<int> graded, IReadOnlyList<int> wrong)
+    {
+        var sb = new System.Text.StringBuilder($"Tôi đang ôn thi 電験 (bằng tiếng Nhật, học bằng tiếng Việt). Tôi vừa làm xong「{_title}」: đúng {graded.Count(IsRight)}/{graded.Count} câu đã chấm.\n");
+        if (wrong.Count > 0) { sb.AppendLine("Các câu sai (Gemini không mở được link thì cứ dựa vào tên câu, chủ đề và đáp án):"); foreach (var i in wrong) sb.AppendLine($"- {DenkenLine(i)}"); }
+        sb.Append("Hãy giải thích bằng tiếng Việt từng câu sai: hướng giải, công thức dùng, chỗ tôi dễ nhầm; rồi cho 2 bài tương tự để tôi luyện thêm. Nếu thiếu đề bài thì hỏi tôi.");
+        return sb.ToString();
     }
 
     public bool HandleKey(Avalonia.Input.KeyEventArgs e)
@@ -441,7 +463,12 @@ sealed class DenkenSessionView : UserControl, IKeyTarget
         {
             col.Children.Add(Text(Score(), 14, bold: true));
             if (WrongIndexes().Count > 0) col.Children.Add(Btn($"Làm lại {WrongIndexes().Count} câu sai", RetryWrong, primary: true));
+            col.Children.Add(Services.AskGemini.PromptButton("Copy để hỏi Gemini kết quả bài này", () => DenkenPrompt(Enumerable.Range(0, _qs.Count).Where(Graded).ToList(), WrongIndexes())));
         }
+        // Mỗi câu đã có đáp án hiện ra thì hỏi riêng câu đó được.
+        if (Revealed || (_submitted && s.Revealed))
+            col.Children.Add(Services.AskGemini.PromptButton("Copy để hỏi Gemini câu này", () =>
+                $"Tôi đang ôn thi 電験. Giải thích bằng tiếng Việt câu này: hướng giải, công thức, chỗ dễ nhầm.\n{DenkenLine(_index)}", link: true).Also(b => b.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left));
         _panel.Content = col;
     }
 

@@ -106,10 +106,11 @@ sealed class TodayView : UserControl, IKeyTarget
         var chips = new WrapPanel();
         foreach (var s in plan.Steps)
             chips.Children.Add(Chip(StepChip(s)).Also(c => c.Margin = new Thickness(0, 0, 8, 8)));
-        var start = new Button { Content = "Bắt đầu", Classes = { "primary" }, MinWidth = 200, MinHeight = 46, FontSize = 18, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, IsEnabled = plan.Steps.Count > 0 };
-        start.Click += (_, _) => Start();
+        var start = new Button { Content = _draft is null ? "Bắt đầu" : "Bắt đầu buổi mới", Classes = { _draft is null ? "primary" : "ghost" }, MinWidth = 200, MinHeight = 46, FontSize = 18, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, IsEnabled = plan.Steps.Count > 0 };
+        start.Click += (_, _) => { if (_draft is not null) SessionDraft.Clear(); StartNew(); };
         var est = plan.Steps.Sum(s => s.EstMinutes);
         var col = Col(12,
+            ResumeCard(),
             plan.Steps.Count == 0 ? Text("Hôm nay không còn gì để lên kế hoạch. Ghé trang Luyện nếu muốn làm thêm.", 14, muted: true) : chips,
             Row(14, start, Text($"Enter để bắt đầu · khoảng {Math.Max(est, 1)} phút", 13, muted: true).Also(t => t.VerticalAlignment = VerticalAlignment.Center)));
         var dueTotal = _input.DueCards.Count + _input.DueQuestions.Count;
@@ -203,8 +204,50 @@ sealed class TodayView : UserControl, IKeyTarget
 
     void Start()
     {
+        if (_draft is not null) { Resume(); return; }
+        StartNew();
+    }
+
+    void StartNew()
+    {
         if (Plan.Steps.Count == 0) return;
+        SessionDraft.Clear();
         App.Shell.Show(new SessionView(Plan));
+    }
+
+    /// <summary>Làm tiếp buổi học dở: bỏ các câu/thẻ đã trả lời từ lúc bắt đầu, vào đúng bước đang làm.</summary>
+    void Resume()
+    {
+        if (_draft is not { } d) return;
+        var plan = d.Remaining(_answered);
+        App.Shell.Show(new SessionView(plan, d));
+    }
+
+    readonly SessionDraft? _draft = SessionDraft.Load();
+    ISet<string> _answered = new HashSet<string>();
+
+    Control? ResumeCard()
+    {
+        if (_draft is not { } d) return null;
+        _answered = App.Progress.Attempts(d.Started.AddSeconds(-1)).Select(a => a.ItemId).ToHashSet();
+        var step = d.Steps[d.Step];
+        var left = d.LeftInCurrentStep(_answered);
+        var what = step.Kind switch
+        {
+            StepKind.Review => $"Ôn tập · còn {left} thẻ",
+            StepKind.Weakness => $"{step.Title.Replace("Luyện điểm yếu: ", "Điểm yếu · ")} · còn {left} câu",
+            StepKind.Reading => "Bài đọc",
+            _ => "Nghe",
+        };
+        var resume = new Button { Content = "Học tiếp", Classes = { "primary" }, MinWidth = 160, MinHeight = 44, FontSize = 17, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+        resume.Click += (_, _) => Resume();
+        var fresh = Btn("Làm buổi mới", () => { SessionDraft.Clear(); StartNew(); });
+        fresh.Classes.Add("ghost");
+        var card = Col(10,
+            Text($"Buổi học đang dở từ {d.Started:HH:mm}", 13, bold: true).Tint("AccentInk"),
+            Text($"Đang ở bước {d.Step + 1}/{d.Steps.Count}: {what}. Những câu đã làm đã lưu, tiếp tục sẽ không bắt làm lại.", 14, muted: true),
+            Row(10, resume, fresh));
+        return new Border { Classes = { "chip", "plain" }, Padding = new Thickness(18, 14), CornerRadius = new CornerRadius(12), Child = card };
     }
 
     public bool HandleKey(KeyEventArgs e)

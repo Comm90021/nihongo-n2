@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -57,7 +57,7 @@ sealed class QuizView : UserControl, IKeyTarget
                 Text("Câu sai đã vào lịch ôn, sẽ quay lại ở trang Hôm nay.", muted: true),
                 Ui.Wrap(
                     _wrong.Count > 0 ? Btn("Làm lại câu sai", Retry, primary: true) : null,
-                    AskGemini.Button("Hỏi Gemini các câu sai", _wrong.Count, () => AskGemini.Prompts(_title, "N2", _wrong.Select(w => AskGemini.From(w.Q, w.Picked)))).Also(b => b.Classes.Add("strong")),
+                    AskGemini.Button("Copy để hỏi Gemini các câu sai", _wrong.Count, () => AskGemini.Prompts(_title, "N2", _wrong.Select(w => AskGemini.From(w.Q, w.Picked)))).Also(b => b.Classes.Add("strong")),
                     Btn("Về trang trước", App.Shell.BackToSection, primary: _wrong.Count == 0)))), animate);
             return;
         }
@@ -109,12 +109,17 @@ sealed class QuizView : UserControl, IKeyTarget
                     reasons.Children.Add(Btn(TodayView.Label(r), () => { _auto.Cancel(); App.Progress.SetReason(q.Id, r); RefreshBar(); }));
                 body.Children.Add(reasons);
                 var picked = _picked ?? 0;
-                var ask = AskGemini.Button("Hỏi Gemini câu này", 1, () => AskGemini.Prompts(_title, "N2", [AskGemini.From(q, picked)]), link: true);
+                var ask = AskGemini.Button("Copy để hỏi Gemini câu này", 1, () => AskGemini.Prompts(_title, "N2", [AskGemini.From(q, picked)]), link: true);
                 ask.Click += (_, _) => { _auto.Cancel(); RefreshBar(); };
                 ask.HorizontalAlignment = HorizontalAlignment.Left;
                 body.Children.Add(ask);
             }
-            body.Children.Add(Row(8, Btn("Nghe câu", () => { _auto.Cancel(); RefreshBar(); Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText)); })));
+            var pickedNow = _picked ?? 0;
+            var ctx = AskGemini.CopyButton("Copy bối cảnh câu", () => AskGemini.ContextOf(q, pickedNow));
+            ctx.Click += (_, _) => { _auto.Cancel(); RefreshBar(); };
+            ctx.HorizontalAlignment = HorizontalAlignment.Left;
+            body.Children.Add(ctx);
+            body.Children.Add(Row(8, Btn("Nghe câu",() => { _auto.Cancel(); RefreshBar(); Speech.Say(JpText.Plain(q.Text).Replace("（", "").Replace("）", answerText)); })));
         }
         QuizNav.Show(_card, Scroll(Card(body)), animate);
         RefreshBar();

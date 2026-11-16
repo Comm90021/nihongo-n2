@@ -360,6 +360,7 @@ public sealed class ArticleReaderView : UserControl, IKeyTarget
         var title = total == 0 ? "Đã đọc xong bài này" : $"Kết quả: {correct}/{total} câu đúng";
         var buttons = Row(10);
         if (next is not null) buttons.Children.Add(Btn("Bài tiếp theo trong kệ", () => App.Shell.Show(new ArticleReaderView(next)), primary: true));
+        buttons.Children.Add(AskGemini.PromptButton("Copy để hỏi Gemini bài này", () => AskGemini.ArticlePrompt(Article, _picked)).Also(b => b.Classes.Add("strong")));
         buttons.Children.Add(Btn("Về kệ sách", () => App.Shell.BackToSection(), primary: next is null));
         return new Border { Classes = { "card" }, Child = Col(12, Text(title, 18, bold: true).Also(t => t.FontFamily = Serif), buttons) };
     }

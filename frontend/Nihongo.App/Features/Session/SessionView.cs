@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -20,7 +20,7 @@ namespace Nihongo.App.Views;
 sealed class SessionView : UserControl, IKeyTarget
 {
     readonly SessionPlan _plan;
-    readonly DateTime _started = DateTime.Now;
+    readonly DateTime _started;
     readonly int _startXp;
     readonly ContentControl _host = new();
     readonly WrapPanel _pills = new();
@@ -32,10 +32,13 @@ sealed class SessionView : UserControl, IKeyTarget
     int _step = -1, _answered, _correct;
     bool _finished, _saved;
 
-    public SessionView(SessionPlan plan)
+    /// <summary>Buổi mới (<paramref name="draft"/> = null) hoặc tiếp tục buổi dở: giữ giờ bắt đầu, XP gốc, bài đọc đã xong và bước đang làm.</summary>
+    public SessionView(SessionPlan plan, SessionDraft? draft = null)
     {
         _plan = plan;
-        _startXp = App.Progress.TotalXp();
+        _started = draft?.Started ?? DateTime.Now;
+        _startXp = draft?.StartXp ?? App.Progress.TotalXp();
+        if (draft is not null) { _articles.AddRange(draft.Articles); _step = draft.Step - 1; }
         _progress = Bar(0, Math.Max(1, plan.Steps.Count), 3);
         _xp.Tint("AccentInk");
 
@@ -68,7 +71,8 @@ sealed class SessionView : UserControl, IKeyTarget
         _ => "Nghe",
     };
 
-    void OnXp() => Dispatcher.UIThread.Post(RefreshXp);
+    // Mỗi lần trả lời (XP đổi) ghi lại bản nháp: tắt app đột ngột cũng không mất bước đang làm.
+    void OnXp() => Dispatcher.UIThread.Post(() => { RefreshXp(); SaveDraft(); });
 
     /// <summary>XP kiếm được từ lúc bắt đầu buổi học = tổng xp_log hiện tại trừ tổng lúc bắt đầu. Đọc lại ở mỗi lần đổi bước, không chỉ khi có sự kiện.</summary>
     void RefreshXp() => _xp.Text = $"+{Math.Max(0, App.Progress.TotalXp() - _startXp)} XP";
@@ -96,10 +100,18 @@ sealed class SessionView : UserControl, IKeyTarget
 
     void Add(int correct, int total) { _correct += correct; _answered += total; }
 
+    /// <summary>Lưu buổi dở (bước đang làm + bài đọc đã xong) để lần sau bấm "Học tiếp" ở trang Hôm nay.</summary>
+    void SaveDraft()
+    {
+        if (_finished || _step < 0 || _step >= _plan.Steps.Count) return;
+        SessionDraft.From(_plan, _started, _step, _startXp, _articles).Save();
+    }
+
     void NextStep()
     {
         _step++;
         if (_step >= _plan.Steps.Count) { Finish(); return; }
+        SaveDraft();
         RenderPills();
         var s = _plan.Steps[_step];
         switch (s.Kind)
@@ -136,7 +148,7 @@ sealed class SessionView : UserControl, IKeyTarget
     void RunReading(SessionStep s)
     {
         var a = PlannerInputBuilder.Articles.FirstOrDefault(x => x.Id == s.ItemIds.FirstOrDefault());
-        if (a is null) { NextStep(); return; }
+        if (a is null || _articles.Contains(a.Id)) { NextStep(); return; }
         _host.Content = new ArticleReaderView(a, (c, t) => { Add(c, t); _articles.Add(a.Id); Later(NextStep); }, inSession: true);
     }
 
@@ -164,6 +176,7 @@ sealed class SessionView : UserControl, IKeyTarget
         if (_finished) return;
         _finished = true;
         _saved = true;
+        SessionDraft.Clear();
         var before = XpRules.LevelOf(_startXp);
         Study.FinishSession(Summary(App.Progress.TotalXp() - _startXp));
         RenderPills();
@@ -207,7 +220,7 @@ sealed class SessionView : UserControl, IKeyTarget
             .Where(w => byId.ContainsKey(w.ItemId)).Select(w => AskGemini.From(byId[w.ItemId], w.Picked)).Take(AskGemini.MaxItems).ToList();
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
         foreach (var c in new Control[] { Btn("Học thêm 15 phút", () => App.Shell.Show(new SessionView(PlannerInputBuilder.Plan(15)))),
-            AskGemini.Button("Hỏi Gemini các câu sai", wrongs.Count, () => AskGemini.Prompts("Buổi học hôm nay", "N2", wrongs)),
+            AskGemini.Button("Copy để hỏi Gemini các câu sai", wrongs.Count, () => AskGemini.Prompts("Buổi học hôm nay", "N2", wrongs)),
             Btn("Về Hôm nay  (Enter)", GoHome, primary: true) })
         { c.Margin = new Thickness(6, 4); buttons.Children.Add(c); }
 
@@ -226,7 +239,7 @@ sealed class SessionView : UserControl, IKeyTarget
     {
         var card = Card(Col(14,
             Text("Dừng buổi học?", 20, bold: true),
-            Text("Những câu mày đã làm đều được lưu. Buổi học dở vẫn ghi lại, chỉ không có thưởng hoàn thành.", 14, muted: true),
+            Text("Những câu mày đã làm đều được lưu. Lần sau vào trang Hôm nay bấm \"Học tiếp\" để làm tiếp đúng chỗ này, không phải học lại từ đầu.", 14, muted: true),
             Row(10, Btn("Học tiếp  (Esc)", HideExit, primary: true), Btn("Thoát", Exit))), 0)
             .Also(c => { c.Padding = new Thickness(28, 22); c.MaxWidth = 480; c.HorizontalAlignment = HorizontalAlignment.Center; c.VerticalAlignment = VerticalAlignment.Center; });
         return new Border { IsVisible = false, Background = new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), Child = card };
@@ -242,6 +255,7 @@ sealed class SessionView : UserControl, IKeyTarget
 
     void Exit()
     {
+        SaveDraft();
         if (!_saved && (_answered > 0 || _articles.Count > 0))
         {
             _saved = true;

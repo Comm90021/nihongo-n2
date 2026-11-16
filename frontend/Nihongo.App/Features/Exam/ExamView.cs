@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -537,7 +537,7 @@ sealed class ExamView : UserControl, IKeyTarget
     }
 
     /// <summary>"Hỏi Gemini các câu sai": chép lời nhắc + mở Gemini. Khóa khi không có câu sai nào có phương án.</summary>
-    Button AskButton() => AskGemini.Button("Hỏi Gemini các câu sai", _wrongItems.Count, () => AskGemini.Prompts(_exam.Title, _exam.Level, _wrongItems))
+    Button AskButton() => AskGemini.Button("Copy để hỏi Gemini các câu sai", _wrongItems.Count, () => AskGemini.Prompts(_exam.Title, _exam.Level, _wrongItems))
         .Also(b => b.Classes.Add("strong"));
 
     /// <summary>Lời nhắc riêng cho một câu sai (kèm đáp án đúng và phương án đã chọn).</summary>
@@ -546,7 +546,7 @@ sealed class ExamView : UserControl, IKeyTarget
         var picked = _picked.GetValueOrDefault(_current);
         if (item.Q is not { } q || picked == 0 || picked == item.Answer) return null;
         var w = AskGemini.From(q, picked, _exam.Level) with { Label = $"{_exam.Title} · {MondaiLabel(item)} · câu {item.No}" };
-        return AskGemini.Button("Hỏi Gemini câu này", 1, () => AskGemini.Prompts(_exam.Title, _exam.Level, [w]), link: true);
+        return AskGemini.Button("Copy để hỏi Gemini câu này", 1, () => AskGemini.Prompts(_exam.Title, _exam.Level, [w]), link: true);
     }
 
 

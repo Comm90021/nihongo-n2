@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Nihongo.Core;
 using Nihongo.App.Services;
 using static Nihongo.App.Views.Ui;
@@ -78,7 +78,7 @@ sealed class PracticeView : UserControl
             var name = g.Key > 100 ? "Nghe (đề mô phỏng)" : g.Key < MondaiNames.Length ? $"Mondai {g.Key}: {MondaiNames[g.Key]}" : $"Mondai {g.Key}";
             var list = g.ToList();
             col.Children.Add(Card(Line(Col(2, Text(name, 16, bold: true), Text($"{list.Count} câu", muted: true)),
-                Row(8, AskGemini.Button("Hỏi Gemini", list.Count, () => AskGemini.Prompts(name, "N2", list.Take(AskGemini.MaxItems).Select(r => AskGemini.From(r.Q, r.Picked))), link: true),
+                Row(8, AskGemini.Button("Copy để hỏi Gemini", list.Count, () => AskGemini.Prompts(name, "N2", list.Take(AskGemini.MaxItems).Select(r => AskGemini.From(r.Q, r.Picked))), link: true),
                     Btn("Làm lại", () => Start(list.Take(Batch).Select(r => r.Q), $"Làm lại · {name}"), primary: true)))));
         }
         return col;

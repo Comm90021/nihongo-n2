@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -132,7 +132,7 @@ sealed class VocabQuizView : UserControl, IKeyTarget
         }
         var wrongWords = _wrong.Distinct().Take(AskGemini.MaxItems).ToList();
         body.Children.Add(Ui.Wrap(
-            AskGemini.Button("Hỏi Gemini các từ sai", wrongWords.Count, () => [ReviewPrompt.VocabPrompt(_title, wrongWords.Select(v => (v.Word, v.Reading, v.Meaning)))]).Also(b => b.Classes.Add("strong")),
+            AskGemini.Button("Copy để hỏi Gemini các từ sai", wrongWords.Count, () => [ReviewPrompt.VocabPrompt(_title, wrongWords.Select(v => (v.Word, v.Reading, v.Meaning)))]).Also(b => b.Classes.Add("strong")),
             Btn("Làm lại các từ sai", () => App.Shell.Show(new VocabQuizView(VocabQuiz.Build(_wrong.Distinct(), null, 50), "Ôn lại từ sai")), primary: true, enabled: _wrong.Count > 0),
             Btn("Về danh sách từ", App.Shell.BackToSection)));
         return Card(body, 0).Also(c => c.Padding = new Thickness(28, 24));

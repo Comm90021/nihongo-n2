@@ -89,6 +89,20 @@ sealed class ReadingSessionView : UserControl, IKeyTarget
             cell.Margin = new Thickness(0, 0, 10, 4);
             _sheet.Children.Add(cell);
         }
+        if (_submitted)
+            _sheet.Children.Add(AskGemini.PromptButton("Copy để hỏi Gemini kết quả đọc hiểu", AskPrompt, link: false).Also(b => { b.Classes.Add("strong"); b.Margin = new Thickness(0, 8, 8, 4); }));
+    }
+
+    /// <summary>Đề đọc hiểu PDF: app chỉ có số câu và đáp án, không có chữ của đề; lời nhắc dặn gửi ảnh/chữ của đề cho câu cần chữa.</summary>
+    string AskPrompt()
+    {
+        var total = _to - _from + 1;
+        var correct = Enumerable.Range(_from, total).Count(n => _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) == k);
+        var wrong = Enumerable.Range(_from, total).Where(n => _set.Answers.TryGetValue(n, out var k) && _picked.GetValueOrDefault(n) != k)
+            .Select(n => $"câu {n}: tôi chọn {(_picked.GetValueOrDefault(n) == 0 ? "(bỏ trống)" : _picked[n].ToString())}, đáp án đúng {_set.Answers[n]}");
+        return AskGemini.ResultPrompt(_set.Title, m9Name(), correct, total, wrong,
+            "Đây là đề đọc hiểu in trong PDF nên tôi chưa gửi chữ của bài. Với mỗi câu sai, hãy nhắc tôi dán đoạn văn và câu hỏi tương ứng (tôi sẽ gửi tiếp) rồi mới chữa chi tiết.");
+        string m9Name() => _m9 ? "Mondai 9" : "Đọc hiểu (Mondai 10–14)";
     }
 
     /// <summary>Phím: 1–4 chọn cho câu đang trỏ rồi trỏ sang câu kế, ↑/↓ đổi câu, ←/→ (hoặc PgUp/PgDn) đổi trang, +/− phóng to/thu nhỏ.</summary>

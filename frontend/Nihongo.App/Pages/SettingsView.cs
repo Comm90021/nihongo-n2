@@ -22,6 +22,7 @@ sealed class SettingsView : UserControl
             Card(Look()),
             Card(Practice()),
             Card(Exam()),
+            Card(Gemini()),
             Card(Backup()),
             Card(About())));
     }
@@ -96,6 +97,25 @@ sealed class SettingsView : UserControl
         level.SelectionChanged += (_, _) => { if (level.SelectedItem is string l) App.Progress.SetSetting("exam_level", l); };
         return Col(12, Text("Kỳ thi", 17, bold: true).Also(t => t.FontFamily = Serif), Labeled("Ngày thi", date), Labeled("Cấp", level), info,
             Text("Mở lại trang Hôm nay để thấy số ngày mới.", 13, muted: true));
+    }
+
+    /// <summary>Liên kết mở khi bấm "Copy để hỏi Gemini": mặc định trang Gemini mới; dán link một cuộc trò chuyện để mọi câu hỏi nằm chung một chỗ.</summary>
+    static Control Gemini()
+    {
+        var info = Text("", 13, muted: true);
+        var url = new TextBox { Text = AskGemini.Url == AskGemini.DefaultUrl ? "" : AskGemini.Url, Watermark = AskGemini.DefaultUrl, MinWidth = 480 };
+        void Save()
+        {
+            if (AskGemini.SetUrl(url.Text ?? "")) { url.Text = AskGemini.Url == AskGemini.DefaultUrl ? "" : AskGemini.Url; info.Text = AskGemini.Url == AskGemini.DefaultUrl ? "Đang dùng trang Gemini mới (mặc định)." : "Đã lưu. Từ giờ \"Copy để hỏi Gemini\" mở đúng cuộc trò chuyện này."; }
+            else info.Text = "Link không hợp lệ. Copy nguyên link trên thanh địa chỉ, dạng https://gemini.google.com/app/xxxx";
+        }
+        url.LostFocus += (_, _) => Save();
+        info.Text = AskGemini.Url == AskGemini.DefaultUrl ? "Đang dùng trang Gemini mới (mặc định)." : "Đang mở cuộc trò chuyện riêng của mày.";
+        return Col(12,
+            Text("Hỏi Gemini", 17, bold: true).Also(t => t.FontFamily = Serif),
+            Text("Mỗi nút \"Copy để hỏi Gemini\" copy lời nhắc rồi mở link dưới đây trong trình duyệt. Muốn mọi câu hỏi dồn vào một cuộc trò chuyện dài: mở cuộc đó trên gemini.google.com, copy link trên thanh địa chỉ (dạng gemini.google.com/app/xxxx) rồi dán vào đây. Đổi lại lúc nào cũng được; để trống = mở cuộc trò chuyện mới.", 13, muted: true),
+            Row(8, url, Btn("Lưu", Save, primary: true), Btn("Về mặc định", () => { url.Text = ""; Save(); }), Btn("Thử mở", () => { try { Process.Start(new ProcessStartInfo(AskGemini.Url) { UseShellExecute = true }); } catch { } })),
+            info);
     }
 
     Control Backup()

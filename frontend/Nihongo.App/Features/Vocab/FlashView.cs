@@ -16,6 +16,7 @@ sealed class FlashView : UserControl, IKeyTarget
     readonly string _title;
     bool _revealed;
     int _known, _forgot;
+    readonly HashSet<VocabItem> _forgotWords = [];
     /// <summary>Chạy trong Buổi học: không có nút quay lại, hết thẻ thì gọi (số thẻ nhớ ngay, tổng thẻ).</summary>
     readonly Action<int, int>? _onDone;
 
@@ -38,7 +39,9 @@ sealed class FlashView : UserControl, IKeyTarget
             Content = Col(12, header, Card(Col(10,
                 Text("Xong bộ thẻ", 20, bold: true),
                 Text($"Nhớ {_known} lần, quên {_forgot} lần. Thẻ sẽ tự quay lại theo lịch ôn.", muted: true),
-                Btn("Xong", App.Shell.BackToSection, primary: true))));
+                Ui.Wrap(
+                    Services.AskGemini.PromptButton("Copy để hỏi Gemini các từ quên", () => ReviewPrompt.VocabPrompt(_title, _forgotWords.Take(Services.AskGemini.MaxItems).Select(w => (w.Word, w.Reading, w.Meaning)))).Also(b => { b.Classes.Add("strong"); b.IsEnabled = _forgotWords.Count > 0; }),
+                    Btn("Xong", App.Shell.BackToSection, primary: true)))));
             return;
         }
 
@@ -85,7 +88,7 @@ sealed class FlashView : UserControl, IKeyTarget
     {
         var v = _queue.Dequeue();
         Services.Study.Answer(v.CardId, SrsKind.Card, known);
-        if (known) _known++; else { _forgot++; _queue.Enqueue(v); }
+        if (known) _known++; else { _forgot++; _queue.Enqueue(v); _forgotWords.Add(v); }
         _revealed = false;
         Render();
     }
