@@ -6,3 +6,5 @@ obj/
 .vs/
 /config/paths.local.json
 /CLAUDE.md
+/AGENTS.md
+/docs/codex/
