@@ -30,12 +30,12 @@ sealed partial class StatsView : UserControl
     public StatsView()
     {
         // Lịch sử giữ mãi trong tien_do.db: lấy 1 năm để xem lại được tuần nào cũng được.
-        _attempts = App.Progress.Attempts(_now.AddDays(-365));
-        _results = App.Progress.Results();
-        int.TryParse(App.Progress.Setting("stats_tab", "0"), out _tab);
+        _attempts = DashboardData.Attempts(_now.AddDays(-365));
+        _results = DashboardData.Results();
+        int.TryParse(DashboardData.Setting("stats_tab", "0"), out _tab);
         var top = Col(10,
             Header("Tiến độ","Số liệu từ mọi câu mày đã trả lời. Ngày nào cũng làm một ít thì biểu đồ tuần tự đẹp lên."),
-            Segmented(Tabs, _tab, i => { _tab = i; App.Progress.SetSetting("stats_tab", i.ToString()); Refresh(); }));
+            Segmented(Tabs, _tab, i => { _tab = i; DashboardData.SetSetting("stats_tab", i.ToString()); Refresh(); }));
         DockPanel.SetDock(top, Dock.Top);
         Content = new DockPanel { Children = { top, Scroll(_body) } };
         Refresh();
@@ -104,16 +104,10 @@ sealed partial class StatsView : UserControl
     // ---------------------------------------------------------------- tuần
     Control Week(IReadOnlyList<AttemptRow> attempts, Func<string, int?> mondaiOf, string[] sections)
     {
-        var start = StudyStats.WeekStart(_today).AddDays(_weekOffset * 7);
-        var mine = attempts.Where(a => StudyStats.SectionOf(a.ItemId, mondaiOf) is { } s && sections.Contains(s)).ToList();
-        var days = StudyStats.Daily(mine, start, 7);
-        var prev = StudyStats.Daily(mine, start.AddDays(-7), 7);
-        int n = days.Sum(d => d.Answered), ok = days.Sum(d => d.Correct), pn = prev.Sum(d => d.Answered), pok = prev.Sum(d => d.Correct);
+        var metrics = StatsMetrics.Week(attempts, _results, _today, _weekOffset, mondaiOf, sections);
+        var (start, days, prev, n, ok, pn, pok, delta, streak, mockMin) = metrics;
         var acc = n == 0 ? 0 : 100.0 * ok / n;
-        var diff = pn == 0 || n == 0 ? "" : $"{(acc - 100.0 * pok / pn >= 0 ? "▲" : "▼")} {Math.Abs(acc - 100.0 * pok / pn):0}% so với tuần trước";
-        var streak = StudyStats.Streak(mine, _today);
-        var mockMin = _results.Where(r => r.Kind is "exam" or "reading" or "listening" && DateOnly.FromDateTime(r.At) >= start && DateOnly.FromDateTime(r.At) < start.AddDays(7)).Sum(r => r.UsedSeconds) / 60;
-
+        var diff = delta is null ? "" : $"{(delta >= 0 ? "▲" : "▼")} {Math.Abs(delta.Value):0}% so với tuần trước";
         var strip = Strip(
             StatCell("Câu đã làm", $"{n}", prev.Sum(d => d.Answered) is var p0 && p0 > 0 ? $"tuần trước {p0}" : ""),
             StatCell("Tỉ lệ đúng", n == 0 ? "—" : $"{acc:0}%", diff),
@@ -173,56 +167,28 @@ sealed partial class StatsView : UserControl
     // ---------------------------------------------------------------- tiến độ
     Control Progress(string level)
     {
-        var content = App.Content;
-        var p = App.Progress;
-        var n2 = content.Vocab.Where(v => v.Level == "N2").ToList();
-        var mastered = n2.Count(v => p.Get(v.CardId) is { Box: >= ProgressStore.MasteredBox });
-        var exams = ExamCatalog.All.Where(e => e.Level == level).ToList();
-        var doneIds = _results.Select(r => r.SetId).ToHashSet();
-        var examsDone = exams.Count(e => doneIds.Contains($"exam:{e.Id}"));
-        var listening = content.LoadListeningSets().Where(s => level == "N1" ? s.Id.Contains("-n1-") : !s.Id.Contains("-n1-") && !s.Id.Contains("jtest")).ToList();
-        var listenDone = listening.Count(s => doneIds.Contains(s.Id));
-        var reading = content.LoadReadingSets().ToList();
-        var readDone = reading.Count(s => doneIds.Contains($"{s.Id}:reading") || doneIds.Contains($"{s.Id}:m9"));
-        var seen = p.SeenQuestions();
-        var grammar = content.Questions.Where(q => q.IsExam && q.Mondai == 7).ToList();
-        var grammarSeen = grammar.Count(q => seen.Contains(q.Id));
-
+        var progress = DashboardData.Progress(level, _results);
         Control Row3(string label, int done, int total, string unit) => Col(4,
             Line(Text(label, 14, bold: true), Text($"{done:N0} / {total:N0} {unit}", 13, muted: true)), Bar(done, Math.Max(1, total), 6));
         return Panel("Tiến độ tổng", Col(12,
-            Row3("Từ N2 đã chắc (đúng 3 lần liên tiếp)", mastered, n2.Count, "từ"),
-            Row3($"Đề thi thử {level} đã nộp", examsDone, exams.Count, "đề"),
-            Row3("Bộ Nghe đã nộp", listenDone, listening.Count, "bộ"),
-            Row3("Bộ Đọc hiểu đã nộp", readDone, reading.Count, "bộ"),
-            Row3("Câu ngữ pháp (問題7) đã gặp", grammarSeen, grammar.Count, "câu")));
+            Row3("Từ N2 đã chắc (đúng 3 lần liên tiếp)", progress.Vocab.Done, progress.Vocab.Total, "từ"),
+            Row3($"Đề thi thử {level} đã nộp", progress.Exams.Done, progress.Exams.Total, "đề"),
+            Row3("Bộ Nghe đã nộp", progress.Listening.Done, progress.Listening.Total, "bộ"),
+            Row3("Bộ Đọc hiểu đã nộp", progress.Reading.Done, progress.Reading.Total, "bộ"),
+            Row3("Câu ngữ pháp (問題7) đã gặp", progress.Grammar.Done, progress.Grammar.Total, "câu")));
     }
 
     // ---------------------------------------------------------------- nên lưu ý
     Control Advice(JlptPrediction pred, IReadOnlyList<AttemptRow> attempts, Func<string, int?> mondaiOf)
     {
-        var tips = new List<string>();
-        var todayN = attempts.Count(a => DateOnly.FromDateTime(a.At) == _today);
-        if (todayN == 0) tips.Add("Hôm nay chưa làm câu nào. 15 phút đủ giữ chuỗi ngày.");
-        var by = StudyStats.BySection(attempts.Where(a => (_now - a.At).TotalDays <= 30), mondaiOf);
-        var weak = StudySection.Jlpt.Where(s => by.TryGetValue(s, out var v) && v.Total >= 15).OrderBy(s => (double)by[s].Correct / by[s].Total).FirstOrDefault();
-        if (weak is not null && by[weak].Correct * 100 / by[weak].Total < 75)
-            tips.Add($"{StudySection.Label(weak)} chỉ đúng {100.0 * by[weak].Correct / by[weak].Total:0}% trong 30 ngày, thấp nhất trong các phần.");
-        foreach (var s in new[] { StudySection.Listening, StudySection.Reading })
-            if (!attempts.Any(a => (_now - a.At).TotalDays <= 7 && StudyStats.SectionOf(a.ItemId, mondaiOf) == s))
-                tips.Add($"7 ngày qua chưa luyện {StudySection.Label(s)}.");
-        if (pred.Weakest != "" && pred.Probability is not null)
-            tips.Add($"Phần kéo khả năng đỗ xuống nhiều nhất: {pred.Weakest switch { "lang" => "Ngôn ngữ", "read" => "Đọc hiểu", _ => "Nghe hiểu" }} (đoán {pred.Sections.First(s => s.Key == pred.Weakest).ExpectedScore}/60).");
-        if (pred.Missing.Count > 0) tips.Add("Làm một đề thi thử đủ 3 phần để có dự đoán đỗ.");
-        if (!_results.Any(r => r.Kind == "exam" && (_now - r.At).TotalDays <= 14)) tips.Add("14 ngày qua chưa thi thử đề nào. Thi thử bấm giờ mới cho số liệu đáng tin.");
-        if (tips.Count == 0) tips.Add("Không có gì đáng lo. Cứ giữ nhịp.");
+        var tips = StatsMetrics.Advice(pred, attempts, _results, _now, mondaiOf);
         var col = Col(6);
         foreach (var t in tips) col.Children.Add(Row(8, Text("•", 14, bold: true, wrap: false), Text(t, 14)));
         return Panel("Nên lưu ý", col);
     }
 
     // ================================================================ 電験
-    string DkLevel => App.Progress.Setting("dk_level", "3種");
+    string DkLevel => DashboardData.Setting("dk_level", "3種");
 
     Control Denken()
     {
@@ -233,22 +199,9 @@ sealed partial class StatsView : UserControl
         var byId = all.ToDictionary(q => q.SrsId, q => q.SubjectName);
         var dk = _attempts.Where(a => byId.ContainsKey(a.ItemId)).ToList();
         var passedKey = $"dk_passed:{level}";
-        var passed = App.Progress.Setting(passedKey).Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var passed = DashboardData.Setting(passedKey).Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
 
-        IReadOnlyList<Evidence> EvidenceOf(string subject)
-        {
-            var list = new List<Evidence>();
-            foreach (var g in dk.Where(a => byId[a.ItemId] == subject).GroupBy(a => DateOnly.FromDateTime(a.At)))
-            {
-                var at = g.Key.ToDateTime(TimeOnly.MinValue);
-                list.Add(new Evidence(g.Count(a => a.Correct), g.Count(), at, PassPredictor.DenkenWeight(_now, at, false)));
-            }
-            foreach (var r in _results.Where(r => r.Kind == "denken" && r.SetId.StartsWith($"dk:{level}:{subject}:") && r.Total > 0))
-                list.Add(new Evidence(r.Correct, r.Total, r.At, PassPredictor.DenkenWeight(_now, r.At, true)));
-            return list;
-        }
-
-        var pred = PassPredictor.Denken(subjects, passed, EvidenceOf, _now);
+        var pred = StatsMetrics.Denken(subjects, passed, byId, dk, _results, level, _now);
         var col = Col(14);
         col.Children.Add(DenkenPrediction(level, pred, passed, passedKey));
         col.Children.Add(Week(dk, id => null, [StudySection.Denken]));
@@ -257,7 +210,7 @@ sealed partial class StatsView : UserControl
 
     Control DenkenPrediction(string level, DenkenPrediction pred, HashSet<string> passed, string passedKey)
     {
-        var examDay = DateOnly.TryParseExact(App.Progress.Setting("dk_exam_day"), "yyyy-MM-dd", out var d) ? d : (DateOnly?)null;
+        var examDay = DateOnly.TryParseExact(DashboardData.Setting("dk_exam_day"), "yyyy-MM-dd", out var d) ? d : (DateOnly?)null;
         var head = Row(24,
             pred.Probability is { } p
                 ? Col(0, BigNumber($"{Math.Round(p * 100):0}%", 52).Tint(p >= 0.6 ? "GoodInk" : p >= 0.3 ? "WarnInk" : "BadInk"), Text("khả năng đỗ hết các môn còn lại", 13, muted: true))
@@ -273,7 +226,7 @@ sealed partial class StatsView : UserControl
             check.IsCheckedChanged += (_, _) =>
             {
                 if (check.IsChecked == true) passed.Add(s.Subject); else passed.Remove(s.Subject);
-                App.Progress.SetSetting(passedKey, string.Join(',', passed));
+                DashboardData.SetSetting(passedKey, string.Join(',', passed));
                 Refresh();
             };
             var note = s.Passed ? "đã đỗ" : s.PassProbability is { } pp ? $"đúng khoảng {100 * s.Accuracy:0}% · đỗ môn này {pp * 100:0}%" : "chưa đủ số liệu";
@@ -288,8 +241,8 @@ sealed partial class StatsView : UserControl
         var dayBox = new TextBox { Text = examDay?.ToString("dd/MM/yyyy") ?? "", Watermark = "dd/MM/yyyy", Width = 150 };
         dayBox.LostFocus += (_, _) =>
         {
-            if (DateOnly.TryParseExact(dayBox.Text?.Trim(), "d/M/yyyy", out var nd)) App.Progress.SetSetting("dk_exam_day", nd.ToString("yyyy-MM-dd"));
-            else if (string.IsNullOrWhiteSpace(dayBox.Text)) App.Progress.SetSetting("dk_exam_day", "");
+            if (DateOnly.TryParseExact(dayBox.Text?.Trim(), "d/M/yyyy", out var nd)) DashboardData.SetSetting("dk_exam_day", nd.ToString("yyyy-MM-dd"));
+            else if (string.IsNullOrWhiteSpace(dayBox.Text)) DashboardData.SetSetting("dk_exam_day", "");
         };
         body.Children.Add(Row(10, Text("Ngày thi 電験:", 13, muted: true), dayBox, Text("(nhập để có đếm ngược; mở lại màn này để cập nhật)", 12, muted: true)));
         body.Children.Add(Text("Mỗi lần luyện hoặc thi thử theo môn đều được tính; câu gần đây nặng hơn câu cũ. Đề thật chấm theo điểm từng câu nên con số chỉ là ước lượng.", 12, muted: true));
