@@ -23,6 +23,18 @@ Luật duyệt: người làm → duyệt vòng 1 → duyệt vòng 2. Tối đa
 | 2d Thi thử, 電験 | — | Chạy như v1, chỉ đổi chỗ file; tách DenkenView để sau | — | — |
 | 2e Tiến độ + sửa đếm XP | Sonnet B | Đang làm | Trưởng | — |
 | build_dochieu.py cho 300 bài | Haiku 1 | Đang làm | Trưởng | — |
-| 3 Ghép, build exe, user thử | Trưởng | Chờ | User | — |
+| Font Cambria, màn đọc rộng, kệ dạng lưới, chữ Nhật tự xếp dòng (禁則) | Sonnet A | Xong 16/11 | Trưởng: trả 1 lần → đạt | — |
+| Cấu trúc theo mẫu: frontend/backend/shared/database | Phó phòng | Xong 16/11 | Trưởng | — |
+| Dời thư mục gốc vào storage/, legacy/, docs/ + Importer đổi đường dẫn | Trưởng | Xong 16/11 (khớp 19/19 bảng) | — | — |
+| Màn làm bài co giãn 820→1920, Hỏi Gemini câu sai, sửa crash Grid | Sonnet A | Xong 16/11 | Trưởng: trả 1 lần → đạt | — |
+| Kiểm thử toàn app; soát dữ liệu cá nhân | Sonnet B | Xong 16/11 | Trưởng | — |
+| Lọc nghĩa rác ở Từ vựng / gỡ thông tin cá nhân / sửa tài liệu | Haiku 3 / Haiku 4 / Haiku 2 | Xong 16/11 | Trưởng | — |
+| 3 Ghép, build exe, chuyển user sang v2, Release v2.0 | Trưởng | Xong 16/11 | User | — |
 
-Số liệu 16/11: 300 bài đọc hiểu + 40 đoạn văn mẫu, 3.787 mục đánh dấu, 900 câu hỏi, 0 lỗi parser. 387 test xanh.
+Số liệu 16/11: 300 bài đọc hiểu + 40 đoạn văn mẫu, 3.786 mục đánh dấu, 900 câu hỏi, 0 lỗi parser. 397 test xanh.
+Phát hành: https://github.com/Comm90021/nihongo-n2/releases/tag/v2.0 (exe + noi_dung.db bản mở chỉ gồm bài đọc, dựng bằng `Importer --mo`).
+
+## Còn để sau
+- Vòng soát tiếng Nhật cho 150 bài mới (vòng 2 thấy fact và đáp án đạt nhưng còn từ nối gượng); user quyết có làm vòng 3 không.
+- Tách DenkenView (list/session/exam), tách các view còn vừa dựng giao diện vừa nạp dữ liệu (TodayView, StatsView, ExamView).
+- Tổng kết buổi học chưa đưa từ vựng sai vào lời nhắc Gemini.
