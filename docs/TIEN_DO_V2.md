@@ -34,7 +34,27 @@ Luật duyệt: người làm → duyệt vòng 1 → duyệt vòng 2. Tối đa
 Số liệu 16/11: 300 bài đọc hiểu + 40 đoạn văn mẫu, 3.786 mục đánh dấu, 900 câu hỏi, 0 lỗi parser. 397 test xanh.
 Phát hành: https://github.com/Comm90021/nihongo-n2/releases/tag/v2.0 (exe + noi_dung.db bản mở chỉ gồm bài đọc, dựng bằng `Importer --mo`).
 
+## Đợt v3 (16–17/11/2026): Claude điều phối, Codex làm
+
+Kế hoạch: `docs/KE_HOACH_V3.md` (gpt-6-astra vẽ một lần, Claude duyệt). Mọi model Codex chạy mức medium, mỗi làn một worktree, phóng bằng `scripts/codex_run.ps1`. Duyệt vòng 1: gpt-reserve; vòng 2: Claude.
+
+| Làn | Model | Kết quả | Duyệt 1 | Duyệt 2 |
+|---|---|---|---|---|
+| L1 Tách 電験 (List/Session/Exam, chọn câu + chấm sang Core) | gpt-6.1-terra | DenkenView 28,7KB → 10,2KB | gpt-reserve: đạt | Claude: đạt |
+| L2 Tách Thi thử (nháp, chấm, câu sai sang Core) | gpt-6.1-terra | ExamView 35KB → 9,7KB | đạt | đạt |
+| L3 Tách số liệu Hôm nay/Tiến độ, `DashboardData` | gpt-6.1-terra (3 lượt: L3, L3b bị ngắt, L3c) | lời khuyên giữ nguyên văn | đạt | đạt |
+| L4 Tách ProgressStore thành 16 repository, giữ facade | gpt-6.1-terra | 21,5KB → 6,7KB | đạt | đạt |
+| L5 Chia SelfTest theo kịch bản | gpt-6-luna | 37,5KB → 2,5KB + 10 file | đạt | Claude sửa: hàm `ProgressMode` bị rơi |
+| L6 Tổng kết buổi học gửi cả từ sai; lập buổi theo cấp N1/N2 | gpt-6.1-terra | buổi N2 không còn lẫn câu đề N1/J.TEST | đạt | đạt (đối chiếu nguồn câu trong noi_dung.db) |
+| Soát tiếng Nhật 150 bài đọc mới (chỉ báo cáo) | Gemini Flash × 5 | `storage/xu_ly/V3_soat_bai_doc/` | Claude lọc | — |
+
+Số liệu 17/11: 448 test xanh (397 + 51 mới). Self-test trên bản sao dữ liệu: ui, keys, stats, progress, session, denken, review, sizes đều chạy hết, không lỗi; exe phát hành chạy lại session + ui. Exe cũ giữ ở `dist/NihongoN2_v2.exe`, tiến độ sao lưu `data/backup/truoc_v3_*.db`.
+
+Bài học khi chạy Codex trên máy này: sandbox không đọc được `%APPDATA%\NuGet\NuGet.Config` (restore trước ngoài sandbox, Codex dùng `--no-restore`), không ghi được `.git` (Claude commit), Avalonia ghi telemetry vào AppData (`AVALONIA_TELEMETRY_OPTOUT=1`), nhiều agent cùng lúc làm lỗi CS2012 (`-m:1 -p:UseSharedCompilation=false`).
+
 ## Còn để sau
+- Chuỗi ngày học lệch giữa Hôm nay (`Study.Streak`, theo XP) và Tiến độ (`StudyStats.Streak`, theo attempt): có từ trước v3.
+- Các mục "9. Cố ý để sau" trong `KE_HOACH_V3.md` (nháp thi hỏng, chốt 電験 nhiều lần, thống kê N1 toàn diện, session ID trong attempt…).
 - Vòng soát tiếng Nhật cho 150 bài mới (vòng 2 thấy fact và đáp án đạt nhưng còn từ nối gượng); user quyết có làm vòng 3 không.
 - Tách DenkenView (list/session/exam), tách các view còn vừa dựng giao diện vừa nạp dữ liệu (TodayView, StatsView, ExamView).
 - Tổng kết buổi học chưa đưa từ vựng sai vào lời nhắc Gemini.
