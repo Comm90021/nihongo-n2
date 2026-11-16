@@ -94,6 +94,16 @@ static class AskGemini
     public static IReadOnlyList<string> Prompts(string title, string level, IEnumerable<WrongItem> items) =>
         ReviewPrompt.Build(title, level, items.Where(i => i.Options.Count > 0).Take(MaxItems).ToList()).Select(p => p.Prompt).ToList();
 
+    public static IReadOnlyList<string> SessionPrompts(string title, string level, IEnumerable<WrongItem> questions, IEnumerable<VocabItem> words)
+    {
+        var qs = questions.Where(q => q.Options.Count > 0).Take(MaxItems).ToList();
+        var ws = words.Take(MaxItems - qs.Count).ToList();
+        var parts = Prompts(title, level, qs).ToList();
+        foreach (var chunk in ws.Chunk(10))
+            parts.Add(ReviewPrompt.VocabPrompt(title, chunk.Select(w => (w.Word, w.Reading, w.Meaning)), level));
+        return parts;
+    }
+
     /// <summary>
     /// Nút "Hỏi Gemini…". <paramref name="count"/> = số câu sai: 0 thì nút bị khóa. <paramref name="prompts"/> dựng lời nhắc ở lần bấm đầu.
     /// <paramref name="link"/>: kiểu liên kết nhỏ (đặt cạnh từng câu).

@@ -19,7 +19,7 @@ public sealed class SessionPlanner : ISessionPlanner
         // 1. Ôn tập: thẻ đến hạn rồi câu đến hạn, cắt theo ngân sách
         int reviewBudget = (int)Math.Round(minutes * 0.4);
         int cap = reviewBudget * ItemsPerMinute;
-        var due = input.DueCards.Concat(input.DueQuestions).Distinct().ToList();
+        var due = input.DueCards.Concat(input.DueQuestions).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
         int dueTotal = due.Count;
         var reviewIds = due.Take(cap).ToList();
         int used = 0;
@@ -85,7 +85,7 @@ public sealed class SessionPlanner : ISessionPlanner
 
     private static SessionStep? PickListening(PlannerInput input, int seed)
     {
-        var sets = input.Listening.Where(s => s.Items.Count > 0).ToList();
+        var sets = input.Listening.Where(s => !string.IsNullOrWhiteSpace(s.Id) && s.Items.Count > 0).ToList();
         if (sets.Count == 0) return null;
         var set = sets[Mod(Fnv(seed, "set"), sets.Count)];
         var item = set.Items[Mod(Fnv(seed, "item" + set.Id), set.Items.Count)];
@@ -109,6 +109,15 @@ public sealed class SessionPlanner : ISessionPlanner
             if (IsAllHiragana(q.Word)) return LooksLikeAdverb(q.Word) ? Weakness.Adverb : Weakness.KanaWord;
             if (q.Mondai >= 5) return Weakness.Nuance;
         }
+        return null;
+    }
+
+    public static Weakness? Categorize(Question q, string level)
+    {
+        if (SessionLevelPolicy.Normalize(level) != "N1") return Categorize(q);
+        if (q.Mondai is >= 5 and <= 7) return Weakness.Grammar;
+        if (q.Mondai is 3 or 4)
+            return IsAllHiragana(q.Word) ? (LooksLikeAdverb(q.Word) ? Weakness.Adverb : Weakness.KanaWord) : Weakness.Nuance;
         return null;
     }
 
@@ -145,8 +154,8 @@ public sealed class SessionPlanner : ISessionPlanner
         var byCat = new Dictionary<Weakness, List<Question>>();
         foreach (var q in input.Questions)
         {
-            if (skip.Contains(q.Id) || q.Options.Length == 0) continue;
-            var c = Categorize(q);
+            if (string.IsNullOrWhiteSpace(q.Id) || skip.Contains(q.Id) || q.Options.Length == 0) continue;
+            var c = Categorize(q, input.Level);
             if (c == null) continue;
             if (!byCat.TryGetValue(c.Value, out var l)) byCat[c.Value] = l = new List<Question>();
             l.Add(q);

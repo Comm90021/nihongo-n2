@@ -21,6 +21,8 @@ sealed class SessionView : UserControl, IKeyTarget
 {
     readonly SessionPlan _plan;
     readonly DateTime _started;
+    readonly HashSet<string> _reviewIds;
+    readonly string _reviewLevel;
     readonly int _startXp;
     readonly ContentControl _host = new();
     readonly WrapPanel _pills = new();
@@ -36,6 +38,8 @@ sealed class SessionView : UserControl, IKeyTarget
     public SessionView(SessionPlan plan, SessionDraft? draft = null)
     {
         _plan = plan;
+        _reviewIds = (draft?.ReviewIds ?? draft?.Steps.SelectMany(s => s.ItemIds).ToList() ?? plan.Steps.SelectMany(s => s.ItemIds).ToList()).ToHashSet();
+        _reviewLevel = SessionLevelPolicy.Normalize(draft?.ReviewLevel ?? PlannerInputBuilder.Level);
         _started = draft?.Started ?? DateTime.Now;
         _startXp = draft?.StartXp ?? App.Progress.TotalXp();
         if (draft is not null) { _articles.AddRange(draft.Articles); _step = draft.Step - 1; }
@@ -104,7 +108,7 @@ sealed class SessionView : UserControl, IKeyTarget
     void SaveDraft()
     {
         if (_finished || _step < 0 || _step >= _plan.Steps.Count) return;
-        SessionDraft.From(_plan, _started, _step, _startXp, _articles).Save();
+        SessionDraft.From(_plan, _started, _step, _startXp, _articles, _reviewIds, _reviewLevel).Save();
     }
 
     void NextStep()
@@ -216,11 +220,13 @@ sealed class SessionView : UserControl, IKeyTarget
         var gentle = todayXp >= goal ? "Hôm nay mày đã chạm mục tiêu. Nghỉ được rồi, hoặc học thêm chút cho chắc." : $"Còn {goal - todayXp} XP nữa là tới mục tiêu hôm nay ({goal} XP).";
         // Câu sai của buổi học này (bảng wrong từ lúc bắt đầu), tối đa 40, kèm phương án đã chọn.
         var byId = PlannerInputBuilder.QuestionsById();
-        var wrongs = App.Progress.Wrongs().Where(w => w.At >= _started.AddSeconds(-2)).GroupBy(w => w.ItemId).Select(g => g.First())
-            .Where(w => byId.ContainsKey(w.ItemId)).Select(w => AskGemini.From(byId[w.ItemId], w.Picked)).Take(AskGemini.MaxItems).ToList();
+        var review = SessionReview.Collect(_started, DateTime.Now, App.Progress.Attempts(_started.AddSeconds(-2)), App.Progress.Wrongs(), PlannerInputBuilder.Cards(), _reviewIds);
+        var wrongs = review.Questions.Where(w => byId.ContainsKey(w.ItemId) && byId[w.ItemId].Options.Length > 0)
+            .Select(w => AskGemini.From(byId[w.ItemId], w.Picked, _reviewLevel)).Take(AskGemini.MaxItems).ToList();
+        var words = review.Words.Take(AskGemini.MaxItems - wrongs.Count).ToList();
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center };
         foreach (var c in new Control[] { Btn("Học thêm 15 phút", () => App.Shell.Show(new SessionView(PlannerInputBuilder.Plan(15)))),
-            AskGemini.Button("Copy để hỏi Gemini các câu sai", wrongs.Count, () => AskGemini.Prompts("Buổi học hôm nay", "N2", wrongs)),
+            AskGemini.Button("Copy để hỏi Gemini các câu sai", wrongs.Count + words.Count, () => AskGemini.SessionPrompts("Buổi học hôm nay", _reviewLevel, wrongs, words)),
             Btn("Về Hôm nay  (Enter)", GoHome, primary: true) })
         { c.Margin = new Thickness(6, 4); buttons.Children.Add(c); }
 
