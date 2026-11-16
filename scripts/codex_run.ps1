@@ -33,7 +33,7 @@ New-Item -ItemType Directory -Force $outDir, $logDir | Out-Null
 $sandbox = 'workspace-write'
 $extra = @()
 if ($ReadOnly) {
-    $dir = $repo
+    $dir = if ($Worktree) { "D:\nihongo_wt\$Worktree" } else { $repo }
     $sandbox = 'read-only'
 } else {
     $name = if ($Worktree) { $Worktree } else { $Task }
