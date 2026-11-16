@@ -6,7 +6,10 @@ using Nihongo.Importer.Sources;
 using static Nihongo.Importer.Util;
 
 // Dựng data/noi_dung.db từ mọi nguồn (mỗi nguồn một file trong Sources/). Chạy lại bất cứ lúc nào; tien_do.db không bị đụng tới.
-// Dùng: Nihongo.Importer [thư mục cha của repo] [file db đầu ra] (mặc định: thư mục cha của repo chứa NihongoApp.sln)
+// Dùng: Nihongo.Importer [thư mục cha của repo] [file db đầu ra] [--mo] (mặc định: thư mục cha của repo chứa NihongoApp.sln)
+// --mo: bản mở để chia sẻ, chỉ nạp bài đọc tự soạn (xem Program bên dưới).
+var openOnly = args.Contains("--mo");
+args = args.Where(a => a != "--mo").ToArray();
 var root = args.Length > 0 ? args[0] : FindRepoParent() ?? throw new InvalidOperationException("Không tìm thấy NihongoApp.sln; truyền thư mục gốc làm tham số đầu tiên.");
 var output = args.Length > 1 ? args[1] : Path.Combine(root, "NihongoApp", "data", "noi_dung.db");
 Root = root;
@@ -43,25 +46,37 @@ using (var db = new SqliteConnection($"Data Source={tmp}"))
         CREATE TABLE listening_item(set_id TEXT, ord INTEGER, mondai INTEGER, label TEXT, instruction TEXT, options TEXT, choices INTEGER, answer INTEGER, script TEXT, img TEXT, PRIMARY KEY(set_id, ord));
         """);
 
-    var examCorpus = new StringBuilder();
-    var examTokens = new Dictionary<string, int>();
-    var questions = Questions.ImportQuestions(db, web, examCorpus, examTokens);
-    var corpus = Vocab.LoadFreqCorpus(P("nguon_github", "jlpt-freq-main", "normalized", "N2"));
-    var vocab = Vocab.ImportVocab(db, examCorpus.ToString(), corpus, examTokens);
-    var sets = Reading.ImportReading(db);
-    var listening = Listening.ImportListening(db);
-    RealText.ImportRealText(db);
-    var sources = WebSources.ImportSources(db);
-    var exams = Exams.ImportExams(db);
-    var grammar = Grammar.ImportGrammar(db, Grammar.LoadSentences(db));
-    var extra = Extra.ImportExtra(db);
-    var docs = Docs.ImportDocs(db);
-    DocHieu.Import(db);
-    var remapped = RemapPaths(db);
-    if (remapped > 0) Console.WriteLine($"Đường dẫn: đổi {remapped} ô sang chỗ mới (storage/, legacy/) theo config/paths.json");
+    int questions = 0, vocab = 0, sets = 0;
+    (string, string)[] counts;
+    if (openOnly)
+    {
+        // Bản mở để chia sẻ công khai: CHỈ bài đọc do team tự soạn (storage/bai_doc). Không đề thật, không MP3, không từ vựng sách.
+        DocHieu.Import(db);
+        counts = [("built_at", DateTime.Now.ToString("s")), ("edition", "mo")];
+    }
+    else
+    {
+        var examCorpus = new StringBuilder();
+        var examTokens = new Dictionary<string, int>();
+        questions = Questions.ImportQuestions(db, web, examCorpus, examTokens);
+        var corpus = Vocab.LoadFreqCorpus(P("nguon_github", "jlpt-freq-main", "normalized", "N2"));
+        vocab = Vocab.ImportVocab(db, examCorpus.ToString(), corpus, examTokens);
+        sets = Reading.ImportReading(db);
+        var listening = Listening.ImportListening(db);
+        RealText.ImportRealText(db);
+        var sources = WebSources.ImportSources(db);
+        var exams = Exams.ImportExams(db);
+        var grammar = Grammar.ImportGrammar(db, Grammar.LoadSentences(db));
+        var extra = Extra.ImportExtra(db);
+        var docs = Docs.ImportDocs(db);
+        DocHieu.Import(db);
+        var remapped = RemapPaths(db);
+        if (remapped > 0) Console.WriteLine($"Đường dẫn: đổi {remapped} ô sang chỗ mới (storage/, legacy/) theo config/paths.json");
+        counts = [("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()), ("docs", docs.ToString())];
+    }
 
     using var meta = db.BeginTransaction();
-    foreach (var (k, v) in new[] { ("built_at", DateTime.Now.ToString("s")), ("vocab", vocab.ToString()), ("questions", questions.ToString()), ("reading_sets", sets.ToString()), ("listening_sets", listening.ToString()), ("sources", sources.ToString()), ("exams", exams.ToString()), ("grammar", grammar.ToString()), ("denken", extra.Denken.ToString()), ("kaiwa", extra.Kaiwa.ToString()), ("docs", docs.ToString()) })
+    foreach (var (k, v) in counts)
         Exec(db, "INSERT INTO meta VALUES($k,$v)", ("$k", k), ("$v", v));
     meta.Commit();
     Exec(db, "CREATE INDEX vocab_level ON vocab(level); VACUUM;");
