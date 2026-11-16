@@ -25,14 +25,14 @@ sealed class TodayView : UserControl, IKeyTarget
         get
         {
             var today = DateOnly.FromDateTime(DateTime.Now);
-            return DateOnly.TryParseExact(App.Progress.Setting("exam_day"), "yyyy-MM-dd", out var d) && d >= today ? d : Nihongo.Core.Stats.StudyStats.NextJlptDay(today);
+            return Nihongo.Core.Stats.TodayMetrics.ResolveExamDay(DashboardData.Setting("exam_day"), today);
         }
     }
 
     /// <summary>Các kỳ sau kỳ đang nhắm (năm sau, năm sau nữa), để hiện dưới số ngày đếm ngược.</summary>
     public static IReadOnlyList<DateOnly> LaterExamDays(int count = 4) =>
         Nihongo.Core.Stats.StudyStats.UpcomingJlptDays(ExamDay.AddDays(1), count);
-    public static string ExamLevel => App.Progress.Setting("exam_level", "N2");
+    public static string ExamLevel => DashboardData.Setting("exam_level", "N2");
     static readonly string[] WeekDays = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
     static readonly int[] MinuteOptions = [15, 30, 45];
 
@@ -49,7 +49,7 @@ sealed class TodayView : UserControl, IKeyTarget
         var now = DateTime.Now;
         var today = DateOnly.FromDateTime(now);
         var days = Math.Max(0, ExamDay.DayNumber - today.DayNumber);
-        var (level, into, need) = XpRules.LevelOf(App.Progress.TotalXp());
+        var (level, into, need) = XpRules.LevelOf(DashboardData.TotalXp());
 
         Control Block(Control value, string label) => Col(2, value, Text(label, 12, muted: true, wrap: false));
         var levelBlock = Col(4,
@@ -145,9 +145,7 @@ sealed class TodayView : UserControl, IKeyTarget
         var a = id is null ? null : PlannerInputBuilder.Articles.FirstOrDefault(x => x.Id == id);
         if (a is null)
             return Panel("Bài đọc hôm nay", Text("Buổi này không có bài đọc (chọn 30 phút để có), hoặc đã đọc hết bài cấp này. Kệ sách ở mục Đọc.", 13.5, muted: true));
-        var plain = Nihongo.Core.Text.ArticleText.Plain(a.BodyJa).Trim();
-        var cut = plain.IndexOf('。');
-        var hook = cut > 0 && cut < 90 ? plain[..(cut + 1)] : plain.Length > 80 ? plain[..80] + "…" : plain;
+        var hook = Nihongo.Core.Stats.TodayMetrics.ReadingHook(a.BodyJa);
         var body = Col(10,
             Row(8, Chip(a.Group), Chip(a.Level)),
             Text(a.Title, 19, bold: true).Also(t => t.FontFamily = Serif),
@@ -179,21 +177,23 @@ sealed class TodayView : UserControl, IKeyTarget
         const double cell = 13, gap = 3;
         var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
         var start = monday.AddDays(-7 * 11);
-        var xp = App.Progress.XpByDay(start);
+        var xp = DashboardData.XpByDay(start);
+        var metrics = Nihongo.Core.Stats.TodayMetrics.Heatmap(today, goal, xp);
         var cols = Row(gap);
-        var active = 0;
+        var active = Nihongo.Core.Stats.TodayMetrics.ActiveDays(metrics);
         for (var w = 0; w < 12; w++)
         {
             var col = Col(gap);
             for (var d = 0; d < 7; d++)
             {
-                var day = start.AddDays(w * 7 + d);
-                var v = xp.GetValueOrDefault(day);
+                var metric = metrics[w * 7 + d];
+                var day = metric.Day;
+                var v = metric.Xp;
                 var sq = new Border { Width = cell, Height = cell, CornerRadius = new CornerRadius(3) };
-                if (day > today) sq.Opacity = 0;
+                if (metric.IsFuture) sq.Opacity = 0;
                 else if (v <= 0) sq.Themed(Border.BackgroundProperty, "Track");
-                else { active++; sq.Background = Accent; sq.Opacity = 0.3 + 0.7 * Math.Min(1, v / (double)Math.Max(1, goal)); }
-                if (day == today) { sq.BorderThickness = new Thickness(1.5); sq.Themed(Border.BorderBrushProperty, "Ink"); }
+                else { sq.Background = Accent; sq.Opacity = metric.Opacity; }
+                if (metric.IsToday) { sq.BorderThickness = new Thickness(1.5); sq.Themed(Border.BorderBrushProperty, "Ink"); }
                 ToolTip.SetTip(sq, $"{day:dd/MM}: {v} XP");
                 col.Children.Add(sq);
             }
@@ -229,7 +229,7 @@ sealed class TodayView : UserControl, IKeyTarget
     Control? ResumeCard()
     {
         if (_draft is not { } d) return null;
-        _answered = App.Progress.Attempts(d.Started.AddSeconds(-1)).Select(a => a.ItemId).ToHashSet();
+        _answered = DashboardData.Attempts(d.Started.AddSeconds(-1)).Select(a => a.ItemId).ToHashSet();
         var step = d.Steps[d.Step];
         var left = d.LeftInCurrentStep(_answered);
         var what = step.Kind switch
