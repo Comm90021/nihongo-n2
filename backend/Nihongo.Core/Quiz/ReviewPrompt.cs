@@ -151,9 +151,12 @@ public static partial class ReviewPrompt
 
     /// <summary>Lời nhắc chữa các từ vựng làm sai (từ, cách đọc, nghĩa đã có trong app).</summary>
     public static string VocabPrompt(string title, IEnumerable<(string Word, string Reading, string Meaning)> words)
+        => VocabPrompt(title, words, "N2");
+
+    public static string VocabPrompt(string title, IEnumerable<(string Word, string Reading, string Meaning)> words, string level)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Tôi đang ôn JLPT N2, vừa làm sai các từ sau trong bài「{title}」. Hãy chữa như một thầy giáo, trả lời bằng tiếng Việt.");
+        sb.AppendLine($"Tôi đang ôn JLPT {level}, vừa làm sai các từ sau trong bài「{title}」. Hãy chữa như một thầy giáo, trả lời bằng tiếng Việt.");
         sb.AppendLine("Với mỗi từ: (1) nghĩa và sắc thái; (2) từ dễ nhầm với nó và cách phân biệt; (3) mẹo nhớ; (4) hai câu ví dụ có dịch. Cuối cùng ra 5 câu trắc nghiệm ôn lại các từ này (có đáp án ở cuối).");
         sb.AppendLine();
         var i = 0;

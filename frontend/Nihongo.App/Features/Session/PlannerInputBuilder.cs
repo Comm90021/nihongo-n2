@@ -22,7 +22,7 @@ static class PlannerInputBuilder
     public static Dictionary<string, Question> QuestionsById() =>
         App.Content.Questions.GroupBy(q => q.Id).ToDictionary(g => g.Key, g => g.First());
 
-    public static string Level => App.Progress.Setting("exam_level", "N2");
+    public static string Level => SessionLevelPolicy.Normalize(App.Progress.Setting("exam_level", "N2"));
 
     public static PlannerInput Build()
     {
@@ -30,16 +30,18 @@ static class PlannerInputBuilder
         var cards = Cards();
         var qs = QuestionsById();
         var p = App.Progress;
+        var level = Level;
+        var levels = App.Content.LoadExams().GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First().Level);
         return new PlannerInput(
             today,
             p.DueIds(SrsKind.Card).Where(cards.ContainsKey).ToList(),
             p.DueIds(SrsKind.Question).Where(qs.ContainsKey).ToList(),
             Articles,
             p.ReadArticleIds(),
-            App.Content.Questions,
+            App.Content.Questions.Where(q => SessionLevelPolicy.QuestionLevel(q, levels) == level).ToList(),
             p.AttemptStats(),
-            Listening,
-            Level,
+            Listening.Where(s => SessionLevelPolicy.ListeningLevel(s) == level).ToList(),
+            level,
             today.DayNumber);
     }
 

@@ -8,7 +8,7 @@ namespace Nihongo.App.Views;
 /// Câu đã làm không cần lưu riêng: bảng attempt có giờ từng lần trả lời, nên lúc tiếp tục chỉ cần bỏ các câu đã trả lời
 /// kể từ <see cref="Started"/>. Chỉ có hiệu lực trong ngày; qua ngày thì bỏ.
 /// </summary>
-sealed record SessionDraft(DateTime Started, int Minutes, int Step, int StartXp, List<DraftStep> Steps, List<string> Articles)
+sealed record SessionDraft(DateTime Started, int Minutes, int Step, int StartXp, List<DraftStep> Steps, List<string> Articles, List<string>? ReviewIds = null, string? ReviewLevel = null)
 {
     const string Key = "session_draft";
 
@@ -29,9 +29,10 @@ sealed record SessionDraft(DateTime Started, int Minutes, int Step, int StartXp,
 
     public static void Clear() { try { if (App.Progress.Setting(Key) != "") App.Progress.SetSetting(Key, ""); } catch { } }
 
-    public static SessionDraft From(SessionPlan plan, DateTime started, int step, int startXp, IEnumerable<string> articles) =>
+    public static SessionDraft From(SessionPlan plan, DateTime started, int step, int startXp, IEnumerable<string> articles, IEnumerable<string>? reviewIds = null, string? reviewLevel = null) =>
         new(started, plan.Minutes, step, startXp,
-            plan.Steps.Select(s => new DraftStep(s.Kind, s.Title, s.ItemIds.ToList(), s.EstMinutes, s.Focus)).ToList(), articles.ToList());
+            plan.Steps.Select(s => new DraftStep(s.Kind, s.Title, s.ItemIds.ToList(), s.EstMinutes, s.Focus)).ToList(), articles.ToList(),
+            (reviewIds ?? plan.Steps.SelectMany(s => s.ItemIds)).Distinct().ToList(), reviewLevel);
 
     /// <summary>Kế hoạch đầy đủ; từ bước đang làm trở đi bỏ câu/thẻ đã trả lời kể từ lúc bắt đầu buổi học. Bước trước đó giữ nguyên (đã xong).</summary>
     public SessionPlan Remaining(ISet<string> answered)
